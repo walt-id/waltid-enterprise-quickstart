@@ -2,7 +2,7 @@
 Quickly run the walt.id Enterprise Stack locally using the docker-compose provided in this repo.
 The docker-compose will bring up the Enterprise Stack API next to the required MongoDB database. 
 
-**Please note: You require a walt.id enterprise license to use this quickstart.**
+**Please note: You require private access to the walt.id enterprise images to use this quickstart.**
 
 ## Running The Enterprise Stack Locally
 
