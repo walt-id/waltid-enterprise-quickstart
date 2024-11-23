@@ -1,0 +1,174 @@
+#!/bin/bash
+
+set -e
+
+export WORKDIR=$(cd $(dirname $0) && pwd)
+
+auth_token=""
+
+init() {
+    info "Checking dependencies..."
+    # jq
+}
+
+log() {
+  script_name=${0##*/}
+  timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+  echo "== $script_name $timestamp $1"
+}
+
+info() {
+    log "[INFO] $1"
+}
+
+error() {
+    log "[ERROR] $1"
+}
+
+help() {
+    cli_name=${0##*/}
+    echo "Walt.id Enterprise Stack Quickstarter v$(cat $WORKDIR/VERSION)
+
+Usage: $cli_name [command]
+
+Commands:
+  run                       Run the Enterprise Stack
+  superadmin-create-account Create the super admin account
+  superadmin-login          Log in the super admin
+  init-db                   Initialize the database
+  create-organization       Create (an | the root) Organization
+  *                         Help
+    "
+  exit 1
+}
+
+docker_hub_login(){
+    password=$(cat .docker-token | grep -v "#" | grep -v -e '^[[:space:]]*$')
+    info "Autheticating to Docker Hub. Please use the password provided..."
+    docker login -u waltid -p $password
+    echo
+}
+
+pull_docker_image() {
+    info "Pulling Enterprise Stack v0.1.0"
+    docker pull waltid/waltid-enterprise-api:0.1.0
+    echo
+}
+
+start_container() {
+    info "Starting up Enterprise Stack v0.1.0"
+    docker compose up
+}
+
+run() { 
+    docker_hub_login
+    pull_docker_image
+    start_container
+}
+
+superadmin_create_account() {
+    superadmin_token=$(cat config/superadmin-registration.conf | sed -n '2 p' | cut -d \" -f 2)
+
+    info "Registering token \"${superadmin_token}\" provided in the superadmin-registration.conf file"
+    response=$(curl -X 'POST' \
+        'http://localhost:3000/v1/superadmin/create-by-token' \
+        -H 'accept: */*' \
+        -H 'Content-Type: application/json' \
+        -d "${superadmin_token}" 2> /dev/null)
+
+    if [[ $response == *"exception"* ]]; then
+        error "Super admin account could not be created."
+        error "$response"
+    else 
+        info "Super admin account successfully created."
+    fi
+}
+
+superadmin_login() {
+
+    superadmin_email=$(cat config/superadmin-registration.conf | grep identifier | cut -d \" -f 2)
+    superadmin_password=$(cat config/superadmin-registration.conf | grep password | cut -d \" -f 2)
+
+    info "Logging in super admin with credentials provided in the superadmin-registration.conf file"
+    response=$(curl -X 'POST' \
+        'http://localhost:3000/auth/account/emailpass' \
+        -H 'accept: application/json' \
+        -H 'Content-Type: application/json' \
+        -d "{
+            \"email\": \"${superadmin_email}\",
+            \"password\": \"${superadmin_password}\"
+        }" 2> /dev/null)
+    if [[ $response == *"exception"* ]]; then
+        error "Super admin could not be logged in."
+        error "$response"
+    else
+        info "Super admin logged in successfully."
+        info "$response"
+
+        auth_token=$(echo $response | jq .token | tr -d '"')
+    fi
+}
+
+init_db() {
+
+    superadmin_login
+
+    info "Initializing the database based on the config/database.conf file"
+    response=$(curl -X 'POST' \
+        'http://localhost:3000/v1/admin/initial-setup' \
+        -H 'accept: */*' \
+        -H "Authorization: Bearer $auth_token" \
+        -d '' 2> /dev/null)
+
+    if [[ $response == *"Unauthorized"* ]]; then
+        error "Database could not be initialized. Access denied."
+        error "$response"
+    else
+        info "Database successfully initialized."
+    fi
+}
+
+create_organization() {
+    response=$(curl -X 'POST' \
+        'http://localhost:3000/v1/organization/create' \
+        -H 'accept: */*' \
+        -H "Authorization: Bearer $auth_token" \
+        -H 'Content-Type: application/json' \
+        -d '{
+            "_id": "waltid",
+            "profile": {
+                "name": "walt.id GmbH"
+            },
+            "billing": {
+                "billingCountry": "AT",
+                "billingAddress": "Liechtensteinstraße 111/115, 1090 Vienna",
+                "vatNr": "ATU75569617"
+            }
+        }')
+
+        echo $response
+}
+
+
+case "$1" in
+    run|step1)
+        run
+        ;;
+    superadmin-create-account|step2)
+        superadmin_create_account
+        ;;
+    superadmin-login|step3)
+        superadmin_login
+        ;;
+    init-db|step4)
+        init_db
+        ;;
+    create-organization|step5)
+        create_organization
+        ;;
+    *)
+        help
+        ;;
+esac
+
+
