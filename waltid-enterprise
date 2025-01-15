@@ -66,6 +66,20 @@ run() {
     start_container
 }
 
+get_auth_token() {
+    if [ -f .auth_token ]; then
+        info "User already logged in." 
+    else
+        info "Logging in..."
+        superadmin_login
+    fi
+    
+    AUTH_TOKEN=$(cat .auth_token)
+    # echo $AUTH_TOKEN
+
+    eval $1=$AUTH_TOKEN
+}
+
 superadmin_create_account() {
     superadmin_token=$(cat config/superadmin-registration.conf | sed -n '2 p' | cut -d \" -f 2)
 
@@ -105,19 +119,20 @@ superadmin_login() {
         info "Super admin logged in successfully."
         info "$response"
 
-        auth_token=$(echo $response | jq .token | tr -d '"')
+        AUTH_TOKEN=$(echo $response | jq .token | tr -d '"')
+        echo $AUTH_TOKEN > .auth_token
     fi
 }
 
 init_db() {
 
-    superadmin_login
+    get_auth_token AUTH_TOKEN
 
     info "Initializing the database based on the config/database.conf file"
     response=$(curl -X 'POST' \
         'http://localhost:3000/v1/admin/initial-setup' \
         -H 'accept: */*' \
-        -H "Authorization: Bearer $auth_token" \
+        -H "Authorization: Bearer $AUTH_TOKEN" \
         -d '' 2> /dev/null)
 
     if [[ $response == *"Unauthorized"* ]]; then
@@ -129,13 +144,16 @@ init_db() {
 }
 
 create_organization() {
+
+    get_auth_token AUTH_TOKEN
+
     response=$(curl -X 'POST' \
         'http://localhost:3000/v1/organization/create' \
         -H 'accept: */*' \
-        -H "Authorization: Bearer $auth_token" \
+        -H "Authorization: Bearer $AUTH_TOKEN" \
         -H 'Content-Type: application/json' \
         -d '{
-            "_id": "waltid",
+            "_id": "waltid5",
             "profile": {
                 "name": "walt.id GmbH"
             },
@@ -144,9 +162,15 @@ create_organization() {
                 "billingAddress": "Liechtensteinstraße 111/115, 1090 Vienna",
                 "vatNr": "ATU75569617"
             }
-        }')
+        }' 2> /dev/null)
 
-        echo $response
+    if [[ $response == *"exception"* ]]; then
+        error "Organization could not be created."
+        error "$response"
+    else
+        info "Organization successfully created."
+    fi
+
 }
 
 
