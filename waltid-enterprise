@@ -9,6 +9,7 @@ auth_token=""
 init() {
     info "Checking dependencies..."
     # jq
+    # curl
 }
 
 log() {
@@ -32,13 +33,23 @@ help() {
 Usage: $cli_name [command]
 
 Commands:
-  run                       Run the Enterprise Stack
-  superadmin-create-account Create the super admin account
-  superadmin-login          Log in the super admin
-  init-db                   Initialize the database
-  create-organization       Create (an | the root) Organization
-  *                         Help
-    "
+  run                               Run the Enterprise Stack
+  superadmin-create-account         Create the super admin account
+  init-db                           Initialize the database
+  superadmin-login                  Log in the super admin
+  create-organization               Create (an | the root) Organization
+  create-user-account               Create a new user
+  add-admin-role                    Assign the 'admin' role to the user previously created
+  user-admin-login                  Log in user with admin role
+  create-tenant                     Create tenant in the organization created with the superadmin user
+  create-kms-service                Create KMS service in the tenant
+  create-key                        Create a key to generate a DID later
+  create-did-service                Create DID service in the tenant
+  create-credential-status-s        ervice  Create credential status service
+  create-issuer-service             Create issuer service in the tenant
+  create-verifier-service           Create verifier service in the tenant
+  recreate-db                       Delete all data and restart it from scratch
+   "
   exit 1
 }
 
@@ -143,6 +154,23 @@ init_db() {
     fi
 }
 
+recreate_collections() {
+
+    get_auth_token AUTH_TOKEN
+
+    response=$(curl -X 'POST' \
+        'http://localhost:3000/v1/dev/database-recreate' \
+        -H 'accept: */*' \
+        -d '' 2> /dev/null)
+
+    if [[ $response == *"exception"* ]]; then
+        error "Database could not be recreated."
+        error "$response"
+    else
+        info "Database successfully recreated."
+    fi
+}
+
 create_organization() {
 
     get_auth_token AUTH_TOKEN
@@ -153,7 +181,7 @@ create_organization() {
         -H "Authorization: Bearer $AUTH_TOKEN" \
         -H 'Content-Type: application/json' \
         -d '{
-            "_id": "waltid5",
+            "_id": "waltid",
             "profile": {
                 "name": "walt.id GmbH"
             },
@@ -173,6 +201,234 @@ create_organization() {
 
 }
 
+create_user_account() {
+
+    get_auth_token AUTH_TOKEN
+
+    response=$(curl -X 'POST' \
+        'http://localhost:3000/v1/admin/account/register' \
+        -H 'accept: application/json' \
+        -H "Authorization: Bearer $AUTH_TOKEN" \
+        -H 'Content-Type: application/json' \
+        -d '{
+        "profile": {
+            "name": "Max Mustermann",
+            "email": "max.mustermann@example.org",
+            "addressCountry": "AT",
+            "address": "Liechtensteinstraße 111/115, 1090 Vienna"
+        },
+        "preferences": {
+            "timeZone": "UTC",
+            "languagePreference": "EN"
+        },
+        "initialAuth": {
+            "type": "email",
+            "identifier": {
+            "type": "email",
+            "email": "max.mustermann@example.org"
+            },
+            "data": {
+            "type": "email",
+            "password": "password123456"
+            }
+        }
+        }' 2> /dev/null)
+
+    if [[ $response == *"exception"* ]]; then
+        error "User account could not be created."
+        error "$response"
+    else
+
+        # TODO Handle user already exists
+
+        info "User account successfully created."
+
+        regex="\"_id\":\"([0-9a-z-]+)\","
+        if [[ "$response" =~ $regex ]]; then
+            user_id=${BASH_REMATCH[1]}
+            info "User ID: $user_id"
+
+            rm .user_id 2> /dev/null
+            echo $user_id > .user_id
+            info "User ID saved at .user_id"
+        else
+            error "User ID not found in the HTTP response."
+        fi
+    fi
+
+}
+
+get_user_id() {
+
+    if [ -f .user_id ]; then
+        USER_ID=$(cat .user_id)
+        info "User ID found: $USER_ID"
+    else
+        error "No user id found. Please run '$0 create-user-account' first. "
+        exit -1
+    fi
+
+    eval $1=$USER_ID
+}
+
+add_admin_role_to_user() {
+
+    # TODO Parameterise USER and ORG 
+
+    get_auth_token AUTH_TOKEN
+    get_user_id USER_ID
+
+    ROLE="waltid.admin"
+    ORGANIZATION="waltid"
+
+    info "Adding role '$ROLE' to user '$USER_ID' from organization '$ORGANIZATION'..."
+    response=$(curl -X 'POST' \
+        "http://localhost:3000/v1/admin/account/$USER_ID/roles/add/$ORGANIZATION/$ROLE" \
+        -H 'accept: application/json' \
+        -H "Authorization: Bearer $AUTH_TOKEN" \
+        -d '' 2> /dev/null)
+
+    if [[ $response == *"exception"* ]]; then
+        error "Role could not be added."
+        error "$response"
+    else
+        info "Role successfully added."
+        info $response
+    fi
+}
+
+user-admin-login() {
+    
+    # get_auth_token AUTH_TOKEN
+
+    response=$(curl -X 'POST' \
+        'http://waltid.localhost:3000/auth/account/emailpass' \
+        -H 'accept: application/json' \
+        -H 'Content-Type: application/json' \
+        -d '{
+        "email": "max.mustermann@example.org",
+        "password": "password123456"
+        }' 2> /dev/null)
+
+    if [[ $response == *"exception"* ]]; then
+        error "User could not be logged in."
+        error "$response"
+    else
+        
+        regex="\"token\":\"([A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+)\""
+        if [[ "$response" =~ $regex ]]; then
+            AUTH_TOKEN=${BASH_REMATCH[1]}
+            # info "User ID: $user_id"
+
+            rm -f .user_auth_token 
+            echo $AUTH_TOKEN > .user_auth_token
+            info "User successfully logged in."
+        else
+            error "Auth token not found in the HTTP response."
+        fi
+    fi
+}
+         
+create-tenant() {
+    
+    get_auth_token AUTH_TOKEN
+
+    response=$( 2> /dev/null)
+
+    if [[ $response == *"exception"* ]]; then
+        error "XXX could not be added."
+        error "$response"
+    else
+        info "XXX successfully added."
+    fi
+}
+
+create-kms-service() {
+    
+    get_auth_token AUTH_TOKEN
+
+    response=$( 2> /dev/null)
+
+    if [[ $response == *"exception"* ]]; then
+        error "XXX could not be added."
+        error "$response"
+    else
+        info "XXX successfully added."
+    fi
+}
+
+create-key() {
+    
+    get_auth_token AUTH_TOKEN
+
+    response=$( 2> /dev/null)
+
+    if [[ $response == *"exception"* ]]; then
+        error "XXX could not be added."
+        error "$response"
+    else
+        info "XXX successfully added."
+    fi
+}
+
+create-did-service() {
+    
+    get_auth_token AUTH_TOKEN
+
+    response=$( 2> /dev/null)
+
+    if [[ $response == *"exception"* ]]; then
+        error "XXX could not be added."
+        error "$response"
+    else
+        info "XXX successfully added."
+    fi
+}
+
+
+create-issuer-service() {
+    
+    get_auth_token AUTH_TOKEN
+
+    response=$( 2> /dev/null)
+
+    if [[ $response == *"exception"* ]]; then
+        error "XXX could not be added."
+        error "$response"
+    else
+        info "XXX successfully added."
+    fi
+}
+
+create-verifier-service() {
+    
+    get_auth_token AUTH_TOKEN
+
+    response=$( 2> /dev/null)
+
+    if [[ $response == *"exception"* ]]; then
+        error "XXX could not be added."
+        error "$response"
+    else
+        info "XXX successfully added."
+    fi
+}
+
+
+aa() {
+    
+    get_auth_token AUTH_TOKEN
+
+    response=$( 2> /dev/null)
+
+    if [[ $response == *"exception"* ]]; then
+        error "XXX could not be added."
+        error "$response"
+    else
+        info "XXX successfully added."
+    fi
+}
+
 
 case "$1" in
     run|step1)
@@ -189,6 +445,36 @@ case "$1" in
         ;;
     create-organization|step5)
         create_organization
+        ;;
+    create-user-account|step6)
+        create_user_account
+        ;;
+    add-admin-role|step7)
+        add_admin_role_to_user
+        ;;
+    user-admin-login)
+        user-admin-login
+        ;;
+    create-tenant)
+        create-tenant
+        ;;
+    create-kms)
+        create-kms
+        ;;
+    create-did-service)
+        create-did-service
+        ;;
+    create-credential-status-service)
+        create-credential-status-service
+        ;;
+    create-issuer-service)
+        create-issuer-service
+        ;;
+    create-verifier-service)
+        create-verifier-service
+        ;;
+    recreate-db|step99)
+        recreate_collections
         ;;
     *)
         help
