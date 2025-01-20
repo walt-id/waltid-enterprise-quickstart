@@ -48,6 +48,9 @@ Commands:
   create-credential-status-s        ervice  Create credential status service
   create-issuer-service             Create issuer service in the tenant
   create-verifier-service           Create verifier service in the tenant
+  list-organizations
+  list-accounts
+  list-resources
   recreate-db                       Delete all data and restart it from scratch
    "
   exit 1
@@ -77,11 +80,11 @@ run() {
     start_container
 }
 
-get_auth_token() {
+get_superadmin_auth_token() {
     if [ -f .auth_token ]; then
-        info "User already logged in." 
+        info "Super admin already logged in." 
     else
-        info "Logging in..."
+        info "Logging super admin in..."
         superadmin_login
     fi
     
@@ -89,6 +92,20 @@ get_auth_token() {
     # echo $AUTH_TOKEN
 
     eval $1=$AUTH_TOKEN
+}
+
+get_user_auth_token() {
+    if [ -f .user_auth_token ]; then
+        info "User already logged in." 
+    else
+        info "Logging user in..."
+        user_admin_login
+    fi
+    
+    USER_AUTH_TOKEN=$(cat .user_auth_token)
+    info "Auth token: $USER_AUTH_TOKEN"
+
+    eval $1=$USER_AUTH_TOKEN
 }
 
 superadmin_create_account() {
@@ -137,7 +154,7 @@ superadmin_login() {
 
 init_db() {
 
-    get_auth_token AUTH_TOKEN
+    get_superadmin_auth_token AUTH_TOKEN
 
     info "Initializing the database based on the config/database.conf file"
     response=$(curl -X 'POST' \
@@ -156,7 +173,7 @@ init_db() {
 
 recreate_collections() {
 
-    get_auth_token AUTH_TOKEN
+    get_superadmin_auth_token AUTH_TOKEN
 
     response=$(curl -X 'POST' \
         'http://localhost:3000/v1/dev/database-recreate' \
@@ -173,7 +190,7 @@ recreate_collections() {
 
 create_organization() {
 
-    get_auth_token AUTH_TOKEN
+    get_superadmin_auth_token AUTH_TOKEN
 
     response=$(curl -X 'POST' \
         'http://localhost:3000/v1/organization/create' \
@@ -203,7 +220,9 @@ create_organization() {
 
 create_user_account() {
 
-    get_auth_token AUTH_TOKEN
+    get_superadmin_auth_token AUTH_TOKEN
+
+    rm -f .user_id
 
     response=$(curl -X 'POST' \
         'http://localhost:3000/v1/admin/account/register' \
@@ -237,6 +256,8 @@ create_user_account() {
     if [[ $response == *"exception"* ]]; then
         error "User account could not be created."
         error "$response"
+
+        # TODO Offer to select an existing user to be used
     else
 
         # TODO Handle user already exists
@@ -248,7 +269,6 @@ create_user_account() {
             user_id=${BASH_REMATCH[1]}
             info "User ID: $user_id"
 
-            rm .user_id 2> /dev/null
             echo $user_id > .user_id
             info "User ID saved at .user_id"
         else
@@ -275,7 +295,7 @@ add_admin_role_to_user() {
 
     # TODO Parameterise USER and ORG 
 
-    get_auth_token AUTH_TOKEN
+    get_superadmin_auth_token AUTH_TOKEN
     get_user_id USER_ID
 
     ROLE="waltid.admin"
@@ -292,26 +312,31 @@ add_admin_role_to_user() {
         error "Role could not be added."
         error "$response"
     else
+        # TODO If response = {}, role hasn't been added either
+        
         info "Role successfully added."
         info $response
     fi
 }
 
-user-admin-login() {
+user_admin_login() {
     
-    # get_auth_token AUTH_TOKEN
+    # get_superadmin_auth_token AUTH_TOKEN
+
+    USER="max.mustermann@example.org"
+    PASS="password123456"
 
     response=$(curl -X 'POST' \
-        'http://waltid.localhost:3000/auth/account/emailpass' \
+        'http://waltid.enterprise.localhost:3000/auth/account/emailpass' \
         -H 'accept: application/json' \
         -H 'Content-Type: application/json' \
-        -d '{
-        "email": "max.mustermann@example.org",
-        "password": "password123456"
-        }' 2> /dev/null)
+        -d "{
+            \"email\": \"$USER\",
+            \"password\": \"$PASS\"
+        }" 2> /dev/null)
 
     if [[ $response == *"exception"* ]]; then
-        error "User could not be logged in."
+        error "User $USER could not be logged in."
         error "$response"
     else
         
@@ -322,44 +347,62 @@ user-admin-login() {
 
             rm -f .user_auth_token 
             echo $AUTH_TOKEN > .user_auth_token
-            info "User successfully logged in."
+            info "User $USER successfully logged in with token $AUTH_TOKEN"
         else
             error "Auth token not found in the HTTP response."
         fi
     fi
 }
          
-create-tenant() {
+create_tenant() {
     
-    get_auth_token AUTH_TOKEN
+    get_user_auth_token AUTH_TOKEN
 
-    response=$( 2> /dev/null)
+    TENANT_ID="waltid.tenant1"
+
+    response=$(curl -X 'POST' \
+        "http://waltid.enterprise.localhost:3000/v1/$TENANT_ID/resource-api/tenants/create" \
+        -H 'accept: */*' \
+        -H "Authorization: Bearer $AUTH_TOKEN" \
+        -H 'Content-Type: application/json' \
+        -d '{
+            "name":"My first Tenant with Tamino"
+        }' 2> /dev/null)
 
     if [[ $response == *"exception"* ]]; then
-        error "XXX could not be added."
+        error "Tenant $TENANT_ID could not be created."
         error "$response"
     else
-        info "XXX successfully added."
+        info "Tenant $TENANT_ID successfully created."
     fi
 }
 
-create-kms-service() {
+create_kms_service() {
     
-    get_auth_token AUTH_TOKEN
+    get_user_auth_token AUTH_TOKEN
 
-    response=$( 2> /dev/null)
+    KMS_ID="waltid.kms1"
+
+    response=$(curl -X 'POST' \
+        "http://waltid.enterprise.localhost:3000/v1/$KMS_ID/resource-api/services/create" \
+        -H 'accept: */*' \
+        -H "Authorization: Bearer $AUTH_TOKEN" \
+        -H 'Content-Type: application/json' \
+        -d '{
+            "type": "kms"
+        }' 2> /dev/null)
 
     if [[ $response == *"exception"* ]]; then
-        error "XXX could not be added."
+        error "KMS $KMS_ID could not be created."
         error "$response"
     else
-        info "XXX successfully added."
+        info "KMS $KMS_ID successfully created."
     fi
 }
 
 create-key() {
     
-    get_auth_token AUTH_TOKEN
+    get_user_auth_token AUTH_TOKEN
 
     response=$( 2> /dev/null)
 
@@ -373,7 +416,7 @@ create-key() {
 
 create-did-service() {
     
-    get_auth_token AUTH_TOKEN
+    get_user_auth_token AUTH_TOKEN
 
     response=$( 2> /dev/null)
 
@@ -388,7 +431,7 @@ create-did-service() {
 
 create-issuer-service() {
     
-    get_auth_token AUTH_TOKEN
+    get_user_auth_token AUTH_TOKEN
 
     response=$( 2> /dev/null)
 
@@ -402,7 +445,7 @@ create-issuer-service() {
 
 create-verifier-service() {
     
-    get_auth_token AUTH_TOKEN
+    get_user_auth_token AUTH_TOKEN
 
     response=$( 2> /dev/null)
 
@@ -414,10 +457,70 @@ create-verifier-service() {
     fi
 }
 
+list_organizations() {
 
+    # TODO Print only relevant infos
+
+    get_superadmin_auth_token AUTH_TOKEN
+
+    response=$(curl -X 'GET' \
+        'http://localhost:3000/v1/admin/organizations?maxPageSize=100&page=0' \
+        -H 'accept: application/json' \
+        -H "Authorization: Bearer $AUTH_TOKEN" 2> /dev/null)
+
+    if [[ $response == *"exception"* ]]; then
+        error "Organizations could not be listed."
+        error "$response"
+    else
+        info "Organizations list:"
+        echo "$response" | jq
+    fi
+}
+
+list_accounts() {
+
+    # TODO Print only relevant infos
+
+    get_superadmin_auth_token AUTH_TOKEN
+
+    response=$(curl -X 'GET' \
+        'http://localhost:3000/v1/admin/accounts?maxPageSize=100&page=0' \
+        -H 'accept: application/json' \
+        -H "Authorization: Bearer $AUTH_TOKEN" 2> /dev/null)
+
+    if [[ $response == *"exception"* ]]; then
+        error "Accounts could not be listed."
+        error "$response"
+    else
+        info "Account list:"
+        echo "$response" | jq
+    fi
+
+}
+
+list_resources() {
+
+    get_user_auth_token AUTH_TOKEN
+
+    response=$(curl -X 'GET' \
+        'http://waltid.enterprise.localhost:3000/v1/waltid/resource-api/resources/list' \
+        -H 'accept: application/json' \
+        -H "Authorization: Bearer $AUTH_TOKEN" 2> /dev/null)
+
+    if [[ $response == *"exception"* ]]; then
+        error "Resources could not be listed."
+        error "$response"
+    else
+        info "Resource list:"
+        echo "$response" | jq
+    fi
+
+    
+
+}
 aa() {
     
-    get_auth_token AUTH_TOKEN
+    get_user_auth_token AUTH_TOKEN
 
     response=$( 2> /dev/null)
 
@@ -453,13 +556,13 @@ case "$1" in
         add_admin_role_to_user
         ;;
     user-admin-login)
-        user-admin-login
+        user_admin_login
         ;;
     create-tenant)
-        create-tenant
+        create_tenant
         ;;
-    create-kms)
-        create-kms
+    create-kms-service)
+        create_kms_service
         ;;
     create-did-service)
         create-did-service
@@ -472,6 +575,15 @@ case "$1" in
         ;;
     create-verifier-service)
         create-verifier-service
+        ;;
+    list-organizations)
+        list_organizations
+        ;;
+    list-accounts)
+        list_accounts
+        ;;
+    list-resources)
+        list_resources
         ;;
     recreate-db|step99)
         recreate_collections
