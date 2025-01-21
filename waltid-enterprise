@@ -26,36 +26,6 @@ error() {
     log "[ERROR] $1"
 }
 
-help() {
-    cli_name=${0##*/}
-    echo "Walt.id Enterprise Stack Quickstarter v$(cat $WORKDIR/VERSION)
-
-Usage: $cli_name [command]
-
-Commands:
-  run                               Run the Enterprise Stack
-  superadmin-create-account         Create the super admin account
-  init-db                           Initialize the database
-  superadmin-login                  Log in the super admin
-  create-organization               Create (an | the root) Organization
-  create-user-account               Create a new user
-  add-admin-role                    Assign the 'admin' role to the user previously created
-  user-admin-login                  Log in user with admin role
-  create-tenant                     Create tenant in the organization created with the superadmin user
-  create-kms-service                Create KMS service in the tenant
-  create-key                        Create a key to generate a DID later
-  create-did-service                Create DID service in the tenant
-  create-credential-status-s        ervice  Create credential status service
-  create-issuer-service             Create issuer service in the tenant
-  create-verifier-service           Create verifier service in the tenant
-  list-organizations
-  list-accounts
-  list-resources
-  recreate-db                       Delete all data and restart it from scratch
-   "
-  exit 1
-}
-
 docker_hub_login(){
     password=$(cat .docker-token | grep -v "#" | grep -v -e '^[[:space:]]*$')
     info "Autheticating to Docker Hub. Please use the password provided..."
@@ -413,6 +383,8 @@ generate_key() {
     get_user_auth_token AUTH_TOKEN
 
     PURPOSE=$1
+    KEY_FILE=$2
+
     KMS_ID="waltid.tenant1.kms1"
 
     response=$(curl -X 'POST' \
@@ -434,17 +406,21 @@ generate_key() {
         echo "$response"
 
         DID_KEY=$(echo $response | jq "._id" | cut -d\" -f2)
-        echo $DID_KEY > .did_key
+        echo $DID_KEY > $KEY_FILE
 
-        info "Key saved at .did_key file"
+        info "Key saved in the $KEY_FILE file"
     fi
 }
 
 generate_did_key() {
-    generate_key "DID"
+    generate_key "DID" ".did_key"
 }
 
-create-did-service() {
+generate_status_key() {
+    generate_key "Credential Status" ".status_key"
+}
+
+create_did_service() {
    create_service "did" "did1"
 }
 
@@ -608,6 +584,38 @@ aa() {
     fi
 }
 
+help() {
+    cli_name=${0##*/}
+    echo "Walt.id Enterprise Stack Quickstarter v$(cat $WORKDIR/VERSION)
+
+Usage: $cli_name [command]
+
+Commands:
+  run                               Run the Enterprise Stack
+  superadmin-create-account         Create the super admin account
+  init-db                           Initialize the database
+  superadmin-login                  Log in the super admin
+  create-organization               Create (an | the root) Organization
+  create-user-account               Create a new user
+  add-admin-role                    Assign the 'admin' role to the user previously created
+  user-admin-login                  Log in user with admin role
+  create-tenant                     Create tenant in the organization created with the superadmin user
+  create-kms-service                Create KMS service in the tenant
+  generate-did-key                  Generate a key to be later used on DID creation
+  generate-status-key
+  create-did-service                Create DID service in the tenant
+  create-did
+  create-credential-status-service  Create credential status service
+  create-issuer-service             Create issuer service in the tenant
+  create-verifier-service           Create verifier service in the tenant
+  list-organizations
+  list-accounts
+  list-resources
+  recreate-db                       Delete all data and restart it from scratch
+   "
+  exit 1
+}
+
 
 case "$1" in
     run|step1)
@@ -647,19 +655,19 @@ case "$1" in
         generate_status_key
         ;;
     create-did-service)
-        create-did-service
+        create_did_service
         ;;
     create-did)
         create_did
         ;;
     create-credential-status-service)
-        create-credential-status-service
+        create_credential_status_service
         ;;
     create-issuer-service)
-        create-issuer-service
+        create_issuer_service
         ;;
     create-verifier-service)
-        create-verifier-service
+        create_verifier_service
         ;;
     list-organizations)
         list_organizations
