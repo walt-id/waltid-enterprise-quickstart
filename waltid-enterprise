@@ -542,6 +542,154 @@ create_verifier_service() {
     fi
 }
 
+issue_jwt_vc() {
+
+    ISSUER_SERVICE_ID="waltid.tenant1.issuer1"
+    KMS_SERVICE_ID="waltid.tenant1.kms1"
+    KEY_ID="test.tenant1.kms1.2CP9-WVc83iO4gAtOYrJhc-gy1nl73fWXOChG1hnI44"
+
+    # REQUEST_BODY=`cat <<EOF
+    #read -r -d '' REQUEST_BODY <<'EOF'
+    REQUEST_BODY=$(cat <<'EOF'
+{
+    "issuerKeyId": "$KEY_ID",
+    "credentialConfigurationId": "OpenBadgeCredential_jwt_vc_json",
+    "credentialData":
+    {
+        "@context":
+        [
+            "https://www.w3.org/2018/credentials/v1",
+            "https://purl.imsglobal.org/spec/ob/v3p0/context.json"
+        ],
+        "id": "urn:uuid:THIS WILL BE REPLACED WITH DYNAMIC DATA FUNCTION (see below)",
+        "type":
+        [
+            "VerifiableCredential",
+            "OpenBadgeCredential"
+        ],
+        "name": "JFF x vc-edu PlugFest 3 Interoperability",
+        "issuer":
+        {
+            "type":
+            [
+                "Profile"
+            ],
+            "name": "Jobs for the Future (JFF)",
+            "url": "https://www.jff.org/",
+            "image": "https://w3c-ccg.github.io/vc-ed/plugfest-1-2022/images/JFF_LogoLockup.png"
+        },
+        "credentialSubject":
+        {
+            "type":
+            [
+                "AchievementSubject"
+            ],
+            "achievement":
+            {
+                "id": "urn:uuid:ac254bd5-8fad-4bb1-9d29-efd938536926",
+                "type":
+                [
+                    "Achievement"
+                ],
+                "name": "JFF x vc-edu PlugFest 3 Interoperability",
+                "description": "This wallet supports the use of W3C Verifiable Credentials and has demonstrated interoperability during the presentation request workflow during JFF x VC-EDU PlugFest 3.",
+                "criteria":
+                {
+                    "type": "Criteria",
+                    "narrative": "Wallet solutions providers earned this badge by demonstrating interoperability during the presentation request workflow. This includes successfully receiving a presentation request, allowing the holder to select at least two types of verifiable credentials to create a verifiable presentation, returning the presentation to the requestor, and passing verification of the presentation and the included credentials."
+                },
+                "image":
+                {
+                    "id": "https://w3c-ccg.github.io/vc-ed/plugfest-3-2023/images/JFF-VC-EDU-PLUGFEST3-badge-image.png",
+                    "type": "Image"
+                }
+            }
+        }
+    },
+    "mapping":
+    {
+        "id": "<uuid>",
+        "issuer":
+        {
+            "id": "<issuerDid>"
+        },
+        "credentialSubject":
+        {
+            "id": "<subjectDid>"
+        },
+        "issuanceDate": "<timestamp>",
+        "expirationDate": "<timestamp-in:365d>"
+    },
+    "selectiveDisclosure":
+    {
+        "fields":
+        {
+            "name":
+            {
+                "sd": true
+            },
+            "credentialSubject":
+            {
+                "sd": false,
+                "children":
+                {
+                    "fields":
+                    {
+                        "achievement":
+                        {
+                            "sd": false,
+                            "children":
+                            {
+                                "fields":
+                                {
+                                    "name":
+                                    {
+                                        "sd": true
+                                    }
+                                },
+                                "decoyMode": "NONE",
+                                "decoys": 0
+                            }
+                        }
+                    },
+                    "decoyMode": "NONE",
+                    "decoys": 0
+                }
+            }
+        },
+        "decoyMode": "NONE",
+        "decoys": 0
+    },
+    "authenticationMethod": "PRE_AUTHORIZED",
+    "issuerDid": "<ISSUER_DID>",
+    "expiresInSeconds": 300
+}
+EOF
+    )
+
+    get_user_auth_token AUTH_TOKEN
+
+    response=$(curl -X 'POST' \
+        "http://waltid.enterprise.localhost:3000/v1/$ISSUER_SERVICE_ID/issuer-service-api/credentials/issue" \
+        -H 'accept: */*' \
+        -H 'statusCallbackUri: https://example.com/status_callback/$id' \
+        -H 'statusCallbackApiKey: 1671a86d-84e8-4d0d-a35e-efb49b728b7e' \
+        -H "Authorization: Bearer $AUTH_TOKEN" \
+        -H 'Content-Type: application/json' \
+        -d "$REQUEST_BODY"
+    2> /dev/null)
+
+    if [[ $response == *"exception"* ]]; then
+        error "Credential could not be issued."
+        error "$response"
+    else
+        info "Credential successfully issued."
+        echo $response
+    fi
+}
+
+
+
 list_organizations() {
 
     # TODO Print only relevant infos
@@ -664,6 +812,7 @@ Commands:
   create-credential-status-service  Create credential status service
   create-issuer-service             Create issuer service in the tenant
   create-verifier-service           Create verifier service in the tenant
+  issue-jwt-vc                      Issue a W3C JWT credential
   list-organizations
   list-accounts
   list-resources
