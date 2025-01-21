@@ -377,57 +377,110 @@ create_tenant() {
     fi
 }
 
-create_kms_service() {
+create_service() {
     
     get_user_auth_token AUTH_TOKEN
 
-    KMS_ID="waltid.kms1"
+    SERVICE_TYPE=$1
+    SERVICE_NAME=$2
+
+    SERVICE_ID="waltid.tenant1.$SERVICE_NAME"
 
     response=$(curl -X 'POST' \
-        "http://waltid.enterprise.localhost:3000/v1/$KMS_ID/resource-api/services/create" \
+        "http://waltid.enterprise.localhost:3000/v1/$SERVICE_ID/resource-api/services/create" \
         -H 'accept: */*' \
         -H "Authorization: Bearer $AUTH_TOKEN" \
         -H 'Content-Type: application/json' \
+        -d "{
+            \"type\": \"$SERVICE_TYPE\"
+        }" 2> /dev/null)
+
+    if [[ $response == *"exception"* ]]; then
+        error "$SERVICE_ID could not be created."
+        error "$response"
+    else
+        info "$SERVICE_ID successfully created."
+        echo "$response" | jq
+    fi
+}
+
+create_kms_service() {
+    create_service "kms" "kms1"
+}
+
+generate_key() {
+    
+    get_user_auth_token AUTH_TOKEN
+
+    PURPOSE=$1
+    KMS_ID="waltid.tenant1.kms1"
+
+    response=$(curl -X 'POST' \
+        "http://waltid.enterprise.localhost:3000/v1/$KMS_ID/kms-service-api/keys/generate" \
+        -H 'accept: application/json' \
+        -H "Authorization: Bearer $AUTH_TOKEN" \
+        -H 'Content-Type: application/json' \
         -d '{
-            "type": "kms"
+            "backend": "jwk",
+            "keyType": "Ed25519"
         }' 2> /dev/null)
 
     if [[ $response == *"exception"* ]]; then
-        error "KMS $KMS_ID could not be created."
+        error "$PURPOSE key could not be generate from $KMS_ID."
         error "$response"
     else
-        info "KMS $KMS_ID successfully created."
+        info "$PURPOSE key successfully generated."
+        echo "$response" | jq
+        echo "$response"
+
+        DID_KEY=$(echo $response | jq "._id" | cut -d\" -f2)
+        echo $DID_KEY > .did_key
+
+        info "Key saved at .did_key file"
     fi
 }
 
-create-key() {
-    
-    get_user_auth_token AUTH_TOKEN
-
-    response=$( 2> /dev/null)
-
-    if [[ $response == *"exception"* ]]; then
-        error "XXX could not be added."
-        error "$response"
-    else
-        info "XXX successfully added."
-    fi
+generate_did_key() {
+    generate_key "DID"
 }
 
 create-did-service() {
-    
-    get_user_auth_token AUTH_TOKEN
-
-    response=$( 2> /dev/null)
-
-    if [[ $response == *"exception"* ]]; then
-        error "XXX could not be added."
-        error "$response"
-    else
-        info "XXX successfully added."
-    fi
+   create_service "did" "did1"
 }
 
+create_did() {
+
+    get_user_auth_token AUTH_TOKEN
+
+    DID_SERVICE_ID="waltid.tenant1.did1"
+    
+    if [[ ! -f .did_key ]]; then
+        info "DID key doesn't exist. Let's create one..."
+        generate_did_key
+    fi
+
+    KEY_ID=$(cat .did_key)
+
+    response=$(curl -X 'POST' \
+        "http://waltid.enterprise.localhost:3000/v1/$DID_SERVICE_ID/did-service-api/dids/create/key" \
+        -H 'accept: application/json' \
+        -H "Authorization: Bearer $AUTH_TOKEN" \
+        -H 'Content-Type: application/json' \
+        -d "{
+            \"keyId\": \"$KEY_ID\",
+            \"useJwkJcsPub\": true
+        }" 2> /dev/null)
+
+    if [[ $response == *"exception"* ]]; then
+        error "did:key could not be created."
+        error "$response"
+    else
+        echo $response > .did
+        info "did:key successfully created and saved in the .did file:"
+        echo "$response" | jq ".did"
+    fi
+
+}
 
 create-issuer-service() {
     
@@ -502,8 +555,10 @@ list_resources() {
 
     get_user_auth_token AUTH_TOKEN
 
+    TENANT_ID="waltid.tenant1"
+
     response=$(curl -X 'GET' \
-        'http://waltid.enterprise.localhost:3000/v1/waltid/resource-api/resources/list' \
+        "http://waltid.enterprise.localhost:3000/v1/$TENANT_ID/resource-api/resources/list" \
         -H 'accept: application/json' \
         -H "Authorization: Bearer $AUTH_TOKEN" 2> /dev/null)
 
@@ -518,6 +573,27 @@ list_resources() {
     
 
 }
+
+list_keys() {
+    
+    get_user_auth_token AUTH_TOKEN
+
+    KMS_ID="waltid.tenant1.kms1"
+
+    response=$(curl -X 'GET' \
+        "http://waltid.enterprise.localhost:3000/v1/$KMS_ID/kms-service-api/keys/list" \
+        -H 'accept: application/json' \
+        -H "Authorization: Bearer $AUTH_TOKEN" 2> /dev/null)
+
+    if [[ $response == *"exception"* ]]; then
+        error "$KMS_ID keys could not be listed."
+        error "$response"
+    else
+        info "$KMS_ID keys:"
+        echo "$response" | jq
+    fi
+}
+
 aa() {
     
     get_user_auth_token AUTH_TOKEN
@@ -564,8 +640,17 @@ case "$1" in
     create-kms-service)
         create_kms_service
         ;;
+    generate-did-key)
+        generate_did_key
+        ;;
+    generate-status-key)
+        generate_status_key
+        ;;
     create-did-service)
         create-did-service
+        ;;
+    create-did)
+        create_did
         ;;
     create-credential-status-service)
         create-credential-status-service
@@ -584,6 +669,9 @@ case "$1" in
         ;;
     list-resources)
         list_resources
+        ;;
+    list-keys)
+        list_keys
         ;;
     recreate-db|step99)
         recreate_collections
