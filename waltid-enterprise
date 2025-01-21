@@ -458,17 +458,63 @@ create_did() {
 
 }
 
-create-issuer-service() {
-    
+create_issuer_service() {
+
+    ISSUER_SERVICE_ID="waltid.tenant1.issuer1"
+    KMS_SERVICE_ID="waltid.tenant1.kms1"
+    KEY_ID="test.tenant1.kms1.2CP9-WVc83iO4gAtOYrJhc-gy1nl73fWXOChG1hnI44"
+
     get_user_auth_token AUTH_TOKEN
 
-    response=$( 2> /dev/null)
+
+    response=$(curl -X 'POST' \
+        "http://waltid.enterprise.localhost:3000/v1/$ISSUER_SERVICE_ID/resource-api/services/create" \
+        -H 'accept: */*' \
+        -H "Authorization: Bearer $AUTH_TOKEN" \
+        -H 'Content-Type: application/json' \
+        -d "{
+            \"type\": \"issuer\",
+            \"kms\": \"$KMS_SERVICE_ID\",
+            \"tokenKeyId\": \"$KEY_ID\",
+            \"supportedCredentialTypes\": {
+                \"identity_credential_vc+sd-jwt\": {
+                \"format\": \"vc+sd-jwt\",
+                \"vct\": \"{vctBaseURL}/identity_credential\",
+                \"cryptographic_binding_methods_supported\": [
+                    \"jwk\"
+                ],
+                \"credential_signing_alg_values_supported\": [
+                    \"ES256\"
+                ],
+                \"sdJwtVcTypeMetadata\": {
+                    \"name\": \"Identity Credential\",
+                    \"description\": \"The Identity Verifiable Credential\",
+                    \"vct\": \"{vctBaseURL}/identity_credential\"
+                }
+                },
+                \"OpenBadgeCredential_jwt_vc_json\": {
+                \"format\": \"jwt_vc_json\",
+                \"cryptographic_binding_methods_supported\": [
+                    \"did\"
+                ],
+                \"credential_signing_alg_values_supported\": [
+                    \"ES256\"
+                ],
+                \"credential_definition\": {
+                    \"type\": [
+                    \"VerifiableCredential\",
+                    \"OpenBadgeCredential\"
+                    ]
+                }
+                }
+            }
+        }" 2> /dev/null)
 
     if [[ $response == *"exception"* ]]; then
-        error "XXX could not be added."
+        error "Issuer Service $ISSUER_SERVICE_ID could not be created."
         error "$response"
     else
-        info "XXX successfully added."
+        info "Issuer Service $ISSUER_SERVICE_ID successfully created."
     fi
 }
 
