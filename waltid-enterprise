@@ -792,10 +792,43 @@ help() {
     cli_name=${0##*/}
     echo "Walt.id Enterprise Stack Quickstarter v$(cat $WORKDIR/VERSION)
 
-Usage: $cli_name [command]
+Usage: 
+
+    $cli_name [command]
+
+Instructions:
+
+    This is a very simple script that aims to give you 
+    a first experience of using our Enterprise Stack so 
+    that you can assimilate its conceptual architecture 
+    in a playful and gradual way.
+
+    We suggest that you open 2 terminals: 
+    
+    1. one to run the stack 
+    2. and another one to run the commands against the 
+       running instance
+
+    To start running the commands, there are two options:
+
+    1. Via wizard, which will guide you through each step.
+    1. By running each command independently, according to 
+       your needs or curiosity.
+
+    Should you have any doubt, just try it out. Nothing will break ;-)
+    
+    And, if you feel it happened, the last command is there 
+    to give you another chance :-)
 
 Commands:
+
+  tl;dr
+  -------------
   run                               Run the Enterprise Stack
+  wizard                            Start a step by step wizard to guide you through all important operations
+
+  expert mode
+  -------------
   superadmin-create-account         Create the super admin account
   init-db                           Initialize the database
   superadmin-login                  Log in the super admin
@@ -806,16 +839,16 @@ Commands:
   create-tenant                     Create tenant in the organization created with the superadmin user
   create-kms-service                Create KMS service in the tenant
   generate-did-key                  Generate a key to be later used on DID creation
-  generate-status-key
+  generate-status-key               Generate a key to be later used on...
   create-did-service                Create DID service in the tenant
-  create-did
+  create-did                        Create a did:key for the credential issuance
   create-credential-status-service  Create credential status service
   create-issuer-service             Create issuer service in the tenant
   create-verifier-service           Create verifier service in the tenant
   issue-jwt-vc                      Issue a W3C JWT credential
-  list-organizations
-  list-accounts
-  list-resources
+  list-organizations                List all organizations under the superadmin account
+  list-accounts                     List all accounts under...
+  list-resources                    List all account in the tenant
   recreate-db                       Delete all data and restart it from scratch
    "
   exit 1
@@ -823,25 +856,28 @@ Commands:
 
 
 case "$1" in
-    run|step1)
+    run)
         run
         ;;
-    superadmin-create-account|step2)
+    wizard)
+        wizard
+        ;;
+    superadmin-create-account)
         superadmin_create_account
         ;;
-    superadmin-login|step3)
+    superadmin-login)
         superadmin_login
         ;;
-    init-db|step4)
+    init-db)
         init_db
         ;;
-    create-organization|step5)
+    create-organization)
         create_organization
         ;;
-    create-user-account|step6)
+    create-user-account)
         create_user_account
         ;;
-    add-admin-role|step7)
+    add-admin-role)
         add_admin_role_to_user
         ;;
     user-admin-login)
