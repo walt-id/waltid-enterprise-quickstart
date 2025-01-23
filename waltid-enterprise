@@ -2,12 +2,14 @@
 
 set -e
 
+cli_name=${0##*/}
 export WORKDIR=$(cd $(dirname $0) && pwd)
 
 auth_token=""
 
 init() {
-    info "Checking dependencies..."
+    echo "Walt.id Enterprise Stack Quickstarter v$(cat $WORKDIR/VERSION)"
+    info "Checking dependencies... TODO"
     # jq
     # curl
 }
@@ -59,9 +61,38 @@ get_superadmin_auth_token() {
     fi
     
     AUTH_TOKEN=$(cat .auth_token)
-    # echo $AUTH_TOKEN
 
     eval $1=$AUTH_TOKEN
+}
+
+clean_all() {
+    info "Cleaning up..."
+    recreate_collections
+    rm -f .user_id
+    rm -f .auth_token
+    rm -f .user_auth_token
+    rm -f .did
+}
+
+check_last_command_failure() {
+    if [[ $result < 0 ]]; then
+        echo "
+        
+        !!!!!!!!!!!
+        !! ERROR !!
+        !!!!!!!!!!!
+
+        Oops. I'm sorry. Something went wrong. Contact the WaltId guys to help you with it. Bye.
+        "
+
+        return -1
+    fi 
+
+    result=0
+}
+
+pause() {
+    read -n1 -s
 }
 
 get_user_auth_token() {
@@ -78,6 +109,514 @@ get_user_auth_token() {
     eval $1=$USER_AUTH_TOKEN
 }
 
+wizard_pre_message() {
+    cat <<EOF
+    $1
+EOF
+    pause
+    result=0
+}
+
+wizard_pos_message() {
+    check_last_command_failure
+    cat <<EOF
+    $1
+EOF
+}
+
+wizard_welcome() {
+    echo "Welcome to the Quickstart Wizard of the WaltId Enterprise Stack! We will now guide you through each step to get you onboarded on our platform."
+}
+
+wizard_disclaimer_disagree() {
+    echo "        
+
+    We understand. No worries. Friendship continues.
+
+    Let us give you 2 options:
+
+    1. Try each command by yourself and deal with eventual issues; or
+    2. Save the data you don't want to lose and come back again to this wizard ;-)
+
+    Tchüss!
+
+    "
+}
+
+wizard_disclaimer_agreed() {
+    echo "
+
+    Cool. Thanks for understanding.
+
+    "
+
+}
+wizard_disclaimer() {
+    echo "
+    In order to make you experience as smooth as possible, we need to recreate the whole database, just to make sure there's no data there that could cause any confusion and get in the way of the main purpose of this script: learning how to use the product.
+
+    Which means: all the data in your local WaltId Enterprise Stack instance will be lost.
+
+    "
+    read -p "Are you ok with that? (y/N) " -n1 AGREED
+
+    shopt -s nocasematch
+    if [[ "$AGREED" != "y" ]]; then
+        wizard_disclaimer_disagree
+        return -1
+    fi
+        
+    wizard_disclaimer_agreed
+
+}
+
+wizard_pre_suerpadmin_create_account() {
+
+    wizard_pre_message "
+    The first thing we need to do is the creation of the so called Super Admin user. It's something like the 'root' in your OS.
+
+    Press any key to run the command below...
+
+        $cli_name superadmin-create-account
+
+    "
+    pause
+}
+
+wizard_pos_suerpadmin_create_account() {
+    wizard_pos_message "
+    Nice! The Super Admin user has just been created with the email and password specified in the ./config/superadmin-registration.conf file.
+
+    The Super Admin user can do anything in the platform. As the name suggests, he is the admin of the whole instance. He can manage all the resources in any tenant in any organization. So, please, never share this user's credential with anyone not related to the instance administration.
+    "
+}
+
+wizard_pre_superadmin_login() {
+    wizard_pre_message "
+    Now, it's time to log him in.
+
+    Press any key to run the command below to get access to super powers...
+
+        $cli_name superadmin-login
+    "
+}
+
+wizard_pos_superadmin_login() {
+    wizard_pos_message "
+    The Super Admin is now logged in.
+
+    Every command from now on will be executed with the Super Admin account. Take care.
+    "
+}
+
+wizard_pre_init_db() {
+    wizard_pre_message "
+    The next step is the database initialization. Since we've just recreated everything from scratch, it's not strictly necessary, but I'll show you how does it work anyway.
+
+    Press any key to run the command below...
+
+        $cli_name init-db
+
+    "
+}
+
+wizard_pos_init_db() {
+    wizard_pos_message "
+    The database has been initialized according to the information provided in the config/database.conf file.
+    "
+}
+
+wizard_pre_create_organization() {
+    wizard_pre_message "
+    It's now time to create the root organization. If you allow me, I will call it "waltid". Once you learn how to do it, you should use your company's name instead.
+    
+    You can find more about organizations in the docs (https://docs.walt.id/enterprise-stack/concepts#the-organization)
+
+    Press any key to run the command below and create the "waltid" root organization...
+
+       $cli_name create-organization
+    "
+}
+
+wizard_pos_create_organization() {
+    wizard_pos_message "
+    Awesome. The "waltid" root organization has been created.
+
+    This is how you database structure looks like so far.
+
+        ┌────────────┐   
+        │            │   
+        │   waltid   │   
+        │            │   
+        └────────────┘   
+                            
+    "
+}
+
+wizard_pre_list_organizations() {
+	wizard_pre_message "
+    At any time, you can list all the organizations in... #TODO
+    
+    Press any key to run the command bellow to list all the organizations... #TODO
+
+        $(basename "$0") list-organizations
+	"
+}
+
+wizard_pos_list_organizations() {
+	wizard_pos_message "
+	"
+}
+
+wizard_pre_create_user_account() {
+	wizard_pre_message "
+    You are probably aware that it's not a good idea to use a super powered user for daily tasks, right?  And, you know... big power leads to big responsibilities. We'd better create a less powered user.
+
+    We will now use the Super Admin account to create a new user account. 
+
+    Press any key to run the command below to create a not-so-super user...
+
+       $cli_name create-user-account
+	"
+}
+
+wizard_pos_create_user_account() {
+	wizard_pos_message "
+    The user "max.mustermann@example.org" was successfuly created with password "password123456".
+
+    We will use it from now on.
+	"
+}
+
+wizard_pre_list_accounts() {
+	wizard_pre_message "
+    Press any key to run the command below to list all users registered in your instance.
+
+        $cli_name list-accounts
+	"
+}
+
+wizard_pos_list_accounts1() {
+	wizard_pos_message "
+    Notice that there are two user accounts: Superadmin and Max.
+
+    And, before we move forward, let's take a closer look to the "role" property of each account. What does it mean?
+
+    Each property in the "roles" object represents the set of roles assingned to that user in a specific organization.
+
+    Take Max as our first example. He doesn't have any specifc role. Which means he doesn't have any privilege on any resource (we will talk more about it later).
+
+    On the other hand, look at the Superadmin account. It has the role "admin" in the "waltid" organization. And, why does it have such privilege? Just because it's the account who created that organization.
+
+    Every time an organization is created, an "admin" role is automatically generated and assigned to its creator.
+	"
+}
+
+wizard_pos_list_accounts2() {
+    wizard_pos_message "
+    Now notice that Max also has the role "waltid.admin".
+    "
+}
+
+
+wizard_pre_list_resources() {
+	wizard_pre_message "
+
+	"
+}
+
+wizard_pos_list_resources() {
+	wizard_pos_message "
+
+	"
+}
+
+
+wizard_pre_list_keys() {
+	wizard_pre_message "
+
+	"
+}
+
+wizard_pos_list_keys() {
+	wizard_pos_message "
+
+	"
+}
+
+wizard_pre_add_admin_role() {
+	wizard_pre_message "
+    What if we now assign the same "waltid.admin" role to Max? Does he deserve it?
+
+     Press any key to run the command below and give Max some powers on the "waltid" organization.
+
+       $cli_name add-admin-role
+	"
+}
+
+wizard_pos_add_admin_role() {
+	wizard_pos_message "
+    Congratz, Max. You are now a VIP at "waltid". Oh, ok, no so VIP as the Super Admin. But you understand, right? ;-)
+	"
+}
+
+
+wizard_pre_user_admin_login() {
+	wizard_pre_message "
+    Let's switch to Max's account and stop using the Super Admin account.
+
+    Press any key to log Max in.
+
+        $cli_name user-admin-login
+	"
+}
+
+wizard_pos_user_admin_login() {
+	wizard_pos_message "
+    Max is in charge now. He logged in successfuly.
+	"
+}
+
+
+wizard_pre_create_tenant() {
+	wizard_pre_message "
+
+	"
+}
+
+wizard_pos_create_tenant() {
+	wizard_pos_message "
+    The root organization is like the '/' directory of a file system. 
+
+    The WaltId Enterprise Stack
+	"
+}
+
+
+wizard_pre_create_kms_service() {
+	wizard_pre_message "
+
+	"
+}
+
+wizard_pos_create_kms_service() {
+	wizard_pos_message "
+
+	"
+}
+
+
+wizard_pre_generate_did_key() {
+	wizard_pre_message "
+
+	"
+}
+
+wizard_pos_generate_did_key() {
+	wizard_pos_message "
+
+	"
+}
+
+
+wizard_pre_generate_status_key() {
+	wizard_pre_message "
+
+	"
+}
+
+wizard_pos_generate_status_key() {
+	wizard_pos_message "
+
+	"
+}
+
+
+wizard_pre_create_did_service() {
+	wizard_pre_message "
+
+	"
+}
+
+wizard_pos_create_did_service() {
+	wizard_pos_message "
+
+	"
+}
+
+
+wizard_pre_create_did() {
+	wizard_pre_message "
+
+	"
+}
+
+wizard_pos_create_did() {
+	wizard_pos_message "
+
+	"
+}
+
+
+wizard_pre_create_credential_status_service() {
+	wizard_pre_message "
+
+	"
+}
+
+wizard_pos_create_credential_status_service() {
+	wizard_pos_message "
+
+	"
+}
+
+
+wizard_pre_create_issuer_service() {
+	wizard_pre_message "
+
+	"
+}
+
+wizard_pos_create_issuer_service() {
+	wizard_pos_message "
+
+	"
+}
+
+
+wizard_pre_create_verifier_service() {
+	wizard_pre_message "
+
+	"
+}
+
+wizard_pos_create_verifier_service() {
+	wizard_pos_message "
+
+	"
+}
+
+
+wizard_pre_issue_jwt_vc() {
+	wizard_pre_message "
+
+	"
+}
+
+wizard_pos_issue_jwt_vc() {
+	wizard_pos_message "
+
+	"
+}
+
+wizard() {
+    wizard_welcome
+    wizard_disclaimer
+    clean_all
+
+    wizard_pre_suerpadmin_create_account
+    superadmin_create_account
+    wizard_pos_suerpadmin_create_account
+
+    wizard_pre_superadmin_login
+    superadmin_login
+    wizard_pos_superadmin_login
+
+    wizard_pre_init_db
+    init_db
+    wizard_pos_init_db
+
+    wizard_pre_create_organization
+    create_organization
+    wizard_pos_create_organization
+
+    wizard_pre_list_organizations
+    list_organizations
+    wizard_pos_list_organizations
+
+    wizard_pre_create_user_account
+    create_user_account
+    wizard_pos_create_user_account
+
+    wizard_pre_list_accounts
+    list_accounts
+    wizard_pos_list_accounts1
+
+    wizard_pre_add_admin_role
+    add_admin_role_to_user
+    wizard_pos_add_admin_role
+
+    wizard_pre_list_accounts
+    list_accounts
+    wizard_pos_list_accounts2
+
+    wizard_pre_user_admin_login
+    user_admin_login
+    wizard_pos_user_admin_login
+
+    wizard_pre_create_tenant
+    create_tenant
+    wizard_pos_create_tenant
+
+    wizard_pre_list_resources
+    list_resources
+    wizard_pos_list_resources
+
+    wizard_pre_create_kms_service
+    create_kms_service
+    wizard_pos_create_kms_service
+
+    wizard_pre_list_resources
+    list_resources
+    wizard_pos_list_resources
+
+    wizard_pre_generate_did_key
+    generate_did_key
+    wizard_pos_generate_did_key
+
+    wizard_pre_generate_status_key
+    generate_status_key
+    wizard_pos_generate_status_key
+
+    wizard_pre_create_did_service
+    create_did_service
+    wizard_pos_create_did_service
+
+    wizard_pre_list_resources
+    list_resources
+    wizard_pos_list_resources
+
+    wizard_pre_create_did
+    create_did
+    wizard_pos_create_did
+
+    # wizard_pre_create_credential_status_service
+    # create_credential_status_service
+    # wizard_pos_create_credential_status_service
+
+    wizard_pre_create_issuer_service
+    create_issuer_service
+    wizard_pos_create_issuer_service
+
+    wizard_pre_list_resources
+    list_resources
+    wizard_pos_list_resources
+
+    wizard_pre_create_verifier_service
+    create_verifier_service
+    wizard_pos_create_verifier_service
+
+    wizard_pre_list_resources
+    list_resources
+    wizard_pos_list_resources
+
+    wizard_pre_issue_jwt_vc
+    issue_jwt_vc
+    wizard_pos_issue_jwt_vc
+
+}
+
+
 superadmin_create_account() {
     superadmin_token=$(cat config/superadmin-registration.conf | sed -n '2 p' | cut -d \" -f 2)
 
@@ -91,6 +630,7 @@ superadmin_create_account() {
     if [[ $response == *"exception"* ]]; then
         error "Super admin account could not be created."
         error "$response"
+        result=-1
     else 
         info "Super admin account successfully created."
     fi
@@ -113,6 +653,7 @@ superadmin_login() {
     if [[ $response == *"exception"* ]]; then
         error "Super admin could not be logged in."
         error "$response"
+        result=-1
     else
         info "Super admin logged in successfully."
         info "$response"
@@ -136,6 +677,7 @@ init_db() {
     if [[ $response == *"Unauthorized"* ]]; then
         error "Database could not be initialized. Access denied."
         error "$response"
+        result=-1
     else
         info "Database successfully initialized."
     fi
@@ -143,7 +685,7 @@ init_db() {
 
 recreate_collections() {
 
-    get_superadmin_auth_token AUTH_TOKEN
+    # get_superadmin_auth_token AUTH_TOKEN
 
     response=$(curl -X 'POST' \
         'http://localhost:3000/v1/dev/database-recreate' \
@@ -820,12 +1362,21 @@ Instructions:
     And, if you feel it happened, the last command is there 
     to give you another chance :-)
 
+    !!! Disclaimer !!!
+
+    - This is a tool for demonstration purposes only.
+    - This is not a tool to be used in production.
+    - Make sure to run it on a local instance.
+    - Eventually, we will recreate the whole database in order redo something we did wrong.
+    - So, use it for educational purposes only, with no critical data at all.
+
 Commands:
 
   tl;dr
   -------------
   run                               Run the Enterprise Stack
-  wizard                            Start a step by step wizard to guide you through all important operations
+  wizard                            Start a step by step wizard to guide you 
+                                    through all important operations
 
   expert mode
   -------------
@@ -854,78 +1405,100 @@ Commands:
   exit 1
 }
 
-
 case "$1" in
     run)
         run
         ;;
     wizard)
+        init
         wizard
         ;;
     superadmin-create-account)
+        init
         superadmin_create_account
         ;;
     superadmin-login)
+        init
         superadmin_login
         ;;
     init-db)
+        init
         init_db
         ;;
     create-organization)
+        init
         create_organization
         ;;
     create-user-account)
+        init
         create_user_account
         ;;
     add-admin-role)
+        init
         add_admin_role_to_user
         ;;
     user-admin-login)
+        init
         user_admin_login
         ;;
     create-tenant)
+        init
         create_tenant
         ;;
     create-kms-service)
+        init
         create_kms_service
         ;;
     generate-did-key)
+        init
         generate_did_key
         ;;
     generate-status-key)
+        init
         generate_status_key
         ;;
     create-did-service)
+        init
         create_did_service
         ;;
     create-did)
+        init
         create_did
         ;;
     create-credential-status-service)
+        init
         create_credential_status_service
         ;;
     create-issuer-service)
+        init
         create_issuer_service
         ;;
     create-verifier-service)
+        init
         create_verifier_service
         ;;
     issue-jwt-vc)
+        init
         issue_jwt_vc
         ;;
     list-organizations)
+        init
         list_organizations
         ;;
     list-accounts)
+        init
         list_accounts
         ;;
     list-resources)
+        init
         list_resources
         ;;
     list-keys)
+        init
         list_keys
         ;;
-    recreate-db|step99)
+    recreate-db)
+        init
         recreate_collections
         ;;
     *)
