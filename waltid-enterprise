@@ -5,10 +5,16 @@ set -e
 cli_name=${0##*/}
 export WORKDIR=$(cd $(dirname $0) && pwd)
 
+ROOT_ORGANIZATION=waltid
+TENANT=mycustomer
+ISSUER_SERVICE="issuer-service"
+VERIFIER_SERVICE="verifier-service"
+# CUSTOMER_ORGANIZATION
+
 auth_token=""
 
 init() {
-    echo "Walt.id Enterprise Stack Quickstarter v$(cat $WORKDIR/VERSION)"
+    echo "walt.id Enterprise Stack Quickstarter v$(cat $WORKDIR/VERSION)"
     info "Checking dependencies... TODO"
     # jq
     # curl
@@ -26,6 +32,18 @@ info() {
 
 error() {
     log "[ERROR] $1"
+}
+
+check_running_instance() {
+    info "#TODO Checking if walt.id Enterprise is running..."
+    
+    # nc -z localhost 7001
+    # if [[ $? != 0 ]]; then
+    #     error "Sorry. I could not find any running instance of the walt.id Enterprise Stack."
+    # else
+    #     info "walt.id Enterprise running"
+    # fi
+
 }
 
 docker_hub_login(){
@@ -72,6 +90,11 @@ clean_all() {
     rm -f .auth_token
     rm -f .user_auth_token
     rm -f .did
+    rm -f .did_key 
+    rm -f .docker-token 
+    rm -f .status_key 
+
+    # Remove docker images?
 }
 
 check_last_command_failure() {
@@ -82,7 +105,7 @@ check_last_command_failure() {
         !! ERROR !!
         !!!!!!!!!!!
 
-        Oops. I'm sorry. Something went wrong. Contact the WaltId guys to help you with it. Bye.
+        Oops. I'm sorry. Something went wrong. Contact the walt.id guys to help you with it. Bye.
         "
 
         return -1
@@ -125,7 +148,7 @@ EOF
 }
 
 wizard_welcome() {
-    echo "Welcome to the Quickstart Wizard of the WaltId Enterprise Stack! We will now guide you through each step to get you onboarded on our platform."
+    echo "Welcome to the Quickstart Wizard of the walt.id Enterprise Stack! We will now guide you through each step to get you onboarded on our platform."
 }
 
 wizard_disclaimer_disagree() {
@@ -155,7 +178,7 @@ wizard_disclaimer() {
     echo "
     In order to make you experience as smooth as possible, we need to recreate the whole database, just to make sure there's no data there that could cause any confusion and get in the way of the main purpose of this script: learning how to use the product.
 
-    Which means: all the data in your local WaltId Enterprise Stack instance will be lost.
+    Which means: all the data in your local walt.id Enterprise Stack instance will be lost.
 
     "
     read -p "Are you ok with that? (y/N) " -n1 AGREED
@@ -180,7 +203,6 @@ wizard_pre_suerpadmin_create_account() {
         $cli_name superadmin-create-account
 
     "
-    pause
 }
 
 wizard_pos_suerpadmin_create_account() {
@@ -211,7 +233,7 @@ wizard_pos_superadmin_login() {
 
 wizard_pre_init_db() {
     wizard_pre_message "
-    The next step is the database initialization. Since we've just recreated everything from scratch, it's not strictly necessary, but I'll show you how does it work anyway.
+    The next step is the database initialization. Since we've just recreated everything from scratch, it's not strictly necessary, but I'll show you how it works anyway.
 
     Press any key to run the command below...
 
@@ -228,11 +250,13 @@ wizard_pos_init_db() {
 
 wizard_pre_create_organization() {
     wizard_pre_message "
-    It's now time to create the root organization. If you allow me, I will call it "waltid". Once you learn how to do it, you should use your company's name instead.
+    It's now time to create the root organization. If you allow me, I will call it '$ROOT_ORGANIZATION'. Once you learn how to do it, you should use your company's name instead.
     
-    You can find more about organizations in the docs (https://docs.walt.id/enterprise-stack/concepts#the-organization)
+    You can find more about organizations in the docs: 
+    
+    https://docs.walt.id/enterprise-stack/concepts#the-organization
 
-    Press any key to run the command below and create the "waltid" root organization...
+    Press any key to run the command below and create the '$ROOT_ORGANIZATION' root organization...
 
        $cli_name create-organization
     "
@@ -240,7 +264,7 @@ wizard_pre_create_organization() {
 
 wizard_pos_create_organization() {
     wizard_pos_message "
-    Awesome. The "waltid" root organization has been created.
+    Awesome. The "$ROOT_ORGANIZATION" root organization has been created.
 
     This is how you database structure looks like so far.
 
@@ -274,7 +298,7 @@ wizard_pre_create_user_account() {
 
     We will now use the Super Admin account to create a new user account. 
 
-    Press any key to run the command below to create a not-so-super user...
+    >> Press any key to run the command below to create a not-so-super user...
 
        $cli_name create-user-account
 	"
@@ -282,7 +306,7 @@ wizard_pre_create_user_account() {
 
 wizard_pos_create_user_account() {
 	wizard_pos_message "
-    The user "max.mustermann@example.org" was successfuly created with password "password123456".
+    The user "max.mustermann@example.org" was successfully created with password "password123456".
 
     We will use it from now on.
 	"
@@ -290,7 +314,7 @@ wizard_pos_create_user_account() {
 
 wizard_pre_list_accounts() {
 	wizard_pre_message "
-    Press any key to run the command below to list all users registered in your instance.
+    >> Press any key to run the command below to list all users registered in your instance.
 
         $cli_name list-accounts
 	"
@@ -306,7 +330,7 @@ wizard_pos_list_accounts1() {
 
     Take Max as our first example. He doesn't have any specifc role. Which means he doesn't have any privilege on any resource (we will talk more about it later).
 
-    On the other hand, look at the Superadmin account. It has the role "admin" in the "waltid" organization. And, why does it have such privilege? Just because it's the account who created that organization.
+    On the other hand, look at the Superadmin account. It has the role "admin" in the "$ROOT_ORGANIZATION" organization. And, why does it have such privilege? Just because it's the account who created that organization.
 
     Every time an organization is created, an "admin" role is automatically generated and assigned to its creator.
 	"
@@ -314,23 +338,38 @@ wizard_pos_list_accounts1() {
 
 wizard_pos_list_accounts2() {
     wizard_pos_message "
-    Now notice that Max also has the role "waltid.admin".
+    Now notice that Max also has the role "$ROOT_ORGANIZATION.admin".
     "
 }
 
 
-wizard_pre_list_resources() {
+wizard_pre_list_org_resources() {
 	wizard_pre_message "
+    >> Press any key to list the resources currently available in our '$ROOT_ORGANIZATION' organization...
 
+        $cli_name list-org-resources
 	"
 }
 
-wizard_pos_list_resources() {
+wizard_pos_list_org_resources() {
 	wizard_pos_message "
 
 	"
 }
 
+wizard_pre_list_tenant_resources() {
+	wizard_pre_message "
+    >> Press any key to list the resources currently available in the '$TENANT' tenant...
+
+        $cli_name list-tenant-resources
+	"
+}
+
+wizard_pos_list_tenant_resources() {
+	wizard_pos_message "
+
+	"
+}
 
 wizard_pre_list_keys() {
 	wizard_pre_message "
@@ -346,9 +385,9 @@ wizard_pos_list_keys() {
 
 wizard_pre_add_admin_role() {
 	wizard_pre_message "
-    What if we now assign the same "waltid.admin" role to Max? Does he deserve it?
+    What if we now assign the same "$ROOT_ORGANIZATION.admin" role to Max? Does he deserve it?
 
-     Press any key to run the command below and give Max some powers on the "waltid" organization.
+     Press any key to run the command below and give Max some powers on the "$ROOT_ORGANIZATION" organization.
 
        $cli_name add-admin-role
 	"
@@ -356,7 +395,7 @@ wizard_pre_add_admin_role() {
 
 wizard_pos_add_admin_role() {
 	wizard_pos_message "
-    Congratz, Max. You are now a VIP at "waltid". Oh, ok, no so VIP as the Super Admin. But you understand, right? ;-)
+    Congratz, Max. You are now a VIP at "$ROOT_ORGANIZATION". Oh, ok, no so VIP as the Super Admin. But you understand, right? ;-)
 	"
 }
 
@@ -373,94 +412,144 @@ wizard_pre_user_admin_login() {
 
 wizard_pos_user_admin_login() {
 	wizard_pos_message "
-    Max is in charge now. He logged in successfuly.
+    Max is in charge now. He logged in successfully.
 	"
 }
 
 
 wizard_pre_create_tenant() {
 	wizard_pre_message "
+    Would it be a good idea to put all your files at the root folder of your storage system? In most case, no, right? It would be even worst if some of those files were about the same thing but on different contexts. You would have to name each file with the full context to make them findable later. That's why we distribute them in directories in a folder hierarchy. Each entry in the hierarchy represents an specific context, which allows you to do '/Company A/Proof of Payment.pdf' instead of 'Proof of Payment for Company A.pdf'.
 
+    This is what Tenants are about. They are organizations units that allows you to isolate resources in different contexts.
+
+    You can give Tenants any semantics you want, just like you do in your file system. However, the most common use case for Tenants is the creation of customer specific contexts in such a way that everything related to one particular customer is isolated from other's.
+
+    So, for example, let's say walt.id has a managed Enterprise instance that is shared by multiple customers. Each customer would be a separated Tenant in the platform. I'll show you.
+
+    Press any key to create an specific \"folder\" for your brand new customer Acme Corporations...
+
+        $cli_name create-tenant
 	"
 }
 
 wizard_pos_create_tenant() {
 	wizard_pos_message "
-    The root organization is like the '/' directory of a file system. 
+    Cool. The '$TENANT' tenant has been successfully created.
 
-    The WaltId Enterprise Stack
+    You can learn more about Tenants here:
+
+    https://docs.walt.id/enterprise-stack/administration/tenants/overview
+
+    Btw, have you seen the tenant id? It's '$ROOT_ORGANIZATION.mycustomer'. It follows the rule <organization_name>.<tenant_name>. Get used to it. This structure will be used everywhere from now on to reference services and other resources.
+
+    We will now start creating the services needed to issue and verify credentials. All of them will be created inside the 'MyCustomer' tenant. Why? Just because we want those services to be customer specific. 
+    
+    By doing this, in addition to the security isolation that is created between the environments of each customer, preventing one customer from accessing the services of another, it also becomes possible to customize the services to the specifics of each of them.
 	"
 }
 
-
 wizard_pre_create_kms_service() {
 	wizard_pre_message "
+    The most basic resource in a decentralized identity solution is criptographic keys.
 
+    Before creating, we need to decide where to store them.
+
+    Despite the fact that we support several KMS solutions on the market (AWS, Oracle and Hashicorp), we're going to use a local key storage implementation which, although not ideal for production environment, is good enough for the educational purpose of this script.
+
+    Press any key to instantiate a Local KMS service in the '$TENANT' tenant...
+
+        $cli_name create-kms-service
 	"
 }
 
 wizard_pos_create_kms_service() {
 	wizard_pos_message "
-
+    The Local KMS has been successfully created and is eagerly awaiting for some keys.
 	"
 }
 
 
 wizard_pre_generate_did_key() {
 	wizard_pre_message "
+    Let's now create your first key. It will be used later to create the DID for the credential issuance.
 
+    Press any key to create an asymetric key pair...
+
+        $cli_name generate-did-key
 	"
 }
 
 wizard_pos_generate_did_key() {
 	wizard_pos_message "
+    The key was created and saved in the local KMS. It was created with the Ed25519 algorithm and saved in the JWT format in the .did_key local file. 
 
+    Learn more about it at:
+
+    https://docs.walt.id/enterprise-stack/services/key-management-service/local
 	"
 }
 
 
 wizard_pre_generate_status_key() {
 	wizard_pre_message "
-
-	"
+    Another key will be needed: the key for the status... #TODO
+    "
 }
 
 wizard_pos_generate_status_key() {
 	wizard_pos_message "
-
+    Status key successfuly created. #TODO
 	"
 }
 
 
 wizard_pre_create_did_service() {
 	wizard_pre_message "
+    One of the most foundational concept in the Decentralized Identity ecosystem is... the Decentralized Identifiers, affectionately called DID ❤️
 
+    DIDs are a way to uniquely identify an entity in the digital space. In the current context, we use DIDs to identify Issuers, Subjects, Holders and Verifiers(?). #TODO 
+    
+    You can learn more about it at:
+
+    https://docs.walt.id/community-stack/concepts/decentralised-identifiers
+
+    Let's now create the DID service that will be responsible for DIDs creation.
+
+    Press any key to run the command below:
+
+        $cli_name create-did-service
 	"
 }
 
 wizard_pos_create_did_service() {
 	wizard_pos_message "
-
+    DID service successfuly created in the scope of tenant 'MyCustomer'.
 	"
 }
 
 
 wizard_pre_create_did() {
 	wizard_pre_message "
+    Now, it's time to use the DID service just created to generate the DID that will be used to identify our Issuer.
 
+    Press any key to run the command below:
+
+        $cli_name create-did
 	"
 }
 
 wizard_pos_create_did() {
 	wizard_pos_message "
-
+    Issuer DID of type did:key successfuly created and save in the .did file.
 	"
 }
 
-
 wizard_pre_create_credential_status_service() {
 	wizard_pre_message "
+    Press any key to run the command below:
 
+        $cli_name create-credential-status-service
 	"
 }
 
@@ -470,48 +559,75 @@ wizard_pos_create_credential_status_service() {
 	"
 }
 
-
 wizard_pre_create_issuer_service() {
 	wizard_pre_message "
+    Creating Issuer Service...
 
+    >> Press any key to run the command below:
+
+        $cli_name create-issuer-service
 	"
 }
 
 wizard_pos_create_issuer_service() {
 	wizard_pos_message "
-
+    Issuer Service successfuly created. Your are now ready to issue credentials.
 	"
 }
 
-
 wizard_pre_create_verifier_service() {
 	wizard_pre_message "
+    In order to verify a credential, we need to instantiate a Verifier Service in the respective tenant. 
+    
+    >> Press any key to run the command below:
 
+        $cli_name create-verifier-service
 	"
 }
 
 wizard_pos_create_verifier_service() {
 	wizard_pos_message "
-
+    Verifier Service successfuly created. You are now ready to verify credentials.
 	"
 }
 
 
 wizard_pre_issue_jwt_vc() {
 	wizard_pre_message "
+    Everything we have done so far has had two main goals: issue and verify credentials. Let's start by the first one.
+    
+    Press any key to run the command below and issue a W3C Credential:
 
+        $cli_name issue-jwt-vc
 	"
 }
 
 wizard_pos_issue_jwt_vc() {
 	wizard_pos_message "
+    The credential offer has been successfuly created and saved in the .vc-offer file.
 
+    According to the OID4VC protocol, this offer should be accepted by a compatible wallet so that the credential is actually issued by the Issuer.
+
+    Unfortunately, our Enterprise Wallet is still under development and we cannot move beyond this point.
 	"
+}
+
+thanks() {
+    wizard_pos_message "
+    Thanks for your attention and patience. We hope this wizard could give you a simple and straight overview of how our Enterprise Stack works.
+
+    Should you have any feedback, do not hesitate to get in touch.
+
+    Have a wonderful day,
+    walt.id
+    "
 }
 
 wizard() {
     wizard_welcome
     wizard_disclaimer
+
+    check_running_instance
     clean_all
 
     wizard_pre_suerpadmin_create_account
@@ -546,8 +662,8 @@ wizard() {
     add_admin_role_to_user
     wizard_pos_add_admin_role
 
-    wizard_pre_list_accounts
-    list_accounts
+    wizard_pre_list_accounts 
+    list_accounts "$ROOT_ORGANIZATION"
     wizard_pos_list_accounts2
 
     wizard_pre_user_admin_login
@@ -558,17 +674,17 @@ wizard() {
     create_tenant
     wizard_pos_create_tenant
 
-    wizard_pre_list_resources
-    list_resources
-    wizard_pos_list_resources
+    wizard_pre_list_org_resources
+    list_org_resources
+    wizard_pos_list_org_resources
 
     wizard_pre_create_kms_service
     create_kms_service
     wizard_pos_create_kms_service
 
-    wizard_pre_list_resources
-    list_resources
-    wizard_pos_list_resources
+    wizard_pre_list_tenant_resources
+    list_tenant_resources
+    wizard_pos_list_tenant_resources
 
     wizard_pre_generate_did_key
     generate_did_key
@@ -582,9 +698,9 @@ wizard() {
     create_did_service
     wizard_pos_create_did_service
 
-    wizard_pre_list_resources
-    list_resources
-    wizard_pos_list_resources
+    wizard_pre_list_tenant_resources
+    list_tenant_resources
+    wizard_pos_list_tenant_resources
 
     wizard_pre_create_did
     create_did
@@ -598,21 +714,23 @@ wizard() {
     create_issuer_service
     wizard_pos_create_issuer_service
 
-    wizard_pre_list_resources
-    list_resources
-    wizard_pos_list_resources
+    wizard_pre_list_tenant_resources
+    list_tenant_resources
+    wizard_pos_list_tenant_resources
 
     wizard_pre_create_verifier_service
     create_verifier_service
     wizard_pos_create_verifier_service
 
-    wizard_pre_list_resources
-    list_resources
-    wizard_pos_list_resources
+    wizard_pre_list_tenant_resources
+    list_tenant_resources
+    wizard_pos_list_tenant_resources
 
     wizard_pre_issue_jwt_vc
     issue_jwt_vc
     wizard_pos_issue_jwt_vc
+
+    thanks
 
 }
 
@@ -620,7 +738,7 @@ wizard() {
 superadmin_create_account() {
     superadmin_token=$(cat config/superadmin-registration.conf | sed -n '2 p' | cut -d \" -f 2)
 
-    info "Registering token \"${superadmin_token}\" provided in the superadmin-registration.conf file"
+    info "Registering token \"${superadmin_token}\" provided in the config/superadmin-registration.conf file"
     response=$(curl -X 'POST' \
         'http://localhost:3000/v1/superadmin/create-by-token' \
         -H 'accept: */*' \
@@ -695,6 +813,7 @@ recreate_collections() {
     if [[ $response == *"exception"* ]]; then
         error "Database could not be recreated."
         error "$response"
+        result=-1
     else
         info "Database successfully recreated."
     fi
@@ -709,21 +828,22 @@ create_organization() {
         -H 'accept: */*' \
         -H "Authorization: Bearer $AUTH_TOKEN" \
         -H 'Content-Type: application/json' \
-        -d '{
-            "_id": "waltid",
-            "profile": {
-                "name": "walt.id GmbH"
+        -d "{
+            \"_id\": \"$ROOT_ORGANIZATION\",
+            \"profile\": {
+                \"name\": \"walt.id GmbH\"
             },
-            "billing": {
-                "billingCountry": "AT",
-                "billingAddress": "Liechtensteinstraße 111/115, 1090 Vienna",
-                "vatNr": "ATU75569617"
+            \"billing\": {
+                \"billingCountry\": \"AT\",
+                \"billingAddress\": \"Liechtensteinstraße 111/115, 1090 Vienna\",
+                \"vatNr\": \"ATU75569617\"
             }
-        }' 2> /dev/null)
+        }" 2> /dev/null)
 
     if [[ $response == *"exception"* ]]; then
         error "Organization could not be created."
         error "$response"
+        result=-1
     else
         info "Organization successfully created."
     fi
@@ -770,6 +890,7 @@ create_user_account() {
         error "$response"
 
         # TODO Offer to select an existing user to be used
+        result=-1
     else
 
         # TODO Handle user already exists
@@ -810,12 +931,11 @@ add_admin_role_to_user() {
     get_superadmin_auth_token AUTH_TOKEN
     get_user_id USER_ID
 
-    ROLE="waltid.admin"
-    ORGANIZATION="waltid"
+    ROLE="$ROOT_ORGANIZATION.admin"
 
-    info "Adding role '$ROLE' to user '$USER_ID' from organization '$ORGANIZATION'..."
+    info "Adding role '$ROLE' to user '$USER_ID' from organization '$ROOT_ORGANIZATION'..."
     response=$(curl -X 'POST' \
-        "http://localhost:3000/v1/admin/account/$USER_ID/roles/add/$ORGANIZATION/$ROLE" \
+        "http://localhost:3000/v1/admin/account/$USER_ID/roles/add/$ROOT_ORGANIZATION/$ROLE" \
         -H 'accept: application/json' \
         -H "Authorization: Bearer $AUTH_TOKEN" \
         -d '' 2> /dev/null)
@@ -823,6 +943,7 @@ add_admin_role_to_user() {
     if [[ $response == *"exception"* ]]; then
         error "Role could not be added."
         error "$response"
+        result=-1
     else
         # TODO If response = {}, role hasn't been added either
         
@@ -839,7 +960,7 @@ user_admin_login() {
     PASS="password123456"
 
     response=$(curl -X 'POST' \
-        'http://waltid.enterprise.localhost:3000/auth/account/emailpass' \
+        "http://$ROOT_ORGANIZATION.enterprise.localhost:3000/auth/account/emailpass" \
         -H 'accept: application/json' \
         -H 'Content-Type: application/json' \
         -d "{
@@ -850,6 +971,7 @@ user_admin_login() {
     if [[ $response == *"exception"* ]]; then
         error "User $USER could not be logged in."
         error "$response"
+        result=-1
     else
         
         regex="\"token\":\"([A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+)\""
@@ -861,7 +983,8 @@ user_admin_login() {
             echo $AUTH_TOKEN > .user_auth_token
             info "User $USER successfully logged in with token $AUTH_TOKEN"
         else
-            error "Auth token not found in the HTTP response."
+            error "User not authenticated. Auth token not found in the HTTP response."
+            result=-1
         fi
     fi
 }
@@ -870,10 +993,10 @@ create_tenant() {
     
     get_user_auth_token AUTH_TOKEN
 
-    TENANT_ID="waltid.tenant1"
+    TENANT_ID="$ROOT_ORGANIZATION.$TENANT"
 
     response=$(curl -X 'POST' \
-        "http://waltid.enterprise.localhost:3000/v1/$TENANT_ID/resource-api/tenants/create" \
+        "http://$ROOT_ORGANIZATION.enterprise.localhost:3000/v1/$TENANT_ID/resource-api/tenants/create" \
         -H 'accept: */*' \
         -H "Authorization: Bearer $AUTH_TOKEN" \
         -H 'Content-Type: application/json' \
@@ -884,6 +1007,7 @@ create_tenant() {
     if [[ $response == *"exception"* ]]; then
         error "Tenant $TENANT_ID could not be created."
         error "$response"
+        result=-1
     else
         info "Tenant $TENANT_ID successfully created."
     fi
@@ -896,10 +1020,10 @@ create_service() {
     SERVICE_TYPE=$1
     SERVICE_NAME=$2
 
-    SERVICE_ID="waltid.tenant1.$SERVICE_NAME"
+    SERVICE_ID="$ROOT_ORGANIZATION.$TENANT.$SERVICE_NAME"
 
     response=$(curl -X 'POST' \
-        "http://waltid.enterprise.localhost:3000/v1/$SERVICE_ID/resource-api/services/create" \
+        "http://$ROOT_ORGANIZATION.enterprise.localhost:3000/v1/$SERVICE_ID/resource-api/services/create" \
         -H 'accept: */*' \
         -H "Authorization: Bearer $AUTH_TOKEN" \
         -H 'Content-Type: application/json' \
@@ -910,6 +1034,7 @@ create_service() {
     if [[ $response == *"exception"* ]]; then
         error "$SERVICE_ID could not be created."
         error "$response"
+        result=-1
     else
         info "$SERVICE_ID successfully created."
         echo "$response" | jq
@@ -927,10 +1052,10 @@ generate_key() {
     PURPOSE=$1
     KEY_FILE=$2
 
-    KMS_ID="waltid.tenant1.kms1"
+    KMS_ID="$ROOT_ORGANIZATION.mycustomer.kms1"
 
     response=$(curl -X 'POST' \
-        "http://waltid.enterprise.localhost:3000/v1/$KMS_ID/kms-service-api/keys/generate" \
+        "http://$ROOT_ORGANIZATION.enterprise.localhost:3000/v1/$KMS_ID/kms-service-api/keys/generate" \
         -H 'accept: application/json' \
         -H "Authorization: Bearer $AUTH_TOKEN" \
         -H 'Content-Type: application/json' \
@@ -942,6 +1067,7 @@ generate_key() {
     if [[ $response == *"exception"* ]]; then
         error "$PURPOSE key could not be generate from $KMS_ID."
         error "$response"
+        result=-1
     else
         info "$PURPOSE key successfully generated."
         echo "$response" | jq
@@ -963,14 +1089,14 @@ generate_status_key() {
 }
 
 create_did_service() {
-   create_service "did" "did1"
+   create_service "did" "did-service"
 }
 
 create_did() {
 
     get_user_auth_token AUTH_TOKEN
 
-    DID_SERVICE_ID="waltid.tenant1.did1"
+    DID_SERVICE_ID="$ROOT_ORGANIZATION.mycustomer.did-service"
     
     if [[ ! -f .did_key ]]; then
         info "DID key doesn't exist. Let's create one..."
@@ -980,7 +1106,7 @@ create_did() {
     KEY_ID=$(cat .did_key)
 
     response=$(curl -X 'POST' \
-        "http://waltid.enterprise.localhost:3000/v1/$DID_SERVICE_ID/did-service-api/dids/create/key" \
+        "http://$ROOT_ORGANIZATION.enterprise.localhost:3000/v1/$DID_SERVICE_ID/did-service-api/dids/create/key" \
         -H 'accept: application/json' \
         -H "Authorization: Bearer $AUTH_TOKEN" \
         -H 'Content-Type: application/json' \
@@ -992,6 +1118,7 @@ create_did() {
     if [[ $response == *"exception"* ]]; then
         error "did:key could not be created."
         error "$response"
+        result=-1
     else
         echo $response > .did
         info "did:key successfully created and saved in the .did file:"
@@ -1002,15 +1129,15 @@ create_did() {
 
 create_issuer_service() {
 
-    ISSUER_SERVICE_ID="waltid.tenant1.issuer1"
-    KMS_SERVICE_ID="waltid.tenant1.kms1"
-    KEY_ID="test.tenant1.kms1.2CP9-WVc83iO4gAtOYrJhc-gy1nl73fWXOChG1hnI44"
+    ISSUER_SERVICE_ID="$ROOT_ORGANIZATION.$TENANT.issuer1"
+    KMS_SERVICE_ID="$ROOT_ORGANIZATION.$TENANT.kms1"
+    KEY_ID=$(cat .did_key) #TODO Should I create another key?
 
     get_user_auth_token AUTH_TOKEN
 
 
     response=$(curl -X 'POST' \
-        "http://waltid.enterprise.localhost:3000/v1/$ISSUER_SERVICE_ID/resource-api/services/create" \
+        "http://$ROOT_ORGANIZATION.enterprise.localhost:3000/v1/$ISSUER_SERVICE_ID/resource-api/services/create" \
         -H 'accept: */*' \
         -H "Authorization: Bearer $AUTH_TOKEN" \
         -H 'Content-Type: application/json' \
@@ -1055,6 +1182,7 @@ create_issuer_service() {
     if [[ $response == *"exception"* ]]; then
         error "Issuer Service $ISSUER_SERVICE_ID could not be created."
         error "$response"
+        result=-1
     else
         info "Issuer Service $ISSUER_SERVICE_ID successfully created."
     fi
@@ -1062,12 +1190,12 @@ create_issuer_service() {
 
 create_verifier_service() {
     
-    VERIFIER_SERVICE_ID="waltid.tenant1.verifier1"
+    VERIFIER_SERVICE_ID="$ROOT_ORGANIZATION.$TENANT.verifier1"
 
     get_user_auth_token AUTH_TOKEN
 
     response=$(curl -X 'POST' \
-        "http://waltid.enterprise.localhost:3000/v1/$VERIFIER_SERVICE_ID/resource-api/services/create" \
+        "http://$ROOT_ORGANIZATION.enterprise.localhost:3000/v1/$VERIFIER_SERVICE_ID/resource-api/services/create" \
         -H 'accept: */*' \
         -H "Authorization: Bearer $AUTH_TOKEN" \
         -H 'Content-Type: application/json' \
@@ -1079,6 +1207,7 @@ create_verifier_service() {
     if [[ $response == *"exception"* ]]; then
         error "Verifier Service $VERIFIER_SERVICE_ID could not be created."
         error "$response"
+        result=-1
     else
         info "Verifier Service $VERIFIER_SERVICE_ID successfully created."
     fi
@@ -1086,13 +1215,15 @@ create_verifier_service() {
 
 issue_jwt_vc() {
 
-    ISSUER_SERVICE_ID="waltid.tenant1.issuer1"
-    KMS_SERVICE_ID="waltid.tenant1.kms1"
-    KEY_ID="test.tenant1.kms1.2CP9-WVc83iO4gAtOYrJhc-gy1nl73fWXOChG1hnI44"
+    ISSUER_SERVICE_ID="$ROOT_ORGANIZATION.$TENANT.issuer1"
+    # KMS_SERVICE_ID="$ROOT_ORGANIZATION.$TENANT.kms1"
+    KEY_ID=$(cat .did_key)
 
     # REQUEST_BODY=`cat <<EOF
     #read -r -d '' REQUEST_BODY <<'EOF'
-    REQUEST_BODY=$(cat <<'EOF'
+
+    # TODO Move request body to a separated file
+    REQUEST_BODY=$(cat <<EOF
 {
     "issuerKeyId": "$KEY_ID",
     "credentialConfigurationId": "OpenBadgeCredential_jwt_vc_json",
@@ -1212,20 +1343,21 @@ EOF
     get_user_auth_token AUTH_TOKEN
 
     response=$(curl -X 'POST' \
-        "http://waltid.enterprise.localhost:3000/v1/$ISSUER_SERVICE_ID/issuer-service-api/credentials/issue" \
+        "http://$ROOT_ORGANIZATION.enterprise.localhost:3000/v1/$ISSUER_SERVICE_ID/issuer-service-api/credentials/issue" \
         -H 'accept: */*' \
         -H 'statusCallbackUri: https://example.com/status_callback/$id' \
         -H 'statusCallbackApiKey: 1671a86d-84e8-4d0d-a35e-efb49b728b7e' \
         -H "Authorization: Bearer $AUTH_TOKEN" \
         -H 'Content-Type: application/json' \
-        -d "$REQUEST_BODY"
-    2> /dev/null)
+        -d "$REQUEST_BODY" 2> /dev/null)
 
     if [[ $response == *"exception"* ]]; then
         error "Credential could not be issued."
         error "$response"
+        result=-1
     else
-        info "Credential successfully issued."
+        echo $response > .vc_offer
+        info "A credential offer has been created and saved in the .vc_offer file"
         echo $response
     fi
 }
@@ -1246,6 +1378,7 @@ list_organizations() {
     if [[ $response == *"exception"* ]]; then
         error "Organizations could not be listed."
         error "$response"
+        result=-1
     else
         info "Organizations list:"
         echo "$response" | jq
@@ -1266,6 +1399,7 @@ list_accounts() {
     if [[ $response == *"exception"* ]]; then
         error "Accounts could not be listed."
         error "$response"
+        result=-1
     else
         info "Account list:"
         echo "$response" | jq
@@ -1273,20 +1407,34 @@ list_accounts() {
 
 }
 
+list_org_resources() {
+    list_resources $ROOT_ORGANIZATION
+}
+
+list_tenant_resources(){
+    list_resources $ROOT_ORGANIZATION.$TENANT
+}
+
 list_resources() {
 
     get_user_auth_token AUTH_TOKEN
 
-    TENANT_ID="waltid.tenant1"
+    TENANT_ID=$1
 
+    if [[ -z "$TENANT_ID" ]]; then
+        TENANT_ID="$ROOT_ORGANIZATION.$TENANT"
+    fi
+
+    info "Listing $TENANT_ID's resources"
     response=$(curl -X 'GET' \
-        "http://waltid.enterprise.localhost:3000/v1/$TENANT_ID/resource-api/resources/list" \
+        "http://$ROOT_ORGANIZATION.enterprise.localhost:3000/v1/$TENANT_ID/resource-api/resources/list" \
         -H 'accept: application/json' \
         -H "Authorization: Bearer $AUTH_TOKEN" 2> /dev/null)
 
     if [[ $response == *"exception"* ]]; then
         error "Resources could not be listed."
         error "$response"
+        result=-1
     else
         info "Resource list:"
         echo "$response" | jq
@@ -1300,16 +1448,17 @@ list_keys() {
     
     get_user_auth_token AUTH_TOKEN
 
-    KMS_ID="waltid.tenant1.kms1"
+    KMS_ID="$ROOT_ORGANIZATION.mycustomer.kms1"
 
     response=$(curl -X 'GET' \
-        "http://waltid.enterprise.localhost:3000/v1/$KMS_ID/kms-service-api/keys/list" \
+        "http://$ROOT_ORGANIZATION.enterprise.localhost:3000/v1/$KMS_ID/kms-service-api/keys/list" \
         -H 'accept: application/json' \
         -H "Authorization: Bearer $AUTH_TOKEN" 2> /dev/null)
 
     if [[ $response == *"exception"* ]]; then
         error "$KMS_ID keys could not be listed."
         error "$response"
+        result=-1
     else
         info "$KMS_ID keys:"
         echo "$response" | jq
@@ -1325,6 +1474,7 @@ aa() {
     if [[ $response == *"exception"* ]]; then
         error "XXX could not be added."
         error "$response"
+        result=-1
     else
         info "XXX successfully added."
     fi
@@ -1398,8 +1548,9 @@ Commands:
   create-verifier-service           Create verifier service in the tenant
   issue-jwt-vc                      Issue a W3C JWT credential
   list-organizations                List all organizations under the superadmin account
-  list-accounts                     List all accounts under...
-  list-resources                    List all account in the tenant
+  list-accounts                     List all accounts in...
+  list-org-resources                List organization's resource
+  list-tenant-resources             List tenant's resource
   recreate-db                       Delete all data and restart it from scratch
    "
   exit 1
@@ -1481,6 +1632,10 @@ case "$1" in
         init
         issue_jwt_vc
         ;;
+    verify-vc)
+        init
+        verify-vc
+        ;;
     list-organizations)
         init
         list_organizations
@@ -1489,9 +1644,13 @@ case "$1" in
         init
         list_accounts
         ;;
-    list-resources)
+    list-org-resources)
         init
-        list_resources
+        list_org_resources
+        ;;
+    list-tenant-resources)
+        init
+        list_tenant_resources
         ;;
     list-keys)
         init
