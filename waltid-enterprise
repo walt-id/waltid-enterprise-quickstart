@@ -1,21 +1,74 @@
 #!/bin/bash
 
+# TODO 
+# review help
+# check dependencies
+# check instance running
+# formatting
+# linux compatibility 
+# windows compatibility
+# status services?
+# verification?
+# issuance key_id
+
 set -e
 
-cli_name=${0##*/}
+RESTORE='\033[0m'
+
+RED='\033[00;31m'
+GREEN='\033[00;32m'
+YELLOW='\033[00;33m'
+BLUE='\033[00;34m'
+PURPLE='\033[00;35m'
+CYAN='\033[00;36m'
+LIGHTGRAY='\033[00;37m'
+
+LRED='\033[01;31m'
+LGREEN='\033[01;32m'
+LYELLOW='\033[01;33m'
+LBLUE='\033[01;34m'
+LPURPLE='\033[01;35m'
+LCYAN='\033[01;36m'
+WHITE='\033[01;37m'
+
+BBACK='\033[1;30m'       
+BRED='\033[1;31m'        
+BFGREEN='\033[1;32m'     
+BYELLOW='\033[1;33m'     
+BBLUE='\033[1;34m'       
+BPURPLE='\033[1;35m'     
+BCYAN='\033[1;36m'       
+BWHITE='\033[1;37m'
+
+BBWHITE='\033[1;97m'
+
+BGCYAN='\033[0;106m'
+
+CLI_NAME=" $0"
 export WORKDIR=$(cd $(dirname $0) && pwd)
+
+ENTERPRISE_RELEASE=$(cat .env | grep ENTERPRISE_API_DOCKER_IMAGE_TAG | cut -d= -f2)
 
 ROOT_ORGANIZATION=waltid
 TENANT=mycustomer
+KMS_SERVICE="kms-service"
+DID_SERVICE="did-service"
 ISSUER_SERVICE="issuer-service"
 VERIFIER_SERVICE="verifier-service"
-# CUSTOMER_ORGANIZATION
+
+USER_EMAIL="max.mustermann@example.org"
+USER_PASS="password123456"
+
+TTY_WIDTH=$(tput cols)
+OUTPUT_WIDTH=$(expr $TTY_WIDTH \* 6 / 10) # 60% the terminal window width
 
 auth_token=""
 
 init() {
-    echo "walt.id Enterprise Stack Quickstarter v$(cat $WORKDIR/VERSION)"
+    echo "================================================================================="
+    info "walt.id Enterprise Stack Quickstarter v$(cat $WORKDIR/VERSION)"
     info "Checking dependencies... TODO"
+    echo "================================================================================="
     # jq
     # curl
 }
@@ -23,30 +76,35 @@ init() {
 log() {
   script_name=${0##*/}
   timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-  echo "== $script_name $timestamp $1"
+  echo -e "== $script_name $timestamp $1" 
 }
 
 info() {
-    log "[INFO] $1"
+    log "${YELLOW}[INFO]${RESTORE} $1"
 }
 
 error() {
-    log "[ERROR] $1"
+    log "${RED}[ERROR]${RESTORE} $1"
 }
 
 check_running_instance() {
-    info "#TODO Checking if walt.id Enterprise is running..."
+    info "Checking if walt.id Enterprise is running..."
     
-    # nc -z localhost 7001
-    # if [[ $? != 0 ]]; then
-    #     error "Sorry. I could not find any running instance of the walt.id Enterprise Stack."
-    # else
-    #     info "walt.id Enterprise running"
-    # fi
+    nc -z localhost 3000 &> /dev/null
+    if [[ $? != 0 ]]; then
+        error "Sorry. I could not find any running instance of the walt.id Enterprise Stack."
+    else
+        info "walt.id Enterprise is up and running. Let's rock 🤘"
+    fi
 
 }
 
 docker_hub_login(){
+    if [ ! -f .docker-token ]; then
+        error "I couldn't find and authorization token to log you in the Docker Hub. Please, ask the walt.id team for one and save it in a file called .docker-token in the current directory." 
+        exit -1
+    fi
+
     password=$(cat .docker-token | grep -v "#" | grep -v -e '^[[:space:]]*$')
     info "Autheticating to Docker Hub. Please use the password provided..."
     docker login -u waltid -p $password
@@ -54,13 +112,13 @@ docker_hub_login(){
 }
 
 pull_docker_image() {
-    info "Pulling Enterprise Stack v0.1.0"
-    docker pull waltid/waltid-enterprise-api:0.1.0
+    info "Pulling Enterprise Stack v$ENTERPRISE_RELEASE"
+    docker pull waltid/waltid-enterprise-api:$ENTERPRISE_RELEASE
     echo
 }
 
 start_container() {
-    info "Starting up Enterprise Stack v0.1.0"
+    info "Starting up Enterprise Stack v$ENTERPRISE_RELEASE"
     docker compose up
 }
 
@@ -71,10 +129,12 @@ run() {
 }
 
 get_superadmin_auth_token() {
+
+    info "Checking Super Admin authentication..."
     if [ -f .auth_token ]; then
-        info "Super admin already logged in." 
+        info "Super Admin already logged in." 
     else
-        info "Logging super admin in..."
+        info "Logging Super Admin in..."
         superadmin_login
     fi
     
@@ -91,7 +151,6 @@ clean_all() {
     rm -f .user_auth_token
     rm -f .did
     rm -f .did_key 
-    rm -f .docker-token 
     rm -f .status_key 
 
     # Remove docker images?
@@ -99,12 +158,12 @@ clean_all() {
 
 check_last_command_failure() {
     if [[ $result < 0 ]]; then
-        echo "
-        
+        echo -e"
+        ${RED}
         !!!!!!!!!!!
         !! ERROR !!
         !!!!!!!!!!!
-
+        ${RESTORE}
         Oops. I'm sorry. Something went wrong. Contact the walt.id guys to help you with it. Bye.
         "
 
@@ -116,6 +175,15 @@ check_last_command_failure() {
 
 pause() {
     read -n1 -s
+}
+
+print() {
+    echo -e "\n$1\n" # | fmt -w $OUTPUT_WIDTH
+}
+
+pp() {
+    print "$1"
+    pause
 }
 
 get_user_auth_token() {
@@ -133,55 +201,44 @@ get_user_auth_token() {
 }
 
 wizard_pre_message() {
-    cat <<EOF
-    $1
+    echo -e "$(
+cat <<EOF | fmt -w $OUTPUT_WIDTH
+$1
 EOF
+)"
     pause
     result=0
 }
 
+
 wizard_pos_message() {
     check_last_command_failure
-    cat <<EOF
-    $1
+
+    echo -e "$(
+cat <<EOF | fmt -w $OUTPUT_WIDTH
+$1
 EOF
+)"
+
 }
 
 wizard_welcome() {
-    echo "Welcome to the Quickstart Wizard of the walt.id Enterprise Stack! We will now guide you through each step to get you onboarded on our platform."
-}
+    wizard_pre_message "
+    Welcome to the Quickstart Wizard of the walt.id Enterprise Stack! We will now guide you through each step to get you onboarded on our platform.
 
-wizard_disclaimer_disagree() {
-    echo "        
-
-    We understand. No worries. Friendship continues.
-
-    Let us give you 2 options:
-
-    1. Try each command by yourself and deal with eventual issues; or
-    2. Save the data you don't want to lose and come back again to this wizard ;-)
-
-    Tchüss!
-
+    ${BLUE}>> Press any key to continue...${RESTORE}
     "
 }
 
-wizard_disclaimer_agreed() {
-    echo "
-
-    Cool. Thanks for understanding.
-
-    "
-
-}
 wizard_disclaimer() {
-    echo "
+    echo -e "
     In order to make you experience as smooth as possible, we need to recreate the whole database, just to make sure there's no data there that could cause any confusion and get in the way of the main purpose of this script: learning how to use the product.
 
     Which means: all the data in your local walt.id Enterprise Stack instance will be lost.
+    " | fmt -w $OUTPUT_WIDTH
 
-    "
-    read -p "Are you ok with that? (y/N) " -n1 AGREED
+    printf "%4s${BLUE}Are you ok with that? (y/N)${RESTORE} "
+    read  -n1 AGREED
 
     shopt -s nocasematch
     if [[ "$AGREED" != "y" ]]; then
@@ -190,7 +247,43 @@ wizard_disclaimer() {
     fi
         
     wizard_disclaimer_agreed
+}
 
+wizard_disclaimer_disagree() {
+    print "
+    We understand. No worries. Friendship continues.
+
+    Let us give you 2 options:
+
+    1. Try each command by yourself and deal with eventual issues; or\n
+    2. Save the data you don't want to lose and come back again to this wizard ;-)
+
+    Tchüss! 
+
+    "
+}
+
+wizard_disclaimer_agreed() {
+    print "
+    Cool. Thanks for understanding.
+    "
+}
+
+
+wizard_pre_clean_all() {
+    wizard_pre_message "
+    Now, let's clean the database and remove auxiliary files.
+
+    ${BLUE}>> Press any key to run the command below...${RESTORE}
+
+        ${BGCYAN}$CLI_NAME recreate-db \n${RESTORE}
+    "
+}
+
+wizard_pos_clean_all() {
+    wizard_pos_message "
+    Database cleaned and auxiliary files deleted.
+    "
 }
 
 wizard_pre_suerpadmin_create_account() {
@@ -198,10 +291,9 @@ wizard_pre_suerpadmin_create_account() {
     wizard_pre_message "
     The first thing we need to do is the creation of the so called Super Admin user. It's something like the 'root' in your OS.
 
-    Press any key to run the command below...
+    ${BLUE}>> Press any key to run the command below...${RESTORE}
 
-        $cli_name superadmin-create-account
-
+        ${BGCYAN}$CLI_NAME superadmin-create-account \n${RESTORE}
     "
 }
 
@@ -217,9 +309,9 @@ wizard_pre_superadmin_login() {
     wizard_pre_message "
     Now, it's time to log him in.
 
-    Press any key to run the command below to get access to super powers...
+    ${BLUE}>> Press any key to run the command below to get access to super powers...${RESTORE}
 
-        $cli_name superadmin-login
+        ${BGCYAN}$CLI_NAME superadmin-login \n${RESTORE}
     "
 }
 
@@ -235,10 +327,9 @@ wizard_pre_init_db() {
     wizard_pre_message "
     The next step is the database initialization. Since we've just recreated everything from scratch, it's not strictly necessary, but I'll show you how it works anyway.
 
-    Press any key to run the command below...
+    ${BLUE}>> Press any key to run the command below...${RESTORE}
 
-        $cli_name init-db
-
+        ${BGCYAN}$CLI_NAME init-db ${RESTORE}\n
     "
 }
 
@@ -256,34 +347,39 @@ wizard_pre_create_organization() {
     
     https://docs.walt.id/enterprise-stack/concepts#the-organization
 
-    Press any key to run the command below and create the '$ROOT_ORGANIZATION' root organization...
+    ${BLUE}>> Press any key to run the command below and create the '$ROOT_ORGANIZATION' root organization...${RESTORE}
 
-       $cli_name create-organization
+       ${BGCYAN}$CLI_NAME create-organization ${RESTORE}\n
     "
 }
 
 wizard_pos_create_organization() {
-    wizard_pos_message "
-    Awesome. The "$ROOT_ORGANIZATION" root organization has been created.
-
-    This is how you database structure looks like so far.
-
-        ┌────────────┐   
-        │            │   
-        │   waltid   │   
-        │            │   
-        └────────────┘   
-                            
+    print "
+    Awesome. The '$ROOT_ORGANIZATION' root organization has been created.         
     "
+
+    # TODO Later
+    # This is how you database structure looks like so far.
+
+    #     ┌────────────┐   
+    #     │            │   
+    #     │   waltid   │   
+    #     │            │   
+    #     └────────────┘  
+
+    #TODO Parameterize org name in the box
 }
 
 wizard_pre_list_organizations() {
-	wizard_pre_message "
-    At any time, you can list all the organizations in... #TODO
-    
-    Press any key to run the command bellow to list all the organizations... #TODO
 
-        $(basename "$0") list-organizations
+    # TODO What's a use case for more than one root organization?
+
+	wizard_pre_message "
+    At any time, you can list all the root organizations in in your Enterprise instance.
+    
+    ${BLUE}>> Press any key to run the command bellow to list all the root organizations...${RESTORE}
+
+        ${BGCYAN}$CLI_NAME list-organizations ${RESTORE}\n
 	"
 }
 
@@ -298,15 +394,15 @@ wizard_pre_create_user_account() {
 
     We will now use the Super Admin account to create a new user account. 
 
-    >> Press any key to run the command below to create a not-so-super user...
+    ${BLUE}>> Press any key to run the command below to create a not-so-super user...${RESTORE}
 
-       $cli_name create-user-account
+       ${BGCYAN}$CLI_NAME create-user-account ${RESTORE}\n
 	"
 }
 
 wizard_pos_create_user_account() {
 	wizard_pos_message "
-    The user "max.mustermann@example.org" was successfully created with password "password123456".
+    The account '$USER_EMAIL' was successfully created with password '$USER_PASS'.
 
     We will use it from now on.
 	"
@@ -314,9 +410,9 @@ wizard_pos_create_user_account() {
 
 wizard_pre_list_accounts() {
 	wizard_pre_message "
-    >> Press any key to run the command below to list all users registered in your instance.
+    ${BLUE}>> Press any key to run the command below to list all accounts registered in your instance...${RESTORE}
 
-        $cli_name list-accounts
+        ${BGCYAN}$CLI_NAME list-accounts ${RESTORE}\n
 	"
 }
 
@@ -326,28 +422,28 @@ wizard_pos_list_accounts1() {
 
     And, before we move forward, let's take a closer look to the "role" property of each account. What does it mean?
 
-    Each property in the "roles" object represents the set of roles assingned to that user in a specific organization.
+    Each property in the 'roles' object represents the set of roles assingned to that user in a specific organization.
 
     Take Max as our first example. He doesn't have any specifc role. Which means he doesn't have any privilege on any resource (we will talk more about it later).
 
-    On the other hand, look at the Superadmin account. It has the role "admin" in the "$ROOT_ORGANIZATION" organization. And, why does it have such privilege? Just because it's the account who created that organization.
+    On the other hand, look at the Superadmin account. It has the role 'admin' in the '$ROOT_ORGANIZATION' organization. And, why does it have such privilege? Just because it's the account who created that organization.
 
-    Every time an organization is created, an "admin" role is automatically generated and assigned to its creator.
+    Every time an organization is created, an 'admin' role is automatically generated and assigned to its creator.
 	"
 }
 
 wizard_pos_list_accounts2() {
     wizard_pos_message "
-    Now notice that Max also has the role "$ROOT_ORGANIZATION.admin".
+    Now notice that Max also has the role '$ROOT_ORGANIZATION.admin'.
     "
 }
 
 
 wizard_pre_list_org_resources() {
 	wizard_pre_message "
-    >> Press any key to list the resources currently available in our '$ROOT_ORGANIZATION' organization...
+    ${BLUE}>> Press any key to list the resources currently available in our '$ROOT_ORGANIZATION' organization...${RESTORE}
 
-        $cli_name list-org-resources
+        ${BGCYAN}$CLI_NAME list-org-resources ${RESTORE}\n
 	"
 }
 
@@ -359,9 +455,9 @@ wizard_pos_list_org_resources() {
 
 wizard_pre_list_tenant_resources() {
 	wizard_pre_message "
-    >> Press any key to list the resources currently available in the '$TENANT' tenant...
+    ${BLUE}>> Press any key to list the resources currently available in the '$TENANT' tenant...${RESTORE}
 
-        $cli_name list-tenant-resources
+        ${BGCYAN}$CLI_NAME list-tenant-resources ${RESTORE}\n
 	"
 }
 
@@ -387,9 +483,9 @@ wizard_pre_add_admin_role() {
 	wizard_pre_message "
     What if we now assign the same "$ROOT_ORGANIZATION.admin" role to Max? Does he deserve it?
 
-     Press any key to run the command below and give Max some powers on the "$ROOT_ORGANIZATION" organization.
+    ${BLUE}>> Press any key to run the command below and give Max some powers on the "$ROOT_ORGANIZATION" organization...${RESTORE}
 
-       $cli_name add-admin-role
+       ${BGCYAN}$CLI_NAME add-admin-role ${RESTORE}\n
 	"
 }
 
@@ -404,9 +500,9 @@ wizard_pre_user_admin_login() {
 	wizard_pre_message "
     Let's switch to Max's account and stop using the Super Admin account.
 
-    Press any key to log Max in.
+    ${BLUE}>> Press any key to log Max in...${RESTORE}
 
-        $cli_name user-admin-login
+        ${BGCYAN}$CLI_NAME user-admin-login ${RESTORE}\n
 	"
 }
 
@@ -416,20 +512,55 @@ wizard_pos_user_admin_login() {
 	"
 }
 
+wizard_pre_list_org_resources_before_tenant() {
+    wizard_pre_message "
+    
+
+    Let's now talk about a very important concept: resource.
+
+    Almost every entity in the walt.id Enterprise is a resource.
+
+    An organization is composed by resources. Let me show you.
+
+    ${BLUE}>> Press any key to list the resources created by default in the '$ROOT_ORGANIZATION' organization...${RESTORE}
+
+        ${BGCYAN}$CLI_NAME list-org-resources ${RESTORE}\n
+    "
+}
+
+wizard_pos_list_org_resources_before_tenant() {
+    wizard_pos_message "
+    By default, any organization is created with 2 resources in it: a role and a host-alias.
+
+    Yeah, roles are also resources. And also the host-alias, which is how we access the instance with subdomains (not currently discussed in this brief quickstart tutorial).
+
+    Resources are referenced with <organization_name>.<resource_name>. That's why the 'admin' role was referenced with '$ROOT_ORGANIZATION.admin'. Get used to it. This structure will be used everywhere from now on.
+
+    What if we now add some more resources into the '$ROOT_ORGANIZATION' organization? Let's do it, then!
+    "
+}
 
 wizard_pre_create_tenant() {
 	wizard_pre_message "
-    Would it be a good idea to put all your files at the root folder of your storage system? In most case, no, right? It would be even worst if some of those files were about the same thing but on different contexts. You would have to name each file with the full context to make them findable later. That's why we distribute them in directories in a folder hierarchy. Each entry in the hierarchy represents an specific context, which allows you to do '/Company A/Proof of Payment.pdf' instead of 'Proof of Payment for Company A.pdf'.
+    
 
-    This is what Tenants are about. They are organizations units that allows you to isolate resources in different contexts.
+    Would it be a good idea to put all your files at the root folder of your storage system? In most case, no, right? It would be even worst if some of those files were about the same thing but on different contexts. You would have to name each file with the full context to make them findable later. That's why we distribute them in directories in a folder hierarchy. Each entry in the hierarchy represents an specific context, which allows you to do 
+    
+    '/Payments/2025/Feb/Company A/Proof of Payment.pdf' 
+    
+    instead of 
+    
+    'Proof_of_Payment_for_Company_A_in_Feb_2025.pdf'
+
+    This is what Tenants are about. They are organizations units (or namespaces, if you will) that allows you to isolate resources in different contexts.
 
     You can give Tenants any semantics you want, just like you do in your file system. However, the most common use case for Tenants is the creation of customer specific contexts in such a way that everything related to one particular customer is isolated from other's.
 
     So, for example, let's say walt.id has a managed Enterprise instance that is shared by multiple customers. Each customer would be a separated Tenant in the platform. I'll show you.
 
-    Press any key to create an specific \"folder\" for your brand new customer Acme Corporations...
+    ${BLUE}>> Press any key to create an specific 'folder' for your new customer...
 
-        $cli_name create-tenant
+        ${BGCYAN}$CLI_NAME create-tenant ${RESTORE}\n
 	"
 }
 
@@ -439,15 +570,34 @@ wizard_pos_create_tenant() {
 
     You can learn more about Tenants here:
 
-    https://docs.walt.id/enterprise-stack/administration/tenants/overview
+    https://docs.walt.id/enterprise-stack/administration/tenants/overview    
+	"
+}
 
-    Btw, have you seen the tenant id? It's '$ROOT_ORGANIZATION.mycustomer'. It follows the rule <organization_name>.<tenant_name>. Get used to it. This structure will be used everywhere from now on to reference services and other resources.
+
+wizard_pre_list_org_resources_after_tenant() {
+    wizard_pre_message "
+    Oh! Did I say that a tenant is also a resource in the root organization?
+
+    ${BLUE}>> Press any key to list again the '$ROOT_ORGANIZATION' organization resources...${RESTORE}
+
+        ${BGCYAN}$CLI_NAME list-org-resources ${RESTORE}\n
+    "
+}
+
+wizard_pos_list_org_resources_after_tenant() {
+    wizard_pos_message "
+    Notice how there are now 3 resources in our organization.
+
+    And, you know what? There is an interesting thing here... Some resources are composable, which means they can also have resources in it. How cool is that?
+    
 
     We will now start creating the services needed to issue and verify credentials. All of them will be created inside the 'MyCustomer' tenant. Why? Just because we want those services to be customer specific. 
     
     By doing this, in addition to the security isolation that is created between the environments of each customer, preventing one customer from accessing the services of another, it also becomes possible to customize the services to the specifics of each of them.
-	"
+    "
 }
+
 
 wizard_pre_create_kms_service() {
 	wizard_pre_message "
@@ -457,9 +607,9 @@ wizard_pre_create_kms_service() {
 
     Despite the fact that we support several KMS solutions on the market (AWS, Oracle and Hashicorp), we're going to use a local key storage implementation which, although not ideal for production environment, is good enough for the educational purpose of this script.
 
-    Press any key to instantiate a Local KMS service in the '$TENANT' tenant...
+    ${BLUE}>> Press any key to instantiate a Local KMS service in the '$TENANT' tenant...${RESTORE}
 
-        $cli_name create-kms-service
+        ${BGCYAN}$CLI_NAME create-kms-service ${RESTORE}\n
 	"
 }
 
@@ -474,9 +624,9 @@ wizard_pre_generate_did_key() {
 	wizard_pre_message "
     Let's now create your first key. It will be used later to create the DID for the credential issuance.
 
-    Press any key to create an asymetric key pair...
+    ${BLUE}>> Press any key to create an asymetric key pair...${RESTORE}
 
-        $cli_name generate-did-key
+        ${BGCYAN}$CLI_NAME generate-did-key ${RESTORE}\n
 	"
 }
 
@@ -516,9 +666,9 @@ wizard_pre_create_did_service() {
 
     Let's now create the DID service that will be responsible for DIDs creation.
 
-    Press any key to run the command below:
+    ${BLUE}>> Press any key to run the command below...${RESTORE}
 
-        $cli_name create-did-service
+        ${BGCYAN}$CLI_NAME create-did-service ${RESTORE}\n
 	"
 }
 
@@ -533,9 +683,9 @@ wizard_pre_create_did() {
 	wizard_pre_message "
     Now, it's time to use the DID service just created to generate the DID that will be used to identify our Issuer.
 
-    Press any key to run the command below:
+    ${BLUE}>> Press any key to run the command below...${RESTORE}
 
-        $cli_name create-did
+        ${BGCYAN}$CLI_NAME create-did ${RESTORE}\n
 	"
 }
 
@@ -547,9 +697,9 @@ wizard_pos_create_did() {
 
 wizard_pre_create_credential_status_service() {
 	wizard_pre_message "
-    Press any key to run the command below:
+    ${BLUE}>> Press any key to run the command below...${RESTORE}
 
-        $cli_name create-credential-status-service
+        ${BGCYAN}$CLI_NAME create-credential-status-service ${RESTORE}\n
 	"
 }
 
@@ -563,9 +713,9 @@ wizard_pre_create_issuer_service() {
 	wizard_pre_message "
     Creating Issuer Service...
 
-    >> Press any key to run the command below:
+    ${BLUE}>> Press any key to run the command below...${RESTORE}
 
-        $cli_name create-issuer-service
+        ${BGCYAN}$CLI_NAME create-issuer-service ${RESTORE}\n
 	"
 }
 
@@ -579,9 +729,9 @@ wizard_pre_create_verifier_service() {
 	wizard_pre_message "
     In order to verify a credential, we need to instantiate a Verifier Service in the respective tenant. 
     
-    >> Press any key to run the command below:
+    ${BLUE}>> Press any key to run the command below...${RESTORE}
 
-        $cli_name create-verifier-service
+        ${BGCYAN}$CLI_NAME create-verifier-service ${RESTORE}\n
 	"
 }
 
@@ -596,9 +746,9 @@ wizard_pre_issue_jwt_vc() {
 	wizard_pre_message "
     Everything we have done so far has had two main goals: issue and verify credentials. Let's start by the first one.
     
-    Press any key to run the command below and issue a W3C Credential:
+    ${BLUE}>> Press any key to run the command below and issue a W3C Credential...${RESTORE}
 
-        $cli_name issue-jwt-vc
+        ${BGCYAN}$CLI_NAME issue-jwt-vct ${RESTORE}\n
 	"
 }
 
@@ -624,11 +774,18 @@ thanks() {
 }
 
 wizard() {
+
+    clear
+    init
+
     wizard_welcome
     wizard_disclaimer
 
     check_running_instance
+
+    wizard_pre_clean_all
     clean_all
+    wizard_pos_clean_all
 
     wizard_pre_suerpadmin_create_account
     superadmin_create_account
@@ -643,7 +800,7 @@ wizard() {
     wizard_pos_init_db
 
     wizard_pre_create_organization
-    create_organization
+    create_organization $ROOT_ORGANIZATION
     wizard_pos_create_organization
 
     wizard_pre_list_organizations
@@ -670,13 +827,17 @@ wizard() {
     user_admin_login
     wizard_pos_user_admin_login
 
+    wizard_pre_list_org_resources_before_tenant
+    list_org_resources
+    wizard_pos_list_org_resources_before_tenant
+
     wizard_pre_create_tenant
     create_tenant
     wizard_pos_create_tenant
 
-    wizard_pre_list_org_resources
+    wizard_pre_list_org_resources_after_tenant
     list_org_resources
-    wizard_pos_list_org_resources
+    wizard_pos_list_org_resources_after_tenant
 
     wizard_pre_create_kms_service
     create_kms_service
@@ -690,9 +851,9 @@ wizard() {
     generate_did_key
     wizard_pos_generate_did_key
 
-    wizard_pre_generate_status_key
-    generate_status_key
-    wizard_pos_generate_status_key
+    # wizard_pre_generate_status_key
+    # generate_status_key
+    # wizard_pos_generate_status_key
 
     wizard_pre_create_did_service
     create_did_service
@@ -731,7 +892,6 @@ wizard() {
     wizard_pos_issue_jwt_vc
 
     thanks
-
 }
 
 
@@ -805,6 +965,7 @@ recreate_collections() {
 
     # get_superadmin_auth_token AUTH_TOKEN
 
+    info "Recreating all database collections..."
     response=$(curl -X 'POST' \
         'http://localhost:3000/v1/dev/database-recreate' \
         -H 'accept: */*' \
@@ -821,15 +982,22 @@ recreate_collections() {
 
 create_organization() {
 
+    ORG_ID=$1
+
+    if [ -z "$ORG_ID" ]; then
+        ORG_ID=$ROOT_ORGANIZATION
+    fi
+
     get_superadmin_auth_token AUTH_TOKEN
 
+    info "Creating organization '$ORG_ID'..." 
     response=$(curl -X 'POST' \
         'http://localhost:3000/v1/organization/create' \
         -H 'accept: */*' \
         -H "Authorization: Bearer $AUTH_TOKEN" \
         -H 'Content-Type: application/json' \
         -d "{
-            \"_id\": \"$ROOT_ORGANIZATION\",
+            \"_id\": \"$ORG_ID\",
             \"profile\": {
                 \"name\": \"walt.id GmbH\"
             },
@@ -841,11 +1009,11 @@ create_organization() {
         }" 2> /dev/null)
 
     if [[ $response == *"exception"* ]]; then
-        error "Organization could not be created."
+        error "Organization '$ORG_ID' could not be created."
         error "$response"
         result=-1
     else
-        info "Organization successfully created."
+        info "Organization '$ORG_ID' successfully created."
     fi
 
 }
@@ -856,37 +1024,38 @@ create_user_account() {
 
     rm -f .user_id
 
+    info "Creating '$USER_EMAIL' account..."
     response=$(curl -X 'POST' \
         'http://localhost:3000/v1/admin/account/register' \
         -H 'accept: application/json' \
         -H "Authorization: Bearer $AUTH_TOKEN" \
         -H 'Content-Type: application/json' \
-        -d '{
-        "profile": {
-            "name": "Max Mustermann",
-            "email": "max.mustermann@example.org",
-            "addressCountry": "AT",
-            "address": "Liechtensteinstraße 111/115, 1090 Vienna"
+        -d "{
+        \"profile\": {
+            \"name\": \"Max Mustermann\",
+            \"email\": \"$USER_EMAIL\",
+            \"addressCountry\": \"AT\",
+            \"address\": \"Liechtensteinstraße 111/115, 1090 Vienna\"
         },
-        "preferences": {
-            "timeZone": "UTC",
-            "languagePreference": "EN"
+        \"preferences\": {
+            \"timeZone\": \"UTC\",
+            \"languagePreference\": \"EN\"
         },
-        "initialAuth": {
-            "type": "email",
-            "identifier": {
-            "type": "email",
-            "email": "max.mustermann@example.org"
+        \"initialAuth\": {
+            \"type\": \"email\",
+            \"identifier\": {
+            \"type\": \"email\",
+            \"email\": \"$USER_EMAIL\"
             },
-            "data": {
-            "type": "email",
-            "password": "password123456"
+            \"data\": {
+            \"type\": \"email\",
+            \"password\": \"$USER_PASS\"
             }
         }
-        }' 2> /dev/null)
+        }" 2> /dev/null)
 
     if [[ $response == *"exception"* ]]; then
-        error "User account could not be created."
+        error "User account '$USER_EMAIL' could not be created."
         error "$response"
 
         # TODO Offer to select an existing user to be used
@@ -895,7 +1064,7 @@ create_user_account() {
 
         # TODO Handle user already exists
 
-        info "User account successfully created."
+        info "User account '$USER_EMAIL' successfully created."
 
         regex="\"_id\":\"([0-9a-z-]+)\","
         if [[ "$response" =~ $regex ]]; then
@@ -947,29 +1116,24 @@ add_admin_role_to_user() {
     else
         # TODO If response = {}, role hasn't been added either
         
-        info "Role successfully added."
+        info "Role '$ROLE' successfully added."
         info $response
     fi
 }
 
 user_admin_login() {
-    
-    # get_superadmin_auth_token AUTH_TOKEN
-
-    USER="max.mustermann@example.org"
-    PASS="password123456"
 
     response=$(curl -X 'POST' \
         "http://$ROOT_ORGANIZATION.enterprise.localhost:3000/auth/account/emailpass" \
         -H 'accept: application/json' \
         -H 'Content-Type: application/json' \
         -d "{
-            \"email\": \"$USER\",
-            \"password\": \"$PASS\"
+            \"email\": \"$USER_EMAIL\",
+            \"password\": \"$USER_PASS\"
         }" 2> /dev/null)
 
     if [[ $response == *"exception"* ]]; then
-        error "User $USER could not be logged in."
+        error "User '$USER_EMAIL' could not be logged in."
         error "$response"
         result=-1
     else
@@ -981,9 +1145,9 @@ user_admin_login() {
 
             rm -f .user_auth_token 
             echo $AUTH_TOKEN > .user_auth_token
-            info "User $USER successfully logged in with token $AUTH_TOKEN"
+            info "User '$USER_EMAIL' successfully logged in with token '$AUTH_TOKEN'"
         else
-            error "User not authenticated. Auth token not found in the HTTP response."
+            error "User '$USER_EMAIL' not authenticated. Auth token not found in the HTTP response."
             result=-1
         fi
     fi
@@ -995,21 +1159,22 @@ create_tenant() {
 
     TENANT_ID="$ROOT_ORGANIZATION.$TENANT"
 
+    info "Creating tenant '$TENANT_ID'..."
     response=$(curl -X 'POST' \
         "http://$ROOT_ORGANIZATION.enterprise.localhost:3000/v1/$TENANT_ID/resource-api/tenants/create" \
         -H 'accept: */*' \
         -H "Authorization: Bearer $AUTH_TOKEN" \
         -H 'Content-Type: application/json' \
         -d '{
-            "name":"My first Tenant with Tamino"
+            "name":"My first Tenant"
         }' 2> /dev/null)
 
     if [[ $response == *"exception"* ]]; then
-        error "Tenant $TENANT_ID could not be created."
+        error "Tenant '$TENANT_ID' could not be created."
         error "$response"
         result=-1
     else
-        info "Tenant $TENANT_ID successfully created."
+        info "Tenant '$TENANT_ID' successfully created."
     fi
 }
 
@@ -1481,12 +1646,11 @@ aa() {
 }
 
 help() {
-    cli_name=${0##*/}
     echo "Walt.id Enterprise Stack Quickstarter v$(cat $WORKDIR/VERSION)
 
 Usage: 
 
-    $cli_name [command]
+    $CLI_NAME [command]
 
 Instructions:
 
@@ -1578,7 +1742,7 @@ case "$1" in
         ;;
     create-organization)
         init
-        create_organization
+        create_organization $2
         ;;
     create-user-account)
         init
