@@ -232,6 +232,12 @@ wizard_welcome() {
 
 wizard_disclaimer() {
     echo -e "
+    DISCLAIMER 1
+    ------------
+    This is not a CLI for the walt.id Enterprise Stack. This script was built for educational purpose only. Use it to learn the basics of how to setup our product. Nothing else ;-)
+
+    DISCLAIMER 2
+    ------------
     In order to make you experience as smooth as possible, we need to recreate the whole database, just to make sure there's no data there that could cause any confusion and get in the way of the main purpose of this script: learning how to use the product.
 
     Which means: all the data in your local walt.id Enterprise Stack instance will be lost.
@@ -392,7 +398,7 @@ wizard_pre_create_user_account() {
 	wizard_pre_message "
     You are probably aware that it's not a good idea to use a super powered user for daily tasks, right?  And, you know... big power leads to big responsibilities. We'd better create a less powered user.
 
-    We will now use the Super Admin account to create a new user account. 
+    We will now use the Super Admin account to create a new 'ordinary' user account. 
 
     ${BLUE}>> Press any key to run the command below to create a not-so-super user...${RESTORE}
 
@@ -589,10 +595,23 @@ wizard_pos_list_org_resources_after_tenant() {
     wizard_pos_message "
     Notice how there are now 3 resources in our organization.
 
-    And, you know what? There is an interesting thing here... Some resources are composable, which means they can also have resources in it. How cool is that?
+    And, you know what? There is an interesting thing here... Tenants are an special type of resource. Why? Because they can be nested. It means that you can create a tenant inside a tenant, like '$ROOT_ORGANIZATION.$TENANT.a_department'. But it's not a theme for now. Let's move on.
     
 
-    We will now start creating the services needed to issue and verify credentials. All of them will be created inside the 'MyCustomer' tenant. Why? Just because we want those services to be customer specific. 
+    It's now time to reveal you something new. If you scroll up a bit, you will see that I said that "Almost every entity in the walt.id Enterprise is a resource.". Yes, ALMOST, not 'only'.
+
+    Another very important concept in the Enterprise Stack is SERVICES.
+
+    In a rough definition, we can say that Resources are _static_ while Services are _dynamic_. Or also, Resources provide some _information_ to the instance and Services provide some _functionality_. 
+
+    So, in order to provide credential issuance and verification, we need to instantiate Services. It could be in the organization level or in the tenant level. That's what we are going to do now.
+
+    To learn more about Services in the Enterprise Stack, look at:
+
+    https://docs.walt.id/enterprise-stack/services/
+
+
+    Now, we are going to create a couple of services. All of them will be created inside the '$TENANT' tenant. Why? Just because we want those services to be customer specific. 
     
     By doing this, in addition to the security isolation that is created between the environments of each customer, preventing one customer from accessing the services of another, it also becomes possible to customize the services to the specifics of each of them.
     "
@@ -616,6 +635,10 @@ wizard_pre_create_kms_service() {
 wizard_pos_create_kms_service() {
 	wizard_pos_message "
     The Local KMS has been successfully created and is eagerly awaiting for some keys.
+
+    Learn more about KMS Services here:
+
+    https://docs.walt.id/enterprise-stack/services/key-management-service/overview
 	"
 }
 
@@ -641,17 +664,17 @@ wizard_pos_generate_did_key() {
 }
 
 
-wizard_pre_generate_status_key() {
-	wizard_pre_message "
-    Another key will be needed: the key for the status... #TODO
-    "
-}
+# wizard_pre_generate_status_key() {
+# 	wizard_pre_message "
+#     Another key will be needed: the key for the status... #TODO
+#     "
+# }
 
-wizard_pos_generate_status_key() {
-	wizard_pos_message "
-    Status key successfuly created. #TODO
-	"
-}
+# wizard_pos_generate_status_key() {
+# 	wizard_pos_message "
+#     Status key successfuly created. #TODO
+# 	"
+# }
 
 
 wizard_pre_create_did_service() {
@@ -674,7 +697,11 @@ wizard_pre_create_did_service() {
 
 wizard_pos_create_did_service() {
 	wizard_pos_message "
-    DID service successfuly created in the scope of tenant 'MyCustomer'.
+    DID service successfuly created in the scope of tenant '$TENANT'.
+
+    Learn more about it at:
+
+    https://docs.walt.id/enterprise-stack/services/did-service/overview
 	"
 }
 
@@ -691,23 +718,23 @@ wizard_pre_create_did() {
 
 wizard_pos_create_did() {
 	wizard_pos_message "
-    Issuer DID of type did:key successfuly created and save in the .did file.
+    Issuer DID of type did:key successfuly created and save in the '.did' file.
 	"
 }
 
-wizard_pre_create_credential_status_service() {
-	wizard_pre_message "
-    ${BLUE}>> Press any key to run the command below...${RESTORE}
+# wizard_pre_create_credential_status_service() {
+# 	wizard_pre_message "
+#     ${BLUE}>> Press any key to run the command below...${RESTORE}
 
-        ${BGCYAN}$CLI_NAME create-credential-status-service ${RESTORE}\n
-	"
-}
+#         ${BGCYAN}$CLI_NAME create-credential-status-service ${RESTORE}\n
+# 	"
+# }
 
-wizard_pos_create_credential_status_service() {
-	wizard_pos_message "
+# wizard_pos_create_credential_status_service() {
+# 	wizard_pos_message "
 
-	"
-}
+# 	"
+# }
 
 wizard_pre_create_issuer_service() {
 	wizard_pre_message "
@@ -1572,6 +1599,32 @@ list_accounts() {
 
 }
 
+list_resources_tree() {
+    get_user_auth_token AUTH_TOKEN
+
+    TENANT_ID=$1
+
+    if [[ -z "$TENANT_ID" ]]; then
+        TENANT_ID="$ROOT_ORGANIZATION.$TENANT"
+    fi
+
+    info "Listing resources tree..."
+
+    response=$(curl -X 'GET' \
+        "http://$ROOT_ORGANIZATION.enterprise.localhost:3000/v1/resources-api/tree" \
+        -H 'accept: application/json' \
+        -H "Authorization: Bearer $AUTH_TOKEN" 2> /dev/null)
+
+    if [[ $response == *"exception"* ]]; then
+        error "Resources tree could not be listed."
+        error "$response"
+        result=-1
+    else
+        info "Resource tree:"
+        echo "$response" | jq
+    fi
+}
+
 list_org_resources() {
     list_resources $ROOT_ORGANIZATION
 }
@@ -1604,9 +1657,6 @@ list_resources() {
         info "Resource list:"
         echo "$response" | jq
     fi
-
-    
-
 }
 
 list_keys() {
@@ -1807,6 +1857,10 @@ case "$1" in
     list-accounts)
         init
         list_accounts
+        ;;
+    list-resources-tree)
+        init
+        list_resources_tree
         ;;
     list-org-resources)
         init
