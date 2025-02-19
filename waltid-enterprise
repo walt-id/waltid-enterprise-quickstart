@@ -376,11 +376,11 @@ wizard_pre_create_organization() {
     wizard_pre_message "
     It's now time to create the root organization. If you allow me, I will call it '$ROOT_ORGANIZATION'. Once you learn how to do it, you should use your company's name instead.
     
-    You can find more about organizations in the docs: 
+    You can find more info about organizations in the docs:
     
     https://docs.walt.id/enterprise-stack/concepts#the-organization
 
-    ${BLUE}>> Press any key to run the command below and create the '$ROOT_ORGANIZATION' root organization...${RESTORE}
+    ${BLUE}>> Press any key to run the command below and create the '$ROOT_ORGANIZATION' organization...${RESTORE}
 
        ${BGCYAN}$CLI_NAME create-organization ${RESTORE}\n
     "
@@ -388,7 +388,7 @@ wizard_pre_create_organization() {
 
 wizard_pos_create_organization() {
     print "
-    Awesome. The '$ROOT_ORGANIZATION' root organization has been created.         
+    Awesome. The '$ROOT_ORGANIZATION' organization has been created.
     "
 
     # TODO Later
@@ -408,9 +408,9 @@ wizard_pre_list_organizations() {
     # TODO What's a use case for more than one root organization?
 
 	wizard_pre_message "
-    At any time, you can list all the root organizations in in your Enterprise instance.
+    At any time, you can list all the organizations in your Enterprise instance.
     
-    ${BLUE}>> Press any key to run the command bellow to list all the root organizations...${RESTORE}
+    ${BLUE}>> Press any key to run the command bellow to list all the organizations...${RESTORE}
 
         ${BGCYAN}$CLI_NAME list-organizations ${RESTORE}\n
 	"
@@ -423,7 +423,7 @@ wizard_pos_list_organizations() {
 
 wizard_pre_create_user_account() {
 	wizard_pre_message "
-    You are probably aware that it's not a good idea to use a super powered user for daily tasks, right?  And, you know... big power leads to big responsibilities. We'd better create a less powered user.
+    You are probably aware that it's not a good idea to use a user with super powers for daily tasks, right?  And, you know... big power leads to big responsibilities. We'd better create a user with less power.
 
     We will now use the Super Admin account to create a new 'ordinary' user account. 
 
@@ -453,13 +453,13 @@ wizard_pos_list_accounts1() {
 	wizard_pos_message "
     Notice that there are two user accounts: Superadmin and Max.
 
-    And, before we move forward, let's take a closer look to the "role" property of each account. What does it mean?
+    Now, before we move on. Let's take a closer look at the "role" property.
 
-    Each property in the 'roles' object represents the set of roles assingned to that user in a specific organization.
+    Each property in the 'roles' object represents a set of roles assigned to that user in a specific organization.
 
-    Take Max as our first example. He doesn't have any specifc role. Which means he doesn't have any privilege on any resource (we will talk more about it later).
+    Take Max as our first example. He doesn't have any specific role. Which means he doesn't have any privileges on any resource (we will talk more about it later).
 
-    On the other hand, look at the Superadmin account. It has the role 'admin' in the '$ROOT_ORGANIZATION' organization. And, why does it have such privilege? Just because it's the account who created that organization.
+    On the other hand, when we look at the Superadmin account. It has the role 'admin' in the '$ROOT_ORGANIZATION' organization. Now, why does it have these privileges? It's because it was this account who created that organization.
 
     Every time an organization is created, an 'admin' role is automatically generated and assigned to its creator.
 	"
@@ -516,7 +516,7 @@ wizard_pre_add_admin_role() {
 	wizard_pre_message "
     What if we now assign the same "$ROOT_ORGANIZATION.admin" role to Max? Does he deserve it?
 
-    ${BLUE}>> Press any key to run the command below and give Max some powers on the "$ROOT_ORGANIZATION" organization...${RESTORE}
+    ${BLUE}>> Press any key to run the command below and give Max some power on the "$ROOT_ORGANIZATION" organization...${RESTORE}
 
        ${BGCYAN}$CLI_NAME add-admin-role ${RESTORE}\n
 	"
@@ -524,7 +524,7 @@ wizard_pre_add_admin_role() {
 
 wizard_pos_add_admin_role() {
 	wizard_pos_message "
-    Congratz, Max. You are now a VIP at "$ROOT_ORGANIZATION". Oh, ok, no so VIP as the Super Admin. But you understand, right? ;-)
+    Congratz, Max. You are now a VIP member at "$ROOT_ORGANIZATION". However, you are not quite at the level of the Super Admin. But I’m sure you understand, right? ;-)
 	"
 }
 
@@ -565,11 +565,12 @@ wizard_pos_list_org_resources_before_tenant() {
     wizard_pos_message "
     By default, any organization is created with 2 resources in it: a role and a host-alias.
 
-    Yeah, roles are also resources. And also the host-alias, which is how we access the instance with subdomains (not currently discussed in this brief quickstart tutorial).
+    Yeah, roles are also resources. Also, the host-alias, which are used to access the enterprise stack API via subdomains (It's a more advanced topic and something we won't discuss in more detail right now).
 
-    Resources are referenced with <organization_name>.<resource_name>. That's why the 'admin' role was referenced with '$ROOT_ORGANIZATION.admin'. Get used to it. This structure will be used everywhere from now on.
+    Resources are referenced with <organization_name>.<resource_name>. That's why the 'admin' role was referenced with '$ROOT_ORGANIZATION.admin'. It's a structure which will be used everywhere from now on so you better
+    get used to it!
 
-    What if we now add some more resources into the '$ROOT_ORGANIZATION' organization? Let's do it, then!
+    What about adding more resources into the '$ROOT_ORGANIZATION' organization? Let's do it!
     "
 }
 
@@ -577,7 +578,7 @@ wizard_pre_create_tenant() {
 	wizard_pre_message "
     
 
-    Would it be a good idea to put all your files at the root folder of your storage system? In most case, no, right? It would be even worst if some of those files were about the same thing but on different contexts. You would have to name each file with the full context to make them findable later. That's why we distribute them in directories in a folder hierarchy. Each entry in the hierarchy represents an specific context, which allows you to do 
+   Would it be good to store all your files in the root folder of your storage system? In most cases, the answer is no, correct? Especially when some of these files would refer to similar things but with different contexts. You would have to name each file with the full context to make sure you find them later. That's why we distribute them in a folder hierarchy. Each entry in the hierarchy represents an specific context, which allows you to do
     
     '/Payments/2025/Feb/Company A/Proof of Payment.pdf' 
     
@@ -585,11 +586,11 @@ wizard_pre_create_tenant() {
     
     'Proof_of_Payment_for_Company_A_in_Feb_2025.pdf'
 
-    This is what Tenants are about. They are organizations units (or namespaces, if you will) that allows you to isolate resources in different contexts.
+    This is what Tenants are about. They are organizations units (or namespaces, if you will) that allow you to isolate resources for different contexts.
 
     You can give Tenants any semantics you want, just like you do in your file system. However, the most common use case for Tenants is the creation of customer specific contexts in such a way that everything related to one particular customer is isolated from other's.
 
-    So, for example, let's say walt.id has a managed Enterprise instance that is shared by multiple customers. Each customer would be a separated Tenant in the platform. I'll show you.
+    So, for example, let's say walt.id has a managed Enterprise instance that is shared by multiple customers. Each customer would be a separated Tenant in the platform. Let's take a look!
 
     ${BLUE}>> Press any key to create an specific 'folder' for your new customer...
 
@@ -622,16 +623,16 @@ wizard_pos_list_org_resources_after_tenant() {
     wizard_pos_message "
     Notice how there are now 3 resources in our organization.
 
-    And, you know what? There is an interesting thing here... Tenants are an special type of resource. Why? Because they can be nested. It means that you can create a tenant inside a tenant, like '$ROOT_ORGANIZATION.$TENANT.a_department'. But it's not a theme for now. Let's move on.
+    And, you know what? There is an interesting thing here... Tenants are an special type of resource. Why? Because they can be nested. It means that you can create a tenant inside a tenant, like '$ROOT_ORGANIZATION.$TENANT.a_department'. But it's not a topic for now. Let's move on.
     
 
-    It's now time to reveal you something new. If you scroll up a bit, you will see that I said that "Almost every entity in the walt.id Enterprise is a resource.". Yes, ALMOST, not 'only'.
+    Now it's time to reveal something new to you. If you scroll up a bit, you will see that I said that "Almost every entity in the walt.id Enterprise is a resource.". Yes, ALMOST, not 'only'.
 
-    Another very important concept in the Enterprise Stack is SERVICES.
+    Another very important concept in the Enterprise Stack are SERVICES.
 
-    In a rough definition, we can say that Resources are _static_ while Services are _dynamic_. Or also, Resources provide some _information_ to the instance and Services provide some _functionality_. 
+    In a rough definition, we can say that Resources are _static_ while Services are _dynamic_. Or also, Resources provide some _information_ to the instance whilst Services provide some _functionality_.
 
-    So, in order to provide credential issuance and verification, we need to instantiate Services. It could be in the organization level or in the tenant level. That's what we are going to do now.
+    So, to enable credential issuance and verification, we need to instantiate Services inside of one or multiple tenants. That's what we are going to do now.
 
     To learn more about Services in the Enterprise Stack, look at:
 
@@ -661,9 +662,9 @@ wizard_pre_create_kms_service() {
 
 wizard_pos_create_kms_service() {
 	wizard_pos_message "
-    The Local KMS has been successfully created and is eagerly awaiting for some keys.
+    The Local KMS has been successfully created and is eagerly awaiting some keys.
 
-    Learn more about KMS Services here:
+    Learn more about the KMS Services here:
 
     https://docs.walt.id/enterprise-stack/services/key-management-service/overview
 	"
@@ -672,7 +673,7 @@ wizard_pos_create_kms_service() {
 
 wizard_pre_generate_did_key() {
 	wizard_pre_message "
-    Let's now create your first key. It will be used later to create the DID for the credential issuance.
+    Let's create your first key, which will be necessary for generating a Decentralized Identifier (DID). Both the key and the DID are needed for issuing a credential later on.
 
     ${BLUE}>> Press any key to create an asymetric key pair...${RESTORE}
 
@@ -682,11 +683,13 @@ wizard_pre_generate_did_key() {
 
 wizard_pos_generate_did_key() {
 	wizard_pos_message "
-    The key was created and saved in the local KMS. It was created with the Ed25519 algorithm and saved in the JWT format in the .did_key local file. 
+    The key was created and saved in the local KMS (database of the Enterprise Stack). It was created with the Ed25519 algorithm and it's resource ID has been saved in the .did_key local file.
 
-    Learn more about it at:
+    Using the local KMS option is great for testing. But, in production we recommend the usage of one of our external KMS provider integrations.
 
-    https://docs.walt.id/enterprise-stack/services/key-management-service/local
+    Learn more about the KMS service, here:
+
+    https://docs.walt.id/enterprise-stack/services/key-management-service/overview
 	"
 }
 
@@ -706,15 +709,15 @@ wizard_pos_generate_did_key() {
 
 wizard_pre_create_did_service() {
 	wizard_pre_message "
-    One of the most foundational concept in the Decentralized Identity ecosystem is... the Decentralized Identifiers, affectionately called DID ❤️
+    One important concept in most Decentralized Identity ecosystems are... Decentralized Identifiers, also called DID ❤️
 
-    DIDs are a way to uniquely identify an entity in the digital space. In the current context, we use DIDs to identify Issuers, Subjects, Holders and Verifiers(?). #TODO 
+    DIDs are a way to uniquely identify any entity. In the current context, we use DIDs to identify Issuers and Subjects.
     
     You can learn more about it at:
 
     https://docs.walt.id/community-stack/concepts/decentralised-identifiers
 
-    Let's now create the DID service that will be responsible for DIDs creation.
+    Let's now create the DID service, which we will later use to create our DIDs.
 
     ${BLUE}>> Press any key to run the command below...${RESTORE}
 
@@ -724,7 +727,7 @@ wizard_pre_create_did_service() {
 
 wizard_pos_create_did_service() {
 	wizard_pos_message "
-    DID service successfuly created in the scope of tenant '$TENANT'.
+    DID service successfully created in the scope of tenant '$TENANT'.
 
     Learn more about it at:
 
@@ -735,7 +738,7 @@ wizard_pos_create_did_service() {
 
 wizard_pre_create_did() {
 	wizard_pre_message "
-    Now, it's time to use the DID service just created to generate the DID that will be used to identify our Issuer.
+    Now, it's time to use the DID service to generate the DID that will be used to identify our Issuer.
 
     ${BLUE}>> Press any key to run the command below...${RESTORE}
 
@@ -745,7 +748,7 @@ wizard_pre_create_did() {
 
 wizard_pos_create_did() {
 	wizard_pos_message "
-    Issuer DID of type did:key successfuly created and save in the '.did' file.
+    Issuer DID of type did:key successfully created and saved in the '.did' file.
 	"
 }
 
@@ -798,7 +801,7 @@ wizard_pos_create_verifier_service() {
 
 wizard_pre_issue_jwt_vc() {
 	wizard_pre_message "
-    Everything we have done so far has had two main goals: issue and verify credentials. Let's start by the first one.
+    Everything we have done so far has had two main goals: to be able to issue and verify credentials. Let's start with the first one.
     
     ${BLUE}>> Press any key to run the command below and issue a W3C Credential...${RESTORE}
 
@@ -808,11 +811,11 @@ wizard_pre_issue_jwt_vc() {
 
 wizard_pos_issue_jwt_vc() {
 	wizard_pos_message "
-    The credential offer has been successfuly created and saved in the .vc-offer file.
+    The credential offer has been successfully created and saved in the .vc-offer file.
 
-    According to the OID4VC protocol, this offer should be accepted by a compatible wallet so that the credential is actually issued by the Issuer.
+    According to the OID4VC protocol, this offer can now be accepted by any compatible wallet.
 
-    Unfortunately, our Enterprise Wallet is still under development and we cannot move beyond this point.
+    Unfortunately, our Enterprise stack wallet service is still under development. Therefore we cannot move beyond this point yet.
 	"
 }
 
@@ -1293,7 +1296,7 @@ generate_key() {
         DID_KEY=$(echo $response | jq "._id" | cut -d\" -f2)
         echo $DID_KEY > $KEY_FILE
 
-        info "Key saved in the $KEY_FILE file"
+        info "The resource identifier of the key has been saved in the $KEY_FILE file"
     fi
 }
 
