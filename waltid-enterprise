@@ -124,7 +124,7 @@ check_running_instance() {
 
 docker_hub_login(){
     if [ ! -f .docker-token ]; then
-        error "I couldn't find and authorization token to log you in the Docker Hub. Please, ask the walt.id team for one and save it in a file called .docker-token in the current directory." 
+        error "I couldn't find and authorization token to log you in the Docker Hub. Please, ask the walt.id team for one and save it in a file called .docker-token in the current directory. To receive access you must be an Enterprise Stack customer."
         exit -1
     fi
 
