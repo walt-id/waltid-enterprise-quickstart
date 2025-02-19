@@ -335,6 +335,10 @@ wizard_pos_suerpadmin_create_account() {
     Nice! The Super Admin user has just been created with the email and password specified in the ./config/superadmin-registration.conf file.
 
     The Super Admin user can do anything in the platform. As the name suggests, he is the admin of the whole instance. He can manage all the resources in any tenant in any organization. So, please, never share this user's credential with anyone not related to the instance administration.
+
+    Learn more about the Super Admin here:
+
+    https://docs.walt.id/enterprise-stack/administration/access-and-permissions/super-admin/overview
     "
 }
 
@@ -352,7 +356,7 @@ wizard_pos_superadmin_login() {
     wizard_pos_message "
     The Super Admin is now logged in.
 
-    Every command from now on will be executed with the Super Admin account. Take care.
+    Every command from now on will be executed with the Super Admin account.
     "
 }
 
@@ -425,7 +429,11 @@ wizard_pre_create_user_account() {
 	wizard_pre_message "
     You are probably aware that it's not a good idea to use a user with super powers for daily tasks, right?  And, you know... big power leads to big responsibilities. We'd better create a user with less power.
 
-    We will now use the Super Admin account to create a new 'ordinary' user account. 
+    We will now use the Super Admin account to create a new 'ordinary' user account.
+
+    Learn more about user accounts here:
+
+    https://docs.walt.id/enterprise-stack/administration/access-and-permissions/accounts/overview
 
     ${BLUE}>> Press any key to run the command below to create a not-so-super user...${RESTORE}
 
@@ -525,6 +533,12 @@ wizard_pre_add_admin_role() {
 wizard_pos_add_admin_role() {
 	wizard_pos_message "
     Congratz, Max. You are now a VIP member at "$ROOT_ORGANIZATION". However, you are not quite at the level of the Super Admin. But I’m sure you understand, right? ;-)
+
+    Learn more about roles here:
+
+    https://docs.walt.id/enterprise-stack/administration/access-and-permissions/roles/overview
+
+
 	"
 }
 
@@ -565,10 +579,9 @@ wizard_pos_list_org_resources_before_tenant() {
     wizard_pos_message "
     By default, any organization is created with 2 resources in it: a role and a host-alias.
 
-    Yeah, roles are also resources. Also, the host-alias, which are used to access the enterprise stack API via subdomains (It's a more advanced topic and something we won't discuss in more detail right now).
+    Yeah, roles and the host-alias are also a resource. The host-alias is used to access the enterprise stack API via a specific subdomain (It's a more advanced topic and something we won't discuss in more detail right now).
 
-    Resources are referenced with <organization_name>.<resource_name>. That's why the 'admin' role was referenced with '$ROOT_ORGANIZATION.admin'. It's a structure which will be used everywhere from now on so you better
-    get used to it!
+    Resources are referenced with <organization_name>.<resource_name>. That's why the 'admin' role was referenced with '$ROOT_ORGANIZATION.admin'. It's a structure which will be used everywhere from now on.
 
     What about adding more resources into the '$ROOT_ORGANIZATION' organization? Let's do it!
     "
@@ -626,7 +639,7 @@ wizard_pos_list_org_resources_after_tenant() {
     And, you know what? There is an interesting thing here... Tenants are an special type of resource. Why? Because they can be nested. It means that you can create a tenant inside a tenant, like '$ROOT_ORGANIZATION.$TENANT.a_department'. But it's not a topic for now. Let's move on.
     
 
-    Now it's time to reveal something new to you. If you scroll up a bit, you will see that I said that "Almost every entity in the walt.id Enterprise is a resource.". Yes, ALMOST, not 'only'.
+    Now it's time to reveal something new to you. If you scroll up a bit, you will see that I said that 'Almost every entity in the walt.id Enterprise is a resource.'. Yes, ALMOST, not 'only'.
 
     Another very important concept in the Enterprise Stack are SERVICES.
 
@@ -685,8 +698,6 @@ wizard_pos_generate_did_key() {
 	wizard_pos_message "
     The key was created and saved in the local KMS (database of the Enterprise Stack). It was created with the Ed25519 algorithm and it's resource ID has been saved in the .did_key local file.
 
-    Using the local KMS option is great for testing. But, in production we recommend the usage of one of our external KMS provider integrations.
-
     Learn more about the KMS service, here:
 
     https://docs.walt.id/enterprise-stack/services/key-management-service/overview
@@ -711,7 +722,7 @@ wizard_pre_create_did_service() {
 	wizard_pre_message "
     One important concept in most Decentralized Identity ecosystems are... Decentralized Identifiers, also called DID ❤️
 
-    DIDs are a way to uniquely identify any entity. In the current context, we use DIDs to identify Issuers and Subjects.
+    DIDs are a way to uniquely identify an entity. In the current context, we use DIDs to identify Issuers and Subjects.
     
     You can learn more about it at:
 
@@ -778,7 +789,11 @@ wizard_pre_create_issuer_service() {
 
 wizard_pos_create_issuer_service() {
 	wizard_pos_message "
-    Issuer Service successfuly created. Your are now ready to issue credentials.
+    Issuer Service successfully created. Your are now ready to issue credentials.
+
+    Learn more about the issuer service here:
+
+    https://docs.walt.id/enterprise-stack/services/issuer-service/overview
 	"
 }
 
@@ -794,7 +809,10 @@ wizard_pre_create_verifier_service() {
 
 wizard_pos_create_verifier_service() {
 	wizard_pos_message "
-    Verifier Service successfuly created. You are now ready to verify credentials.
+    Verifier Service successfully created. You are now ready to verify credentials.
+
+    Learn more about the verifier service here:
+    https://docs.walt.id/enterprise-stack/services/verifier-service/overview
 	"
 }
 
