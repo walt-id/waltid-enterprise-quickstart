@@ -65,26 +65,49 @@ OUTPUT_WIDTH=$(expr $TTY_WIDTH \* 6 / 10) # 60% the terminal window width
 auth_token=""
 
 init() {
-    echo "================================================================================="
+    header
+    check_dependencies
+    check_running_instance
+}
+
+header() {
+    echo "============================================================================================="
     info "walt.id Enterprise Stack Quickstarter v$(cat $WORKDIR/VERSION)"
-    info "Checking dependencies... TODO"
-    echo "================================================================================="
-    # jq
-    # curl
+    echo "============================================================================================="
+}
+
+check_dependencies() {
+    info "Checking dependencies..."
+    REQUIREMENTS="jq curl tput"
+    for c in $REQUIREMENTS; do
+        info "  Checking '$c'..." "NO_LINEBREAK_PLEASE"
+        if [[ -z "$(which $c)" ]]; then
+            echo -e "${RED}FAIL${RESTORE}"
+            error "'$c' not found. Please, install it."
+            exit -1
+        fi
+        echo -e "${GREEN}OK${RESTORE}"
+        # echo -e "\033[FOK"
+        # echo -e "$(tput cuu1)$(tput hpa $(tput cols))OK"
+    done
 }
 
 log() {
   script_name=${0##*/}
   timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-  echo -e "== $script_name $timestamp $1" 
+  if [[ ! -z "$2" ]]; then
+    echo -ne "== $script_name $timestamp $1" 
+  else
+    echo -e "== $script_name $timestamp $1" 
+  fi
 }
 
 info() {
-    log "${YELLOW}[INFO]${RESTORE} $1"
+    log "${YELLOW}[INFO]${RESTORE} $1" "$2"
 }
 
 error() {
-    log "${RED}[ERROR]${RESTORE} $1"
+    log "${RED}[ERROR]${RESTORE} $1" "$2"
 }
 
 check_running_instance() {
@@ -233,17 +256,21 @@ wizard_welcome() {
 wizard_disclaimer() {
     echo -e "
     DISCLAIMER 1
-    ------------
-    This is not a CLI for the walt.id Enterprise Stack. This script was built for educational purpose only. Use it to learn the basics of how to setup our product. Nothing else ;-)
+    -------------"
+    echo -e "
+    This is not a CLI for the walt.id Enterprise Stack. This script was built for educational purpose only. Use it to learn the basics of how to setup our product. Nothing else ;-)" | fmt -w $OUTPUT_WIDTH
 
+    echo -e "
     DISCLAIMER 2
-    ------------
+    -------------"
+    
+    echo -e "
     In order to make you experience as smooth as possible, we need to recreate the whole database, just to make sure there's no data there that could cause any confusion and get in the way of the main purpose of this script: learning how to use the product.
 
     Which means: all the data in your local walt.id Enterprise Stack instance will be lost.
     " | fmt -w $OUTPUT_WIDTH
 
-    printf "%4s${BLUE}Are you ok with that? (y/N)${RESTORE} "
+    printf "%4s${BLUE}>> Are you ok with that? (y/N)${RESTORE} "
     read  -n1 AGREED
 
     shopt -s nocasematch
@@ -807,8 +834,6 @@ wizard() {
 
     wizard_welcome
     wizard_disclaimer
-
-    check_running_instance
 
     wizard_pre_clean_all
     clean_all
@@ -1754,12 +1779,9 @@ Commands:
   create-tenant                     Create tenant in the organization created with the superadmin user
   create-kms-service                Create KMS service in the tenant
   generate-did-key                  Generate a key to be later used on DID creation
-  generate-status-key               Generate a key to be later used on...
   create-did-service                Create DID service in the tenant
   create-did                        Create a did:key for the credential issuance
-  create-credential-status-service  Create credential status service
-  create-issuer-service             Create issuer service in the tenant
-  create-verifier-service           Create verifier service in the tenant
+  create-issuer-service             Create issuer service in the tenenant
   issue-jwt-vc                      Issue a W3C JWT credential
   list-organizations                List all organizations under the superadmin account
   list-accounts                     List all accounts in...
@@ -1768,6 +1790,11 @@ Commands:
   recreate-db                       Delete all data and restart it from scratch
    "
   exit 1
+
+#   ant
+#   generate-status-key               Generate a key to be later used on...
+#   create-credential-status-service  Create credential status service
+#   create-verifier-service           Create verifier service in the t
 }
 
 case "$1" in
@@ -1818,10 +1845,10 @@ case "$1" in
         init
         generate_did_key
         ;;
-    generate-status-key)
-        init
-        generate_status_key
-        ;;
+    # generate-status-key)
+    #     init
+    #     generate_status_key
+    #     ;;
     create-did-service)
         init
         create_did_service
@@ -1830,26 +1857,26 @@ case "$1" in
         init
         create_did
         ;;
-    create-credential-status-service)
-        init
-        create_credential_status_service
-        ;;
+    # create-credential-status-service)
+    #     init
+    #     create_credential_status_service
+    #     ;;
     create-issuer-service)
         init
         create_issuer_service
         ;;
-    create-verifier-service)
-        init
-        create_verifier_service
-        ;;
+    # create-verifier-service)
+    #     init
+    #     create_verifier_service
+    #     ;;
     issue-jwt-vc)
         init
         issue_jwt_vc
         ;;
-    verify-vc)
-        init
-        verify-vc
-        ;;
+    # verify-vc)
+    #     init
+    #     verify-vc
+    #     ;;
     list-organizations)
         init
         list_organizations
