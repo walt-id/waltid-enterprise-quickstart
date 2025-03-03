@@ -1,8 +1,8 @@
 # walt.id Enterprise Stack Quickstart
 
-Explore enterprise features via via our CLI tool and/or bring up the whole stack using docker-compose.
+Explore enterprise features via our CLI tool and/or bring up the whole stack using docker-compose.
 
-⚠️ Please note: You require private access to the walt.id enterprise images to use this quickstart.
+⚠️ Please note: You need to be an Enterprise Stack customer & have access to the private enterprise stack images, to use this quickstart.
 
 ## 1. Enterprise CLI: Explore Enterprise Features via CLI 
 
