@@ -7,6 +7,19 @@
 ## 1. Enterprise CLI: Explore Enterprise Features via CLI 
 
 ### Use the CLI
+
+**Clone the repo**
+
+```bash
+git clone https://github.com/walt-id/waltid-enterprise-quickstart.git
+```
+
+**Change Working Directory**
+```bash
+cd waltid-enterprise-quickstart
+```
+
+**Run the CLI**
 ```bash
 ./waltid-enterprise
 ```
@@ -46,6 +59,19 @@
 Use docker-compose to bring up the Enterprise Stack API, UI (soon) and a MongoDB database (storage of the Enterprise Stack).  
 
 You can update the version of the enterprise stack via the `.env` file. 
+
+### Use docker-compose
+
+**Clone the repo**
+
+```bash
+git clone https://github.com/walt-id/waltid-enterprise-quickstart.git
+```
+
+**Change Working Directory**
+```bash
+cd waltid-enterprise-quickstart
+```
 
 **Run The Stack**
 ```bash
