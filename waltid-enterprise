@@ -49,12 +49,14 @@ export WORKDIR=$(cd $(dirname $0) && pwd)
 
 ENTERPRISE_RELEASE=$(cat .env | grep ENTERPRISE_API_DOCKER_IMAGE_TAG | cut -d= -f2)
 
-ROOT_ORGANIZATION=waltid
-TENANT=mycustomer
-KMS_SERVICE="kms-service"
-DID_SERVICE="did-service"
-ISSUER_SERVICE="issuer-service"
-VERIFIER_SERVICE="verifier-service"
+ROOT_ORGANIZATION="waltid"
+TENANT="tenant1"
+KMS_SERVICE="kms1"
+DID_SERVICE="did1"
+ISSUER_SERVICE="issuer1"
+VERIFIER_SERVICE="verifier1"
+KEY="key1"
+WALLET="wallet1"
 
 USER_EMAIL="max.mustermann@example.org"
 USER_PASS="password123456"
@@ -967,6 +969,81 @@ wizard() {
     thanks
 }
 
+quick_setup() {
+    info "Initializing..."
+    clear
+    init
+    clean_all
+
+    echo
+    info "Creating superadmin..."
+    superadmin_create_account
+    superadmin_login
+    log "superadmin auth token: $(cat .auth_token)"
+    init_db
+
+    echo
+    info "Creating organization..."
+    create_organization $ROOT_ORGANIZATION
+    echo
+    info "Creating user account..."
+    create_user_account
+    # list_accounts
+    add_admin_role_to_user
+    # list_accounts "$ROOT_ORGANIZATION"
+    
+    echo
+    info "Logging in..."
+    user_admin_login
+    # list_org_resources
+
+    echo
+    info "Creating tenant..."
+    create_tenant
+    # list_org_resources
+
+    echo
+    info "Creating KMS Service..."
+    create_kms_service
+    # list_tenant_resources
+
+    echo
+    info "Creating DID Service..."
+    generate_did_key
+    create_did_service
+    # list_tenant_resources
+    
+    echo
+    info "Creating DID..."
+    create_did
+    echo
+    info "Creating Issuer Service..."
+    create_issuer_service
+    # list_tenant_resources
+    
+    echo
+    info "Creating Verifier Service..."
+    create_verifier_service
+    # list_tenant_resources
+
+    echo
+    info "Setting up wallet..."
+    wallet_setup
+    # list_tenant_resources
+}
+
+issue_and_receive() {
+
+    quick_setup
+
+    echo
+    info "Issuing credential..."
+    issue_jwt_vc
+
+    echo 
+    info "Receiving credential in the Wallet..."
+    wallet_credential_receive
+}
 
 superadmin_create_account() {
     superadmin_token=$(cat config/superadmin-registration.conf | sed -n '2 p' | cut -d \" -f 2)
@@ -1290,10 +1367,10 @@ generate_key() {
     PURPOSE=$1
     KEY_FILE=$2
 
-    KMS_ID="$ROOT_ORGANIZATION.mycustomer.kms1"
+    KEY_ID="$ROOT_ORGANIZATION.$TENANT.$KMS_SERVICE.$KEY"
 
     response=$(curl -X 'POST' \
-        "http://$ROOT_ORGANIZATION.enterprise.localhost:3000/v1/$KMS_ID/kms-service-api/keys/generate" \
+        "http://$ROOT_ORGANIZATION.enterprise.localhost:3000/v1/$KEY_ID/kms-service-api/keys/generate" \
         -H 'accept: application/json' \
         -H "Authorization: Bearer $AUTH_TOKEN" \
         -H 'Content-Type: application/json' \
@@ -1303,13 +1380,13 @@ generate_key() {
         }' 2> /dev/null)
 
     if [[ $response == *"exception"* ]]; then
-        error "$PURPOSE key could not be generate from $KMS_ID."
+        error "$PURPOSE key could not be generate: $KEY_ID."
         error "$response"
         result=-1
     else
         info "$PURPOSE key successfully generated."
         echo "$response" | jq
-        echo "$response"
+        # echo "$response"
 
         DID_KEY=$(echo $response | jq "._id" | cut -d\" -f2)
         echo $DID_KEY > $KEY_FILE
@@ -1327,14 +1404,14 @@ generate_status_key() {
 }
 
 create_did_service() {
-   create_service "did" "did-service"
+   create_service "did" "$DID_SERVICE"
 }
 
 create_did() {
 
     get_user_auth_token AUTH_TOKEN
 
-    DID_SERVICE_ID="$ROOT_ORGANIZATION.mycustomer.did-service"
+    DID_SERVICE_ID="$ROOT_ORGANIZATION.$TENANT.$DID_SERVICE"
     
     if [[ ! -f .did_key ]]; then
         info "DID key doesn't exist. Let's create one..."
@@ -1453,7 +1530,7 @@ create_verifier_service() {
 
 issue_jwt_vc() {
 
-    ISSUER_SERVICE_ID="$ROOT_ORGANIZATION.$TENANT.issuer1"
+    ISSUER_SERVICE_ID="$ROOT_ORGANIZATION.$TENANT.$ISSUER_SERVICE"
     # KMS_SERVICE_ID="$ROOT_ORGANIZATION.$TENANT.kms1"
     KEY_ID=$(cat .did_key)
 
@@ -1648,11 +1725,11 @@ list_accounts() {
 list_resources_tree() {
     get_user_auth_token AUTH_TOKEN
 
-    TENANT_ID=$1
+    # TENANT_ID=$1
 
-    if [[ -z "$TENANT_ID" ]]; then
-        TENANT_ID="$ROOT_ORGANIZATION.$TENANT"
-    fi
+    # if [[ -z "$TENANT_ID" ]]; then
+    #     TENANT_ID="$ROOT_ORGANIZATION.$TENANT"
+    # fi
 
     info "Listing resources tree..."
 
@@ -1709,7 +1786,7 @@ list_keys() {
     
     get_user_auth_token AUTH_TOKEN
 
-    KMS_ID="$ROOT_ORGANIZATION.mycustomer.kms1"
+    KMS_ID="$ROOT_ORGANIZATION.$TENANT.kms1"
 
     response=$(curl -X 'GET' \
         "http://$ROOT_ORGANIZATION.enterprise.localhost:3000/v1/$KMS_ID/kms-service-api/keys/list" \
@@ -1723,6 +1800,78 @@ list_keys() {
     else
         info "$KMS_ID keys:"
         echo "$response" | jq
+    fi
+}
+
+
+wallet_setup() {
+    
+    get_user_auth_token AUTH_TOKEN
+
+    WALLET_ID="$ROOT_ORGANIZATION.$TENANT.$WALLET"
+
+    response=$(curl -X 'POST' \
+        "http://$ROOT_ORGANIZATION.enterprise.localhost:3000/v1/$WALLET_ID/wallet-service-api/init-wallet" \
+        -H 'accept: */*' \
+        -H "Authorization: Bearer $AUTH_TOKEN" \
+        -H 'Content-Type: application/json' \
+        -d '{ 
+            "createKms": true,
+            "createKeyInKms": {
+                "backend": "jwk",
+                "keyType": "Ed25519"
+            },
+            "createDidStore": true,
+            "createDidService": true,
+            "createDidWithDidService": "key",
+            "createCredentialStore": true
+        }' 2> /dev/null)
+
+    if [[ $response == *"exception"* ]]; then
+        error "$WALLET_ID could not be initialized."
+        error "$response"
+        result=-1
+    else
+        info "$WALLET_ID assets created:"
+        echo "$response" | jq
+    fi
+}
+
+get_dids_from_did_store() {
+    DIDS[0]="waltid.tenant1.didstore.did:key:z6Mkp3AtEqtG6ciaK66yXhmGCvwLiepGQYJunNTUS1pz7bPd"
+    DIDS[1]="waltid.tenant1.didstore.did:key:z6Mkp3AtEqtG6ciaK66yXhmGCvwLiepGQYJunNTUS1pz7bPe"
+
+    echo "${DIDS[@]}"
+}
+
+wallet_credential_receive() {
+
+    get_user_auth_token AUTH_TOKEN
+    DIDS="$(get_dids_from_did_store)"
+
+    WALLET_ID="$ROOT_ORGANIZATION.$TENANT.$WALLET"
+    OFFER_URL=$(cat .vc_offer)
+    local KEY="waltid.tenant1.kms.wallet_key"
+    local DID="$(echo $DIDS | cut -d' ' -f1)"
+
+    response=$(curl -X 'POST' \
+        "http://$ROOT_ORGANIZATION.enterprise.localhost:3000/v1/$WALLET_ID/wallet-service-api/credentials/receive" \
+        -H 'accept: application/json' \
+        -H "Authorization: Bearer $AUTH_TOKEN" \
+        -H 'Content-Type: application/json' \
+        -d "{
+            \"offerUrl\": \"$OFFER_URL\",
+            \"keyReference\": \"$KEY\",
+            \"didReference\": \"$DID\"
+        }" 2> /dev/null)
+
+    if [[ $response == *"exception"* ]]; then
+        error "Credential could not be received."
+        error "$response"
+        result=-1
+    else
+        info "Credential successfully received."
+        echo $response
     fi
 }
 
@@ -1787,6 +1936,8 @@ Commands:
   run                               Run the Enterprise Stack
   wizard                            Start a step by step wizard to guide you 
                                     through all important operations
+  quick-setup                       Do the basic configurations to start using the Enterprise Stack.
+                                    What does it create: an organization, an admin account, a tenant, a KMS service, a key, an Issuer and a Verifier Service.
 
   expert mode
   -------------
@@ -1804,10 +1955,14 @@ Commands:
   create-did                        Create a did:key for the credential issuance
   create-issuer-service             Create issuer service in the tenenant
   issue-jwt-vc                      Issue a W3C JWT credential
+  wallet-setup                      Convenient way to initialize the wallet service and all its dependant services
+  wallet-credential-receive         Receive a previously issued credential
+  issue_and_receive                 Set everything up, issue a credential and receive it in the Wallet
   list-organizations                List all organizations under the superadmin account
   list-accounts                     List all accounts in...
   list-org-resources                List organization's resource
   list-tenant-resources             List tenant's resource
+  list-resources-tree               List all resources under current tenant.
   recreate-db                       Delete all data and restart it from scratch
    "
   exit 1
@@ -1825,6 +1980,10 @@ case "$1" in
     wizard)
         init
         wizard
+        ;;
+    quick-setup)
+        init
+        quick_setup
         ;;
     superadmin-create-account)
         init
@@ -1898,6 +2057,18 @@ case "$1" in
     #     init
     #     verify-vc
     #     ;;
+    wallet-setup)
+        init
+        wallet_setup
+        ;;
+    wallet-credential-receive)
+        init
+        wallet_credential_receive
+        ;;
+    issue-and-receive)
+        init
+        issue_and_receive
+        ;;
     list-organizations)
         init
         list_organizations
