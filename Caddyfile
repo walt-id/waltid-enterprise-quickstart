@@ -1,0 +1,22 @@
+*.enterprise.localhost, enterprise.localhost {
+    @didjson path_regexp didjson ^/.+/did\.json$
+    	handle @didjson {
+    		reverse_proxy waltid-enterprise:3000
+    	}
+	handle /swagger* {
+		reverse_proxy waltid-enterprise:3000
+	}
+	handle /api.json {
+		reverse_proxy waltid-enterprise:3000
+	}
+	handle /auth/* {
+		reverse_proxy waltid-enterprise:3000
+	}
+	handle /v1/* {
+		reverse_proxy waltid-enterprise:3000
+	}
+
+	handle {
+		reverse_proxy waltid-enterprise-ui:3000
+	}
+}
