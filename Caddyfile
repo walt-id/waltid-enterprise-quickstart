@@ -1,8 +1,8 @@
-*.enterprise.localhost, enterprise.localhost {
-    @didjson path_regexp didjson ^/.+/did\.json$
-    	handle @didjson {
-    		reverse_proxy waltid-enterprise:3000
-    	}
+http://*.enterprise.localhost, http://enterprise.localhost {
+	@didjson path_regexp didjson ^/.+/did\.json$
+	handle @didjson {
+		reverse_proxy waltid-enterprise:3000
+	}
 	handle /swagger* {
 		reverse_proxy waltid-enterprise:3000
 	}
