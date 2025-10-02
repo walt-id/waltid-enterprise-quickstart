@@ -1,26 +1,72 @@
 services:
-  mongodb:
+  init-keyfile:
     image: mongo:latest
-    container_name: mongo
+    container_name: init_keyfile
     hostname: mongo
+    command: >
+      sh -c "
+      if [ ! -f /etc/mongodb/pki/keyfile ]; then
+        echo 'Generating keyfile...';
+        openssl rand -base64 756 > /etc/mongodb/pki/keyfile && chmod 400 /etc/mongodb/pki/keyfile;
+      else
+        echo 'Keyfile already exists.';
+      fi
+      "
     volumes:
+      - mongo-keyfile-vol:/etc/mongodb/pki
+    networks:
+      - mongodb_network
+    restart: "no"
+
+  mongodb:
+    container_name: mongo
+    image: mongo:latest
+    hostname: mongo
+    ports:
+      - "27017:27017"
+    depends_on:
+      - init-keyfile
+    volumes:
+      - mongo-keyfile-vol:/etc/mongodb/pki
       - mongodb-data:/data/db/
       - mongodb-log:/var/log/mongodb/
+    command: |
+      bash -c '
+      mongod --replSet rs0 --bind_ip_all --port 27017 & MONGO_PID=$!
+      until mongosh --port 27017 --eval "db.runCommand({ ping: 1 })" >/dev/null 2>&1; do
+        sleep 2
+      done
+
+      mongosh --port 27017 --eval "rs.initiate({_id: \"rs0\", members: [{_id: 0, host: \"mongodb:27017\"}]})"
+      sleep 5
+
+      mongosh --port 27017 --eval "
+        db = db.getSiblingDB(\"admin\");
+        db.createUser({
+          user: \"${MONGO_INITDB_ROOT_USERNAME}\",
+          pwd: \"${MONGO_INITDB_ROOT_PASSWORD}\",
+          roles: [{ role: \"root\", db: \"admin\" }]
+        });
+      "
+
+      kill $MONGO_PID
+      wait $MONGO_PID
+
+      exec mongod --replSet rs0 --bind_ip_all --port 27017 --keyFile /etc/mongodb/pki/keyfile
+      '
     env_file:
       - .env
     environment:
       MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME}
       MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD}
       MONGO_INITDB_DATABASE: waltid-enterprise
-    ports:
-      - "27017:27017"
     networks:
       - mongodb_network
     healthcheck:
-      test: echo 'db.runCommand("ping").ok' | mongo mongo:27017/test --quiet
+      test: ["CMD", "mongosh", "--port", "27017", "--eval", "db.adminCommand('ping')"]
       interval: 30s
       timeout: 10s
-      retries: 3
+      retries: 5
     restart: unless-stopped
 
   mongo-express:
@@ -77,6 +123,7 @@ services:
       - waltid-enterprise
 
 volumes:
+  mongo-keyfile-vol:
   mongodb-data:
     driver: local
     name: mongo-data
