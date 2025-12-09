@@ -84,6 +84,8 @@ Once the docker-compose is running, you can visit [enterprise.localhost:3000/swa
 
 Visit [docs.walt.id/enterprise-stack](https://docs.walt.id/enterprise-stack/home) to learn more about features and configurations of the enterprise stack.
 
+Need Support? As an Enterprise customer you should also have a support contract with us. Please raise any issues via the [portal](https://support.walt.id), or reach out to the team over email if you need to be given access.
+
 
 
 
