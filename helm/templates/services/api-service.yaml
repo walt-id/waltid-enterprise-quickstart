@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "enterprise-stack.fullname" . }}-api-service
+  labels:
+    {{- include "enterprise-stack.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.api.type }}
+  selector:
+    app: waltid-enterprise-api
+  {{- include "enterprise-stack.selectorLabels" . | nindent 4 }}
+  ports:
+ 	{{- .Values.api.ports | toYaml | nindent 2 -}}

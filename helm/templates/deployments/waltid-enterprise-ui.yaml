@@ -1,0 +1,43 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "enterprise-stack.fullname" . }}-ui
+spec:
+  selector:
+    matchLabels:
+      app: {{ include "enterprise-stack.fullname" . }}-ui
+      {{- include "enterprise-stack.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        app: {{ include "enterprise-stack.fullname" . }}-ui
+        {{- include "enterprise-stack.selectorLabels" . | nindent 8 }}
+      annotations:
+        deployment/id: "_DEFAULT_DEPLOYMENT_"
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      imagePullSecrets:
+        - name: {{ .Values.web.image.pullSecrets }}
+      containers:
+        - name: waltid-enterprise-ui
+          image: {{ .Values.web.image.repository }}:{{ .Values.web.image.tag }}
+          imagePullPolicy: {{ .Values.web.image.pullPolicy }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+          resources:
+            requests:
+              memory: "50Mi"
+              cpu: "50m"
+          env:
+            - name: NUXT_PUBLIC_BASE_DOMAIN
+              value: {{ .Values.ingress.host }}
+          ports:
+            - containerPort: 3000
+              name: http-api

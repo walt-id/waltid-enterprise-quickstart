@@ -1,0 +1,77 @@
+featConf: |-
+  enabledFeatures = [
+      admin
+      dev-mode
+      superadmin-registration
+  ]
+authConf: |
+  requireHttps = false
+  pepper = "waltid-enterprise12345678"
+  signingKey = {"type": "jwk", "jwk": {"kty": "OKP", "d": "L_2RuCSFUu818ZzM6Xml6uxesqTcxo8323-Q2S_qq4c", "use": "sig", "crv": "Ed25519", "x": "vvCN3xMAb0ZCt4sWIdtKDhkVHSERJZeBxybN-eSRkgw", "alg": "EdDSA"}}
+  verificationKey = {"type": "jwk", "jwk": {"kty": "OKP", "d": "L_2RuCSFUu818ZzM6Xml6uxesqTcxo8323-Q2S_qq4c", "use": "sig", "crv": "Ed25519", "x": "vvCN3xMAb0ZCt4sWIdtKDhkVHSERJZeBxybN-eSRkgw", "alg": "EdDSA"}}
+  hashAlgorithm = ARGON2
+  hashMigrations = {
+      MESSAGE_DIGEST: ARGON2 # E.g.: Convert all the MD5 hashes to Argon2 hashes
+  }
+  authFlow = {
+      method: email
+      expiration: "7d" # optional: Set expiration time for login tokens, e.g. a week
+      ok: true # Auth flow ends successfuly with this step
+  }
+dbConf: |
+  databaseType = mongodb
+  fileStorage = {
+    path = "data"
+  }
+  mongodb = {
+    connectionString = "mongodb://root:password@localhost:27017/"
+    database = "waltid-enterprise-demo"
+  }
+superadminRegConf: |
+  tokens = {
+    "1234567890-my-token": {
+      expiration = "2029-01-01T00:00:00Z", # Token has to be used by this expiration date
+      account = {
+        type = "email"
+        identifier = { email = "superadmin@walt.id" }
+        data = { password = "super123456" }
+      }
+    }
+  }
+enterpriseConf: |
+  baseDomain = "enterprise.test.waltid.cloud"
+webConfig:
+  webConf: |-
+    webHost = "0.0.0.0"
+    webPort = 3000
+
+api:
+  ports:
+  - name: http
+    port: 80
+    protocol: TCP
+    targetPort: http-api
+  replicas: 1
+  type: ClusterIP
+  image:
+    repository: waltid/waltid-enterprise-api
+    tag: latest
+    imagePullPolicy: Always
+    pullSecrets: waltid-regcred
+
+web:
+  ports:
+  - name: http
+    port: 80
+    protocol: TCP
+    targetPort: http-api
+  type: ClusterIP
+  image:
+    repository: waltid/waltid-enterprise-ui
+    tag: latest
+    imagePullPolicy: Always
+    pullSecrets: waltid-regcred
+
+ingress:
+  ingressClassName: nginx # or traefik
+  host: enterprise.test.waltid.cloud

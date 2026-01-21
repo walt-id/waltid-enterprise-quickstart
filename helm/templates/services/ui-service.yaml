@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "enterprise-stack.fullname" . }}-ui-service
+  labels:
+    {{- include "enterprise-stack.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.web.type }}
+  selector:
+    app: {{ include "enterprise-stack.fullname" . }}-ui
+  {{- include "enterprise-stack.selectorLabels" . | nindent 4 }}
+  ports:
+ 	{{- .Values.web.ports | toYaml | nindent 2 -}}

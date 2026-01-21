@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "enterprise-stack.fullname" . }}-api-config
+  labels:
+  {{- include "enterprise-stack.labels" . | nindent 4 }}
+data:
+  _features.conf: {{ .Values.featConf | toYaml | indent 1 }}
+  auth.conf: {{ .Values.authConf | toYaml | indent 1 }}
+  database.conf: {{ .Values.dbConf | toYaml | indent 1 }}
+  superadmin-registration.conf: {{ .Values.superadminRegConf | toYaml | indent 1 }}
+  enterprise.conf: {{ .Values.enterpriseConf | toYaml | indent 1 }}
+  web.conf: {{ .Values.webConfig.webConf | toYaml | indent 1 }}
+  {{ if .Values.loggingConf }}
+  klogging.json: | {{ printf "%s" (.Values.loggingConf | toPrettyJson | nindent 4) }}
+  {{ end }}
