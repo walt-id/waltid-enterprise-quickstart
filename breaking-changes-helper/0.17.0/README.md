@@ -87,22 +87,26 @@ Customers using AWS Keys *may have* to run the script below to migrate keys to t
 
 ```
 db.organization_trees.updateMany(
+  {
+    _t: 'key',
+    'key.type': 'aws',
+    'key.config.region': { $exists: true },
+    'key.config.auth': { $exists: false }
+  },
+  [
     {
-        _t: 'key',
-        'key.type': 'aws',
-        'key.config': { $exists: true },
-        'key.auth': { $exists: false },
-    },
-    [
-        {
-            $set: {
-                'key.config.auth': '$key.config',
-            }
-        },
-        {
-            $unset: 'key.config'
+      $set: {
+        'key.config': {
+          auth: {
+            region: '$key.config.region'
+          }
         }
-    ]
+      }
+    },
+    {
+      $unset: 'key.config.region'
+    }
+  ]
 )
 ```
 
