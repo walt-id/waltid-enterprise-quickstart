@@ -38,13 +38,13 @@ spec:
             cpu: "500m"
         startupProbe:
           httpGet:
-            path: /health
+            path: /livez
             port: http-api
           initialDelaySeconds: 10
           periodSeconds: 5
         livenessProbe:
           httpGet:
-            path: /health
+            path: /livez
             port: http-api
         env:
         {{- if .Values.loggingConf }}
