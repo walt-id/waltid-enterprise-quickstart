@@ -42,6 +42,7 @@ spec:
             port: http-api
           initialDelaySeconds: 10
           periodSeconds: 5
+          failureThreshold: 30
         livenessProbe:
           httpGet:
             path: /livez
