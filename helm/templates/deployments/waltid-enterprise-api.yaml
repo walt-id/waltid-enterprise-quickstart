@@ -36,6 +36,16 @@ spec:
           requests:
             memory: "512Mi"
             cpu: "500m"
+        startupProbe:
+          httpGet:
+            path: /health
+            port: http-api
+          initialDelaySeconds: 10
+          periodSeconds: 5
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: http-api
         env:
         {{- if .Values.loggingConf }}
           - name: KLOGGING_CONFIG_PATH
