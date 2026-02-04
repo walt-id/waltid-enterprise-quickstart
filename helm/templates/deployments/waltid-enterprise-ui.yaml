@@ -33,8 +33,7 @@ spec:
                 - ALL
           resources:
             requests:
-              memory: "50Mi"
-              cpu: "50m"
+              cpu: "20m"
           env:
             - name: NUXT_PUBLIC_BASE_DOMAIN
               value: {{ .Values.ingress.host }}

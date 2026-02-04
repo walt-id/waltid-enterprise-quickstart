@@ -34,8 +34,7 @@ spec:
               - ALL
         resources:
           requests:
-            memory: "512Mi"
-            cpu: "500m"
+            cpu: "100m"
         startupProbe:
           httpGet:
             path: /livez
