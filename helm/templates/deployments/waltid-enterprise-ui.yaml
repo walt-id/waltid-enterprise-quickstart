@@ -13,7 +13,7 @@ spec:
         app: {{ include "enterprise-stack.fullname" . }}-ui
         {{- include "enterprise-stack.selectorLabels" . | nindent 8 }}
       annotations:
-        deployment/id: "_DEFAULT_DEPLOYMENT_"
+        latest-restart: {{ now | unixEpoch }}
     spec:
       securityContext:
         runAsNonRoot: true
