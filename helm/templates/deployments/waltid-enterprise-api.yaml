@@ -3,7 +3,6 @@ kind: Deployment
 metadata:
   name: {{ include "enterprise-stack.fullname" . }}-api
 spec:
-  replicas: {{ .Values.api.replicas }}
   selector:
     matchLabels:
       app: waltid-enterprise-api

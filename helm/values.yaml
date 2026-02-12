@@ -51,7 +51,6 @@ api:
     port: 80
     protocol: TCP
     targetPort: http-api
-  replicas: 1
   type: ClusterIP
   image:
     repository: waltid/waltid-enterprise-api
