@@ -1142,7 +1142,7 @@ create_organization() {
 
     info "Creating organization '$ORG_ID'..." 
     response=$(curl -X 'POST' \
-        'http://localhost:3000/v1/organization/create' \
+        'http://localhost:3000/v1/admin/organizations' \
         -H 'accept: */*' \
         -H "Authorization: Bearer $AUTH_TOKEN" \
         -H 'Content-Type: application/json' \
