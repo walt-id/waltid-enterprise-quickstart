@@ -108,6 +108,8 @@ services:
       - "3000:3000"
     volumes:
       - ./config:/config
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     networks:
       - mongodb_network
     depends_on:

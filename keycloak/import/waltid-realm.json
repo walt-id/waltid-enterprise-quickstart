@@ -1,0 +1,99 @@
+{
+  "realm": "waltid",
+  "enabled": true,
+  "displayName": "waltid",
+  "roles": {
+    "realm": [
+      { "name": "tenant-admin" },
+      { "name": "wallet-operator" }
+    ]
+  },
+  "clients": [
+    {
+      "clientId": "waltid_enterprise",
+      "name": "waltid_enterprise",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "secret": "waltid-enterprise-dev-secret",
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "redirectUris": [
+        "http://enterprise.localhost:3000/auth/account/oidc/callback",
+        "http://waltid.enterprise.localhost:3000/auth/account/oidc/callback",
+        "http://enterprise.localhost:3000/*",
+        "http://waltid.enterprise.localhost:3000/*"
+      ],
+      "webOrigins": [
+        "http://enterprise.localhost:3000",
+        "http://waltid.enterprise.localhost:3000"
+      ],
+      "protocolMappers": [
+        {
+          "name": "realm-roles",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-realm-role-mapper",
+          "consentRequired": false,
+          "config": {
+            "multivalued": "true",
+            "userinfo.token.claim": "true",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "claim.name": "realm_access.roles",
+            "jsonType.label": "String"
+          }
+        },
+        {
+          "name": "client-roles-waltid-enterprise",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-client-role-mapper",
+          "consentRequired": false,
+          "config": {
+            "multivalued": "true",
+            "userinfo.token.claim": "true",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "claim.name": "resource_access.waltid_enterprise.roles",
+            "jsonType.label": "String",
+            "usermodel.clientRoleMapping.clientId": "waltid_enterprise"
+          }
+        }
+      ]
+    }
+  ],
+  "users": [
+    {
+      "username": "waltid-admin",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Walt",
+      "lastName": "Admin",
+      "email": "waltid-admin@waltid.local",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "waltid-admin",
+          "temporary": false
+        }
+      ],
+      "realmRoles": ["tenant-admin"]
+    },
+    {
+      "username": "waltid-operator",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Walt",
+      "lastName": "Operator",
+      "email": "waltid-operator@waltid.local",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "waltid-operator",
+          "temporary": false
+        }
+      ],
+      "realmRoles": ["wallet-operator"]
+    }
+  ]
+}

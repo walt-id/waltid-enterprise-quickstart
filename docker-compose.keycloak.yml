@@ -1,0 +1,26 @@
+services:
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.0
+    container_name: waltid-keycloak
+    command: ["start-dev", "--import-realm", "--hostname=keycloak.localhost", "--hostname-strict=false"]
+    environment:
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin
+    ports:
+      - "8080:8080"
+    volumes:
+      - keycloak-data:/opt/keycloak/data
+      - ./keycloak/import:/opt/keycloak/data/import:ro
+    networks:
+      mongo-network:
+        aliases:
+          - keycloak.localhost
+
+volumes:
+  keycloak-data:
+    name: waltid-keycloak-data
+
+networks:
+  mongo-network:
+    external: true
+    name: mongo-network
