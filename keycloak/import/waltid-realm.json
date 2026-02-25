@@ -4,8 +4,12 @@
   "displayName": "waltid",
   "roles": {
     "realm": [
-      { "name": "tenant-admin" },
-      { "name": "wallet-operator" }
+      {
+        "name": "tenant-admin"
+      },
+      {
+        "name": "wallet-operator"
+      }
     ]
   },
   "clients": [
@@ -77,7 +81,10 @@
           "temporary": false
         }
       ],
-      "realmRoles": ["tenant-admin"]
+      "realmRoles": [
+        "tenant-admin"
+      ],
+      "id": "d51cd00b-759a-4b34-8f97-b740145ce9d6"
     },
     {
       "username": "waltid-operator",
@@ -93,7 +100,10 @@
           "temporary": false
         }
       ],
-      "realmRoles": ["wallet-operator"]
+      "realmRoles": [
+        "wallet-operator"
+      ],
+      "id": "9c1f7096-9c90-4a75-810b-3245f4dd67f7"
     }
   ]
 }
