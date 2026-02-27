@@ -45,13 +45,15 @@
       "directAccessGrantsEnabled": true,
       "serviceAccountsEnabled": false,
       "redirectUris": [
-        "http://enterprise.localhost:3000/auth/account/oidc/callback",
-        "http://waltid.enterprise.localhost:3000/auth/account/oidc/callback",
         "http://enterprise.localhost:3000/*",
-        "http://waltid.enterprise.localhost:3000/*"
+        "http://enterprise.localhost:3000/auth/account/oidc/callback",
+        "http://localhost:3002/oidc/callback",
+        "http://waltid.enterprise.localhost:3000/*",
+        "http://waltid.enterprise.localhost:3000/auth/account/oidc/callback"
       ],
       "webOrigins": [
         "http://enterprise.localhost:3000",
+        "http://localhost:3002",
         "http://waltid.enterprise.localhost:3000"
       ],
       "protocolMappers": [
