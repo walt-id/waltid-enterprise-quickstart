@@ -1,0 +1,172 @@
+{
+  "realm": "waltid",
+  "enabled": true,
+  "displayName": "waltid",
+  "roles": {
+    "realm": [
+      { "name": "tenant-admin" },
+      { "name": "wallet-operator" },
+      { "name": "wallet-user" }
+    ]
+  },
+  "clients": [
+    {
+      "clientId": "waltid_enterprise",
+      "name": "waltid_enterprise",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "secret": "waltid-enterprise-dev-secret",
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": true,
+      "serviceAccountsEnabled": false,
+      "redirectUris": [
+        "http://enterprise.localhost:3000/auth/account/oidc/callback",
+        "http://waltid.enterprise.localhost:3000/auth/account/oidc/callback",
+        "http://enterprise.localhost:3000/*",
+        "http://waltid.enterprise.localhost:3000/*"
+      ],
+      "webOrigins": [
+        "http://enterprise.localhost:3000",
+        "http://waltid.enterprise.localhost:3000"
+      ],
+      "protocolMappers": [
+        {
+          "name": "realm-roles",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-realm-role-mapper",
+          "consentRequired": false,
+          "config": {
+            "multivalued": "true",
+            "userinfo.token.claim": "true",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "claim.name": "realm_access.roles",
+            "jsonType.label": "String"
+          }
+        },
+        {
+          "name": "client-roles-waltid-enterprise",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-client-role-mapper",
+          "consentRequired": false,
+          "config": {
+            "multivalued": "true",
+            "userinfo.token.claim": "true",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "claim.name": "resource_access.waltid_enterprise.roles",
+            "jsonType.label": "String",
+            "usermodel.clientRoleMapping.clientId": "waltid_enterprise"
+          }
+        },
+        {
+          "name": "tenant-name",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "consentRequired": false,
+          "config": {
+            "user.attribute": "tenant_name",
+            "claim.name": "tenant_name",
+            "jsonType.label": "String",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
+        }
+      ]
+    }
+  ],
+  "users": [
+    {
+      "username": "alice.admin@acme.demo",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Alice",
+      "lastName": "Admin",
+      "email": "alice.admin@acme.demo",
+      "attributes": {
+        "tenant_name": ["acme"]
+      },
+      "credentials": [
+        { "type": "password", "value": "Demo123!", "temporary": false }
+      ],
+      "realmRoles": ["tenant-admin"]
+    },
+    {
+      "username": "oscar.operator@acme.demo",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Oscar",
+      "lastName": "Operator",
+      "email": "oscar.operator@acme.demo",
+      "attributes": {
+        "tenant_name": ["acme"]
+      },
+      "credentials": [
+        { "type": "password", "value": "Demo123!", "temporary": false }
+      ],
+      "realmRoles": ["wallet-operator"]
+    },
+    {
+      "username": "uma.user@acme.demo",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Uma",
+      "lastName": "User",
+      "email": "uma.user@acme.demo",
+      "attributes": {
+        "tenant_name": ["acme"]
+      },
+      "credentials": [
+        { "type": "password", "value": "Demo123!", "temporary": false }
+      ],
+      "realmRoles": ["wallet-user"]
+    },
+    {
+      "username": "gary.admin@globex.demo",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Gary",
+      "lastName": "Admin",
+      "email": "gary.admin@globex.demo",
+      "attributes": {
+        "tenant_name": ["globex"]
+      },
+      "credentials": [
+        { "type": "password", "value": "Demo123!", "temporary": false }
+      ],
+      "realmRoles": ["tenant-admin"]
+    },
+    {
+      "username": "olivia.operator@globex.demo",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Olivia",
+      "lastName": "Operator",
+      "email": "olivia.operator@globex.demo",
+      "attributes": {
+        "tenant_name": ["globex"]
+      },
+      "credentials": [
+        { "type": "password", "value": "Demo123!", "temporary": false }
+      ],
+      "realmRoles": ["wallet-operator"]
+    },
+    {
+      "username": "ursula.user@globex.demo",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Ursula",
+      "lastName": "User",
+      "email": "ursula.user@globex.demo",
+      "attributes": {
+        "tenant_name": ["globex"]
+      },
+      "credentials": [
+        { "type": "password", "value": "Demo123!", "temporary": false }
+      ],
+      "realmRoles": ["wallet-user"]
+    }
+  ]
+}
