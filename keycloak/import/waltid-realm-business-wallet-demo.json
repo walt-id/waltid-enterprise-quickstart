@@ -4,9 +4,33 @@
   "displayName": "waltid",
   "roles": {
     "realm": [
-      { "name": "tenant-admin" },
-      { "name": "wallet-operator" },
-      { "name": "wallet-user" }
+      {
+        "name": "tenant-admin"
+      },
+      {
+        "name": "wallet-operator"
+      },
+      {
+        "name": "wallet-user"
+      },
+      {
+        "name": "acme-tenant-admin"
+      },
+      {
+        "name": "acme-wallet-operator"
+      },
+      {
+        "name": "acme-wallet-user"
+      },
+      {
+        "name": "globex-tenant-admin"
+      },
+      {
+        "name": "globex-wallet-operator"
+      },
+      {
+        "name": "globex-wallet-user"
+      }
     ]
   },
   "clients": [
@@ -86,12 +110,21 @@
       "lastName": "Admin",
       "email": "alice.admin@acme.demo",
       "attributes": {
-        "tenant_name": ["acme"]
+        "tenant_name": [
+          "acme"
+        ]
       },
       "credentials": [
-        { "type": "password", "value": "Demo123!", "temporary": false }
+        {
+          "type": "password",
+          "value": "Demo123!",
+          "temporary": false
+        }
       ],
-      "realmRoles": ["tenant-admin"]
+      "realmRoles": [
+        "acme-tenant-admin",
+        "tenant-admin"
+      ]
     },
     {
       "username": "oscar.operator@acme.demo",
@@ -101,12 +134,21 @@
       "lastName": "Operator",
       "email": "oscar.operator@acme.demo",
       "attributes": {
-        "tenant_name": ["acme"]
+        "tenant_name": [
+          "acme"
+        ]
       },
       "credentials": [
-        { "type": "password", "value": "Demo123!", "temporary": false }
+        {
+          "type": "password",
+          "value": "Demo123!",
+          "temporary": false
+        }
       ],
-      "realmRoles": ["wallet-operator"]
+      "realmRoles": [
+        "acme-wallet-operator",
+        "wallet-operator"
+      ]
     },
     {
       "username": "uma.user@acme.demo",
@@ -116,12 +158,21 @@
       "lastName": "User",
       "email": "uma.user@acme.demo",
       "attributes": {
-        "tenant_name": ["acme"]
+        "tenant_name": [
+          "acme"
+        ]
       },
       "credentials": [
-        { "type": "password", "value": "Demo123!", "temporary": false }
+        {
+          "type": "password",
+          "value": "Demo123!",
+          "temporary": false
+        }
       ],
-      "realmRoles": ["wallet-user"]
+      "realmRoles": [
+        "acme-wallet-user",
+        "wallet-user"
+      ]
     },
     {
       "username": "gary.admin@globex.demo",
@@ -131,12 +182,21 @@
       "lastName": "Admin",
       "email": "gary.admin@globex.demo",
       "attributes": {
-        "tenant_name": ["globex"]
+        "tenant_name": [
+          "globex"
+        ]
       },
       "credentials": [
-        { "type": "password", "value": "Demo123!", "temporary": false }
+        {
+          "type": "password",
+          "value": "Demo123!",
+          "temporary": false
+        }
       ],
-      "realmRoles": ["tenant-admin"]
+      "realmRoles": [
+        "globex-tenant-admin",
+        "tenant-admin"
+      ]
     },
     {
       "username": "olivia.operator@globex.demo",
@@ -146,12 +206,21 @@
       "lastName": "Operator",
       "email": "olivia.operator@globex.demo",
       "attributes": {
-        "tenant_name": ["globex"]
+        "tenant_name": [
+          "globex"
+        ]
       },
       "credentials": [
-        { "type": "password", "value": "Demo123!", "temporary": false }
+        {
+          "type": "password",
+          "value": "Demo123!",
+          "temporary": false
+        }
       ],
-      "realmRoles": ["wallet-operator"]
+      "realmRoles": [
+        "globex-wallet-operator",
+        "wallet-operator"
+      ]
     },
     {
       "username": "ursula.user@globex.demo",
@@ -161,12 +230,21 @@
       "lastName": "User",
       "email": "ursula.user@globex.demo",
       "attributes": {
-        "tenant_name": ["globex"]
+        "tenant_name": [
+          "globex"
+        ]
       },
       "credentials": [
-        { "type": "password", "value": "Demo123!", "temporary": false }
+        {
+          "type": "password",
+          "value": "Demo123!",
+          "temporary": false
+        }
       ],
-      "realmRoles": ["wallet-user"]
+      "realmRoles": [
+        "globex-wallet-user",
+        "wallet-user"
+      ]
     }
   ]
 }
