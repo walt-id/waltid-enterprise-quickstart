@@ -100,7 +100,6 @@ services:
       - mongodb_network
     depends_on:
       - waltid-enterprise
-      - waltid-enterprise-ui
 
   waltid-enterprise:
     image: waltid/waltid-enterprise-api:${ENTERPRISE_API_DOCKER_IMAGE_TAG}
@@ -110,19 +109,12 @@ services:
       - ./config:/config
     extra_hosts:
       - "host.docker.internal:host-gateway"
+      - "waltid.enterprise.localhost:host-gateway"
+      - "enterprise.localhost:host-gateway"
     networks:
       - mongodb_network
     depends_on:
       - mongodb
-
-  waltid-enterprise-ui:
-    image: waltid/waltid-enterprise-ui:${ENTERPRISE_API_DOCKER_IMAGE_TAG}
-    ports:
-      - "3001:3000"
-    networks:
-      - mongodb_network
-    depends_on:
-      - waltid-enterprise
 
 volumes:
   mongo-keyfile-vol:
