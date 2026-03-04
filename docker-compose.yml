@@ -110,6 +110,8 @@ services:
       - "--log-level=trace"
     ports:
       - "3000:3000"
+    extra_hosts:
+      - "waltid.enterprise.localhost:host-gateway"
     volumes:
       - ./config:/config
     extra_hosts:
