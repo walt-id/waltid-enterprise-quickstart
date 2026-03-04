@@ -106,6 +106,8 @@ services:
     image: waltid/waltid-enterprise-api:${ENTERPRISE_API_DOCKER_IMAGE_TAG}
     ports:
       - "3000:3000"
+    extra_hosts:
+      - "waltid.enterprise.localhost:host-gateway"
     volumes:
       - ./config:/config
     networks:
