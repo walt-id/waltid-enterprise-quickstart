@@ -104,6 +104,8 @@ services:
 
   waltid-enterprise:
     image: waltid/waltid-enterprise-api:${ENTERPRISE_API_DOCKER_IMAGE_TAG}
+    # environment:
+    #   - LOG_LEVEL=trace
     ports:
       - "3000:3000"
     extra_hosts:
