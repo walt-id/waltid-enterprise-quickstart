@@ -78,6 +78,10 @@ spec:
             mountPath: /config/web.conf
             readOnly: true
             subPath: web.conf
+          - name: waltid-enterprise-api-config
+            mountPath: /config/resource-access.conf
+            readOnly: true
+            subPath: resource-access.conf
           {{- if .Values.loggingConf }}
           - name: waltid-enterprise-api-config
             mountPath: /config/klogging.json

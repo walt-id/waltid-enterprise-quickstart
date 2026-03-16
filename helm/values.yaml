@@ -44,6 +44,8 @@ webConfig:
   webConf: |-
     webHost = "0.0.0.0"
     webPort = 3000
+resourceAccessConf: |
+  resourceAccess = {}
 
 api:
   ports:

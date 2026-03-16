@@ -11,6 +11,7 @@ data:
   superadmin-registration.conf: {{ .Values.superadminRegConf | toYaml | indent 1 }}
   enterprise.conf: {{ .Values.enterpriseConf | toYaml | indent 1 }}
   web.conf: {{ .Values.webConfig.webConf | toYaml | indent 1 }}
+  resource-access.conf: {{ .Values.resourceAccessConf | toYaml | indent 1 }}
   {{ if .Values.loggingConf }}
   klogging.json: | {{ printf "%s" (.Values.loggingConf | toPrettyJson | nindent 4) }}
   {{ end }}
