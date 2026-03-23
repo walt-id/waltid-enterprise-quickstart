@@ -13,5 +13,5 @@ data:
   web.conf: {{ .Values.webConfig.webConf | toYaml | indent 1 }}
   resource-access.conf: {{ .Values.resourceAccessConf | toYaml | indent 1 }}
   {{ if .Values.loggingConf }}
-  klogging.json: | {{ printf "%s" (.Values.loggingConf | toPrettyJson | nindent 4) }}
+  klogging.json: {{ .Values.loggingConf | toYaml | indent 1 }}
   {{ end }}
