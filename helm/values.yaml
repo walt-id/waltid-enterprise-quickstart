@@ -46,6 +46,92 @@ webConfig:
     webPort = 3000
 resourceAccessConf: |
   resourceAccess = {}
+loggingConf: |
+  {
+    "kloggingMinLogLevel": "INFO",
+    "minDirectLogLevel": "INFO",
+    "sinks": {
+      "stdout": {
+        "renderWith": "RENDER_STANDARD",
+        "sendTo": "STDOUT"
+      }
+    },
+    "logging": [
+      {
+        "comment": "Root logger",
+        "levelRanges": [
+          {
+            "fromMinLevel": "WARN",
+            "toSinks": [
+              "stdout"
+            ]
+          }
+        ]
+      },
+      {
+        "comment": "Walt.id service info",
+        "matchLogger": "FeatureManager|ConfigManager|Web\\s*exception",
+        "levelRanges": [
+          {
+            "fromMinLevel": "INFO",
+            "toSinks": [
+              "stdout"
+            ]
+          }
+        ]
+      },
+      {
+        "comment": "Default loglevel for all id.walt loggers",
+        "fromLoggerBase": "id.walt",
+        "levelRanges": [
+          {
+            "fromMinLevel": "INFO",
+            "toMaxLevel": "INFO",
+            "toSinks": [
+              "stdout"
+            ]
+          }
+        ]
+      },
+      {
+        "comment": "Default loglevel for all loggers except Request/Response logger: INFO",
+        "matchLogger": "^(?!(io\\.ktor\\.client|WebLog|io\\.ktor\\.server\\.plugins\\.cors)).*$",
+        "levelRanges": [
+          {
+            "fromMinLevel": "INFO",
+            "toMaxLevel": "WARN",
+            "toSinks": [
+              "stdout"
+            ]
+          }
+        ]
+      },
+      {
+        "comment": "Loglevel for service request monitoring - set it to INFO if you want enable it",
+        "exactLogger": "WebLog",
+        "levelRanges": [
+          {
+            "fromMinLevel": "WARN",
+            "toSinks": [
+              "stout"
+            ]
+          }
+        ]
+      },
+      {
+        "comment": "Loglevel for http client requests - set it to INFO if you want enable it",
+        "fromLoggerBase": "io.ktor.client",
+        "levelRanges": [
+          {
+            "fromMinLevel": "WARN",
+            "toSinks": [
+              "stout"
+            ]
+          }
+        ]
+      }
+    ]
+  }
 
 api:
   ports:
