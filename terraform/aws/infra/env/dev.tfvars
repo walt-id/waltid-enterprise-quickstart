@@ -28,3 +28,8 @@ tags = {
   ManagedBy  = "Terraform"
   CostCenter = "Development"
 }
+
+# Credential Status Bucket Configuration (disabled by default)
+enable_credential_status_bucket                      = false
+credential_status_force_destroy                      = true
+credential_status_noncurrent_version_expiration_days = 30

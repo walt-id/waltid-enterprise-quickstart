@@ -28,3 +28,7 @@ tags = {
   ManagedBy  = "Terraform"
   CostCenter = "Production"
 }
+
+# Credential Status Bucket Configuration (disabled by default)
+enable_credential_status_bucket      = false
+credential_status_versioning_enabled = true

@@ -168,6 +168,47 @@ variable "letsencrypt_server" {
   default     = "https://acme-v02.api.letsencrypt.org/directory"
 }
 
+variable "enable_credential_status_bucket" {
+  description = "Enable S3 bucket for credential status publishing"
+  type        = bool
+  default     = false
+}
+
+variable "credential_status_force_destroy" {
+  description = "Allow destruction of credential status bucket even if it contains objects"
+  type        = bool
+  default     = false
+}
+
+variable "credential_status_versioning_enabled" {
+  description = "Enable versioning for credential status bucket"
+  type        = bool
+  default     = false
+}
+
+variable "credential_status_lifecycle_enabled" {
+  description = "Enable lifecycle policies for credential status bucket (only applies if versioning is enabled)"
+  type        = bool
+  default     = true
+}
+
+variable "credential_status_noncurrent_version_expiration_days" {
+  description = "Number of days before old credential status versions are deleted"
+  type        = number
+  default     = 90
+
+  validation {
+    condition     = var.credential_status_noncurrent_version_expiration_days >= 1
+    error_message = "Expiration days must be at least 1."
+  }
+}
+
+variable "credential_status_cors_allowed_origins" {
+  description = "CORS allowed origins for credential status bucket (use ['*'] for all origins)"
+  type        = list(string)
+  default     = ["*"]
+}
+
 variable "tags" {
   description = "Additional tags to apply to all resources"
   type        = map(string)

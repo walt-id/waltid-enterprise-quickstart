@@ -7,7 +7,8 @@
 2. [Architecture Overview](#architecture-overview)
 3. [Network Design](#network-design)
 4. [Security Model](#security-model)
-5. [Access Patterns](#access-patterns)
+5. [Cost Considerations](#cost-considerations)
+6. [Access Patterns](#access-patterns)
 
 ---
 
@@ -21,6 +22,7 @@ This document defines the infrastructure-as-code design for deploying a producti
 - **Scalability**: Managed node groups with Cluster Autoscaler
 - **Observability**: CloudWatch Container Insights enabled by default
 - **Database**: Multi-AZ DocumentDB cluster with MongoDB compatibility
+- **Object Storage**: Public read-only S3 bucket, disabled by default
 - **Load Balancing**: Ingress NGINX exposed via internet-facing NLB
 - **Encryption**: AWS managed KMS encryption for EKS secrets
 
@@ -35,6 +37,7 @@ terraform/aws/
 ├── documentdb.tf             # DocumentDB cluster and security
 ├── iam.tf                    # IAM roles and policies
 ├── helm.tf                   # Helm chart deployments
+├── s3-credential-status.tf   # S3 bucket for credential status publishing
 ├── outputs.tf                # Output values
 └── env/
     ├── dev.tfvars            # Development environment
@@ -310,7 +313,7 @@ Egress Rules:
 - None required (database doesn't initiate connections)
 ```
 
-### IAM Roles and Policies
+### IAM Users, Roles, and Policies
 
 #### 1. EKS Cluster IAM Role
 **Purpose:** Allows EKS control plane to manage AWS resources
@@ -386,6 +389,15 @@ Egress Rules:
 }
 ```
 
+#### 4. S3 Credential Status IAM User
+**Purpose:** Allows the Walt.id application to publish and manage credential status entries in S3
+
+**Managed Policies:**
+- `s3:PutObject` — publish new credential status entries
+- `s3:DeleteObject` — revoke / remove status entries
+- `s3:GetObject` — read back published entries
+- `s3:ListBucket` — enumerate objects in the bucket
+
 ### Encryption
 
 #### EKS Secrets Encryption
@@ -408,9 +420,32 @@ encryption_config {
 - **In Transit:** Not required for internal communication within VPC, but can be enabled with TLS if needed
 - No custom KMS key required
 
+#### S3 Bucket Encryption
+- **At Rest:** Automatic SSE-S3 (AES-256) encryption enabled by default
+- **In Transit:** HTTPS/TLS enforced via bucket policy
+- No custom KMS key required
+
+### CORS
+
+CORS is configured on the S3 credential status bucket to allow browsers to fetch status data directly. The bucket permits `GET` and `HEAD` requests from any origin (`*`) with a 1-hour preflight cache (`max-age: 3600`).
+
 ---
 
-## 5. Access Patterns
+## 5. Cost Considerations
+
+### S3 Bucket
+
+#### Development Environment (Cost-Optimized)
+- **Versioning:** Disabled
+- **Trade-off:** No object history or recovery from accidental overwrites (acceptable for dev/testing)
+
+#### Production Environment (Durability)
+- **Versioning:** Enabled
+- **Benefit:** Full object history, protection against accidental deletes, point-in-time recovery
+
+---
+
+## 6. Access Patterns
 
 ### Kubectl Access
 
