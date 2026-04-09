@@ -23,6 +23,7 @@ This document defines the infrastructure-as-code design for deploying a producti
 - **Observability**: CloudWatch Container Insights enabled by default
 - **Database**: Multi-AZ DocumentDB cluster with MongoDB compatibility
 - **Object Storage**: Public read-only S3 bucket, disabled by default
+- **KMS**: Dedicated IAM user for KMS key management, disabled by default
 - **Load Balancing**: Ingress NGINX exposed via internet-facing NLB
 - **Encryption**: AWS managed KMS encryption for EKS secrets
 
@@ -38,6 +39,7 @@ terraform/aws/
 ├── iam.tf                    # IAM roles and policies
 ├── helm.tf                   # Helm chart deployments
 ├── s3-credential-status.tf   # S3 bucket for credential status publishing
+├── kms.tf                    # IAM user for KMS key management
 ├── outputs.tf                # Output values
 └── env/
     ├── dev.tfvars            # Development environment
@@ -392,11 +394,26 @@ Egress Rules:
 #### 4. S3 Credential Status IAM User
 **Purpose:** Allows the Walt.id application to publish and manage credential status entries in S3
 
-**Managed Policies:**
+**Permissions:**
 - `s3:PutObject` — publish new credential status entries
 - `s3:DeleteObject` — revoke / remove status entries
 - `s3:GetObject` — read back published entries
 - `s3:ListBucket` — enumerate objects in the bucket
+
+#### 5. KMS Key Manager IAM User
+**Purpose:** Allows the Walt.id application to create and manage KMS keys for cryptographic operations
+
+**Permissions:**
+- `kms:CreateKey` — create new KMS keys
+- `kms:CreateAlias`, `kms:DeleteAlias`, `kms:UpdateAlias` — manage key aliases
+- `kms:DescribeKey`, `kms:ListKeys`, `kms:ListAliases` — discover and inspect keys
+- `kms:Encrypt`, `kms:Decrypt` — symmetric encryption/decryption
+- `kms:Sign`, `kms:Verify` — digital signatures
+- `kms:GenerateDataKey`, `kms:GenerateDataKeyWithoutPlaintext` — envelope encryption
+- `kms:GetPublicKey` — retrieve public key for asymmetric keys
+- `kms:ReEncryptFrom`, `kms:ReEncryptTo` — re-encryption
+- `kms:ScheduleKeyDeletion` — schedule key removal
+- `kms:TagResource`, `kms:UntagResource` — manage key tags
 
 ### Encryption
 

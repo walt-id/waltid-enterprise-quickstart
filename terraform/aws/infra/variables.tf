@@ -209,6 +209,12 @@ variable "credential_status_cors_allowed_origins" {
   default     = ["*"]
 }
 
+variable "enable_kms_key_manager" {
+  description = "Enable IAM user with permissions to manage KMS keys"
+  type        = bool
+  default     = false
+}
+
 variable "tags" {
   description = "Additional tags to apply to all resources"
   type        = map(string)

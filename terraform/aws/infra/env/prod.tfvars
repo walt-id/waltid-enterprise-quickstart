@@ -32,3 +32,6 @@ tags = {
 # Credential Status Bucket Configuration (disabled by default)
 enable_credential_status_bucket      = false
 credential_status_versioning_enabled = true
+
+# KMS Configuration (disabled by default)
+enable_kms_key_manager = false
