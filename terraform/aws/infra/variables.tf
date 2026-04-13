@@ -195,7 +195,7 @@ variable "credential_status_lifecycle_enabled" {
 variable "credential_status_noncurrent_version_expiration_days" {
   description = "Number of days before old credential status versions are deleted"
   type        = number
-  default     = 90
+  default     = 30
 
   validation {
     condition     = var.credential_status_noncurrent_version_expiration_days >= 1
