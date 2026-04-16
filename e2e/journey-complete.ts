@@ -1279,8 +1279,9 @@ class CompleteJourney {
     const vicalUrl = `${this.ctx.orgBaseUrl}/v1/${this.ctx.tenantPath}.${RESOURCES.vical}/vical-service-api/latest`;
 
     const request = {
-      core: {
-        dcqlQuery: {
+      flow_type: "cross_device",
+      core_flow: {
+        dcql_query: {
           credentials: [
             {
               id: 'my_mdl',
@@ -1299,12 +1300,13 @@ class CompleteJourney {
         policies: {
           vc_policies: [
             {
-              policy: 'VicalPolicy',
-              args: {
-                vicalUrl: vicalUrl,
-                enableDocumentTypeValidation: true,
-                enableTrustedChainRoot: true,
-              },
+              "policy": "signature"
+            },
+            {
+              "policy": "vical",
+              "vicalUrl": vicalUrl,
+              "enableDocumentTypeValidation": true,
+              "enableTrustedChainRoot": true
             },
           ],
         },
