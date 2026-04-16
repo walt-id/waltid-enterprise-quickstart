@@ -802,16 +802,6 @@ class CompleteJourney {
 
     const ISO_NAMESPACE = 'org.iso.18013.5.1';
     
-    // mDoc namespace mapping config - converts JSON types to CBOR types
-    const mDocMappingConfig = {
-      type: 'object',
-      entriesConfigMap: {
-        birth_date: { type: 'string', conversionType: 'stringToFullDate' },
-        issue_date: { type: 'string', conversionType: 'stringToFullDate' },
-        expiry_date: { type: 'string', conversionType: 'stringToFullDate' },
-      },
-    };
-    
     const request = {
       name: RESOURCES.issuerProfile,
       credentialConfigurationId: MDL_DOC_TYPE,
@@ -835,9 +825,7 @@ class CompleteJourney {
           un_distinguishing_sign: 'USA',
         },
       },
-      mDocNameSpacesDataMappingConfig: {
-        [ISO_NAMESPACE]: mDocMappingConfig,
-      },
+      // mDocNameSpacesDataMappingConfig is optional - omit for now
     };
 
     this.saveJson('create-issuer-profile-request.json', request);
