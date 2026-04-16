@@ -1076,7 +1076,7 @@ class CompleteJourney {
 
     const request = {
       type: 'issuer2',
-      _id: `${this.ctx.tenantPath}.${RESOURCES.issuer2}`,
+      _id: `${this.ctx.tenantPath}.${RESOURCES.issuer}`,
       tokenKeyId: `${this.ctx.tenantPath}.${RESOURCES.kms}.${KEY_IDS.issuerSigningKey}`,
       kms: `${this.ctx.tenantPath}.${RESOURCES.kms}`,
       credentialConfigurations: {
