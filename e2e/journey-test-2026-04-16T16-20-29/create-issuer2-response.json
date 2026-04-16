@@ -1,0 +1,47 @@
+{
+  "type": "issuer2",
+  "traversable": true,
+  "_id": "waltid.wallet-mdoc-client-attestation.issuer2",
+  "tokenKeyId": "waltid.wallet-mdoc-client-attestation.kms.issuer-signing-key",
+  "kms": "waltid.wallet-mdoc-client-attestation.kms",
+  "credentialConfigurations": {
+    "org.iso.18013.5.1.mDL": {
+      "format": "mso_mdoc",
+      "scope": "org.iso.18013.5.1.mDL",
+      "doctype": "org.iso.18013.5.1.mDL",
+      "credentialSigningAlgValuesSupported": [
+        {
+          "coseValue": -7
+        },
+        {
+          "coseValue": -9
+        }
+      ],
+      "cryptographicBindingMethodsSupported": [
+        "cose_key"
+      ],
+      "proofTypesSupported": {
+        "jwt": {
+          "proofSigningAlgValuesSupported": [
+            "ES256"
+          ]
+        }
+      }
+    }
+  },
+  "clientAttestationConfig": {
+    "required": true,
+    "verificationMethod": {
+      "type": "static-jwk",
+      "jwk": {
+        "kty": "EC",
+        "crv": "P-256",
+        "x": "qcYiEHtnh5ikzzycbk3Lfsi36b98KrSYdDbO9zPysK0",
+        "y": "9tJsFltI2Ddw95EI2mX9J7bu7UveP3vV280Buhiryyg"
+      }
+    },
+    "clockSkewSeconds": 300,
+    "replayWindowSeconds": 300
+  },
+  "parent": "waltid.wallet-mdoc-client-attestation"
+}

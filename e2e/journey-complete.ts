@@ -806,6 +806,7 @@ class CompleteJourney {
       issuerKeyId: `${this.ctx.tenantPath}.${RESOURCES.kms}.${KEY_IDS.issuerSigningKey}`,
       x5Chain: [
         {
+          type: "pem-encoded-x509-certificate-descriptor",
           pemEncodedCertificate: this.ctx.docSignerPem,
         },
       ],
@@ -839,9 +840,12 @@ class CompleteJourney {
     this.log('Attach client attester dependency to wallet');
 
     try {
-      await this.orgClient.post(
+      await this.orgClient.request(
+        'POST',
         `/v1/${this.ctx.tenantPath}.${RESOURCES.wallet}/wallet-service-api/dependencies/add`,
-        `"${this.ctx.tenantPath}.${RESOURCES.clientAttester}"`
+        `${this.ctx.tenantPath}.${RESOURCES.clientAttester}`, // Raw string, no quotes
+        'application/json',
+        false // Don't JSON.stringify
       );
       console.log(`   ✓ Client attester linked to wallet`);
     } catch (error: any) {

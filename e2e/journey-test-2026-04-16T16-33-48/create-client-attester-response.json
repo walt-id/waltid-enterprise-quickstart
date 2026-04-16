@@ -1,0 +1,11 @@
+{
+  "type": "client-attester-service",
+  "dependencies": [
+    "waltid.wallet-mdoc-client-attestation.kms"
+  ],
+  "traversable": true,
+  "_id": "waltid.wallet-mdoc-client-attestation.client-attester",
+  "signingKeyId": "waltid.wallet-mdoc-client-attestation.kms.attester-signing-key",
+  "attestationValiditySeconds": 86400,
+  "parent": "waltid.wallet-mdoc-client-attestation"
+}

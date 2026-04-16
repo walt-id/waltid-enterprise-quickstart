@@ -1,0 +1,7 @@
+{
+  "type": "kms",
+  "traversable": true,
+  "_id": "waltid.wallet-mdoc-client-attestation.kms",
+  "defaultKeyGenerationRequests": {},
+  "parent": "waltid.wallet-mdoc-client-attestation"
+}

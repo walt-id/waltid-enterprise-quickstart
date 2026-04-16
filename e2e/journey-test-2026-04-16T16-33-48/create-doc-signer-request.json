@@ -1,0 +1,19 @@
+{
+  "iacaSigner": {
+    "type": "iaca-pem-cert-descriptor",
+    "iacaPemEncodedCertificate": "-----BEGIN CERTIFICATE-----\r\nMIIBwjCCAWigAwIBAgIUKg1nDXEGSLX6Js/AcMJz85pH91AwCgYIKoZIzj0EAwIw\r\nKTELMAkGA1UEBhMCVVMxGjAYBgNVBAMMEUpvdXJuZXkgVGVzdCBJQUNBMB4XDTI2\r\nMDQxNjEzMTUwMFoXDTQ2MDQxMTEzMTUwMFowKTELMAkGA1UEBhMCVVMxGjAYBgNV\r\nBAMMEUpvdXJuZXkgVGVzdCBJQUNBMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE\r\nq0xi21uudhkC1QMykfYryN9bcDx480iJLSaRI05CWgY2EP7T3GqtSATb6pK3yDmK\r\nZ4+Ao881WligeaxMvZ/iKqNuMGwwHQYDVR0OBBYEFJivESE5Oobz+UKxHwhXykjS\r\nFVo4MBIGA1UdEwEB/wQIMAYBAf8CAQAwJwYDVR0SBCAwHoYcaHR0cHM6Ly9qb3Vy\r\nbmV5LmV4YW1wbGUvaWFjYTAOBgNVHQ8BAf8EBAMCAQYwCgYIKoZIzj0EAwIDSAAw\r\nRQIgSu7ygm+JUqfukY1bZQfGiWXuflNDGg2RWNfer1mpmsECIQDIQHMrR+i7EpZx\r\nRAr7ICw4u0a6gNzgO0keAeh3vhB70g==\r\n-----END CERTIFICATE-----",
+    "iacaKeyDesc": {
+      "type": "kms-hosted-key-descriptor",
+      "keyIdPath": "waltid.wallet-mdoc-client-attestation.kms.vical-iaca-key"
+    }
+  },
+  "certificateData": {
+    "country": "US",
+    "commonName": "Journey Test Document Signer",
+    "crlDistributionPointUri": "https://journey.example/crl"
+  },
+  "dsKeyDescriptor": {
+    "type": "kms-hosted-key-descriptor",
+    "keyIdPath": "waltid.wallet-mdoc-client-attestation.kms.issuer-signing-key"
+  }
+}

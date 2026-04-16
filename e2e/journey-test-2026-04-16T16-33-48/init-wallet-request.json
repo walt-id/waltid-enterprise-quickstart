@@ -1,0 +1,5 @@
+{
+  "createKeyInKms": {
+    "keyType": "secp256r1"
+  }
+}

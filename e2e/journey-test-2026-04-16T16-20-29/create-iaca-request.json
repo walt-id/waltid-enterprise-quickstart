@@ -1,0 +1,18 @@
+{
+  "certificateData": {
+    "country": "US",
+    "commonName": "Journey Test IACA",
+    "issuerAlternativeNameConf": {
+      "uri": "https://journey.example/iaca"
+    }
+  },
+  "iacaKeyDesc": {
+    "type": "kms-hosted-key-descriptor",
+    "keyIdPath": "waltid.wallet-mdoc-client-attestation.kms.vical-iaca-key"
+  },
+  "vicalEntryComplementaryMetadata": {
+    "docType": [
+      "org.iso.18013.5.1.mDL"
+    ]
+  }
+}

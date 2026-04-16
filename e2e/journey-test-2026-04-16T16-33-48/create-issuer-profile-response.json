@@ -1,0 +1,22 @@
+{
+  "profileId": "mdl-profile",
+  "name": "mdl-profile",
+  "status": "ACTIVE",
+  "version": 1,
+  "credentialConfigurationId": "org.iso.18013.5.1.mDL",
+  "issuerKeyId": "waltid.wallet-mdoc-client-attestation.kms.issuer-signing-key",
+  "x5Chain": [
+    {
+      "type": "pem-encoded-x509-certificate-descriptor",
+      "pemEncodedCertificate": "-----BEGIN CERTIFICATE-----\r\nMIICITCCAcegAwIBAgIUbgWLKnmkFWBdxT11bLkz9Wf7v5AwCgYIKoZIzj0EAwIw\r\nKTELMAkGA1UEBhMCVVMxGjAYBgNVBAMMEUpvdXJuZXkgVGVzdCBJQUNBMB4XDTI2\r\nMDQxNjEzMTk1MloXDTI3MDcxNzEzMTk1MlowNDELMAkGA1UEBhMCVVMxJTAjBgNV\r\nBAMMHEpvdXJuZXkgVGVzdCBEb2N1bWVudCBTaWduZXIwWTATBgcqhkjOPQIBBggq\r\nhkjOPQMBBwNCAAR1Smrpb5zrIueIXeTkuPmPisXKxheacdNIr9o5vYlX8LqypVAZ\r\nx6ByHgT/WLgo/WcFQXsEuMjZGk9SeuIEC5xMo4HBMIG+MB8GA1UdIwQYMBaAFJiv\r\nESE5Oobz+UKxHwhXykjSFVo4MB0GA1UdDgQWBBRaCAXIplsEh1Lj+lOhyKr8Y+3Z\r\nbDAOBgNVHQ8BAf8EBAMCB4AwJwYDVR0SBCAwHoYcaHR0cHM6Ly9qb3VybmV5LmV4\r\nYW1wbGUvaWFjYTAVBgNVHSUBAf8ECzAJBgcogYxdBQECMCwGA1UdHwQlMCMwIaAf\r\noB2GG2h0dHBzOi8vam91cm5leS5leGFtcGxlL2NybDAKBggqhkjOPQQDAgNIADBF\r\nAiBLfXv/rOt+OI5RcBC8BQWWwRika29NXnvDssGhHBcY4QIhAMhrGkQ4Utu6W3ov\r\n8Za1f6ZKFBCG6KgUricpSGzs38Gy\r\n-----END CERTIFICATE-----"
+    }
+  ],
+  "credentialData": {
+    "given_name": "John",
+    "family_name": "Doe",
+    "birth_date": "1990-01-01"
+  },
+  "mDocNameSpacesDataMappingConfig": {},
+  "createdAt": 1776357228762,
+  "updatedAt": 1776357228762
+}

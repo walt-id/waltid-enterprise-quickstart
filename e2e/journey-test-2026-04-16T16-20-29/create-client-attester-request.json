@@ -1,0 +1,5 @@
+{
+  "type": "client-attester-service",
+  "_id": "waltid.wallet-mdoc-client-attestation.client-attester",
+  "signingKeyId": "waltid.wallet-mdoc-client-attestation.kms.attester-signing-key"
+}

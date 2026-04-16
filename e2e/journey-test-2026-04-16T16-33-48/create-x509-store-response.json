@@ -1,0 +1,6 @@
+{
+  "type": "x509-store",
+  "traversable": true,
+  "_id": "waltid.wallet-mdoc-client-attestation.x509-store",
+  "parent": "waltid.wallet-mdoc-client-attestation"
+}

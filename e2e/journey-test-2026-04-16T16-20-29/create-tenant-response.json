@@ -1,0 +1,7 @@
+{
+  "traversable": true,
+  "_id": "waltid.wallet-mdoc-client-attestation",
+  "name": "mDoc client attestation + VICAL journey tenant",
+  "configuration": {},
+  "parent": "waltid"
+}

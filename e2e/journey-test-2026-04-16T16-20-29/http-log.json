@@ -1,0 +1,601 @@
+[
+  {
+    "method": "POST",
+    "url": "http://enterprise.localhost:3000/auth/account/emailpass",
+    "body": {
+      "email": "superadmin@walt.id",
+      "password": "super123456"
+    },
+    "response": {
+      "session_id": "c967f153-d734-47d1-a51c-ef4ab1a21832",
+      "status": "SUCCESS",
+      "token": "eyJhbGciOiJFZERTQSJ9.eyJzdWIiOiI4ZDQ2NzNiMy05YTM3LTE3YzEtZWQ5Zi01Nzc3MjE5N2NiMWUiLCJzZXNzaW9uIjoiYzk2N2YxNTMtZDczNC00N2QxLWE1MWMtZWY0YWIxYTIxODMyIiwiZXhwIjoxNzc2OTYxMjI5fQ.1tgULfO_5j-0p9osJZ9kXxPutWvxIAjlXHGHcKe9mEtS4K6SLaAtR2amL3OjXmCtHWpe9syo6Rmt7Ayxy4rcBA",
+      "expiration": "2026-04-23T16:20:29.157287384Z"
+    },
+    "status": 200
+  },
+  {
+    "method": "POST",
+    "url": "http://waltid.enterprise.localhost:3000/v1/waltid.wallet-mdoc-client-attestation/resource-api/tenants/create",
+    "body": {
+      "name": "mDoc client attestation + VICAL journey tenant"
+    },
+    "response": {
+      "traversable": true,
+      "_id": "waltid.wallet-mdoc-client-attestation",
+      "name": "mDoc client attestation + VICAL journey tenant",
+      "configuration": {},
+      "parent": "waltid"
+    },
+    "status": 201
+  },
+  {
+    "method": "POST",
+    "url": "http://waltid.enterprise.localhost:3000/v1/waltid.wallet-mdoc-client-attestation/wallet-service-api/init-wallet",
+    "body": {
+      "createKeyInKms": {
+        "keyType": "secp256r1"
+      }
+    },
+    "response": {
+      "dependencies": [
+        "waltid.wallet-mdoc-client-attestation.didstore",
+        "waltid.wallet-mdoc-client-attestation.didservice",
+        "waltid.wallet-mdoc-client-attestation.didregistry",
+        "waltid.wallet-mdoc-client-attestation.kms",
+        "waltid.wallet-mdoc-client-attestation.credentialstore"
+      ],
+      "traversable": true,
+      "_id": "waltid.wallet-mdoc-client-attestation.wallet",
+      "configuration": {},
+      "parent": "waltid.wallet-mdoc-client-attestation"
+    },
+    "status": 200
+  },
+  {
+    "method": "POST",
+    "url": "http://waltid.enterprise.localhost:3000/v1/waltid.wallet-mdoc-client-attestation.verifier2/resource-api/services/create",
+    "body": {
+      "type": "verifier2",
+      "baseUrl": "http://waltid.enterprise.localhost:3000",
+      "clientId": "wallet-mdoc-client-attestation-verifier"
+    },
+    "response": {
+      "type": "verifier2",
+      "traversable": true,
+      "_id": "waltid.wallet-mdoc-client-attestation.verifier2",
+      "baseUrl": "http://waltid.enterprise.localhost:3000",
+      "clientId": "wallet-mdoc-client-attestation-verifier",
+      "clientMetadata": {
+        "client_name": "Verifier"
+      },
+      "parent": "waltid.wallet-mdoc-client-attestation"
+    },
+    "status": 201
+  },
+  {
+    "method": "POST",
+    "url": "http://waltid.enterprise.localhost:3000/v1/waltid.wallet-mdoc-client-attestation.kms/resource-api/services/create",
+    "body": {
+      "type": "kms"
+    },
+    "response": {
+      "type": "kms",
+      "traversable": true,
+      "_id": "waltid.wallet-mdoc-client-attestation.kms",
+      "defaultKeyGenerationRequests": {},
+      "parent": "waltid.wallet-mdoc-client-attestation"
+    },
+    "status": 201
+  },
+  {
+    "method": "POST",
+    "url": "http://waltid.enterprise.localhost:3000/v1/waltid.wallet-mdoc-client-attestation.x509-service/resource-api/services/create",
+    "body": {
+      "type": "x509-service",
+      "dependencies": []
+    },
+    "response": {
+      "type": "x509-service",
+      "dependencies": [
+        "waltid.wallet-mdoc-client-attestation.kms",
+        "waltid.wallet-mdoc-client-attestation.x509-store"
+      ],
+      "_id": "waltid.wallet-mdoc-client-attestation.x509-service",
+      "parent": "waltid.wallet-mdoc-client-attestation"
+    },
+    "status": 201
+  },
+  {
+    "method": "POST",
+    "url": "http://waltid.enterprise.localhost:3000/v1/waltid.wallet-mdoc-client-attestation.x509-store/resource-api/services/create",
+    "body": {
+      "type": "x509-store"
+    },
+    "response": {
+      "type": "x509-store",
+      "traversable": true,
+      "_id": "waltid.wallet-mdoc-client-attestation.x509-store",
+      "parent": "waltid.wallet-mdoc-client-attestation"
+    },
+    "status": 201
+  },
+  {
+    "method": "POST",
+    "url": "http://waltid.enterprise.localhost:3000/v1/waltid.wallet-mdoc-client-attestation.x509-service/x509-service-api/dependencies/add",
+    "body": "waltid.wallet-mdoc-client-attestation.kms",
+    "response": "KeyManagementServiceReference attached",
+    "status": 201
+  },
+  {
+    "method": "POST",
+    "url": "http://waltid.enterprise.localhost:3000/v1/waltid.wallet-mdoc-client-attestation.x509-service/x509-service-api/dependencies/add",
+    "body": "waltid.wallet-mdoc-client-attestation.x509-store",
+    "response": "X509StoreServiceReference attached",
+    "status": 201
+  },
+  {
+    "method": "POST",
+    "url": "http://waltid.enterprise.localhost:3000/v1/waltid.wallet-mdoc-client-attestation.kms.vical-iaca-key/kms-service-api/keys/import/jwk",
+    "body": {
+      "kty": "EC",
+      "d": "5zvesctW1c9KlWtExySUUdu6CBEc-X4HzAt1dA4HvH8",
+      "crv": "P-256",
+      "kid": "S6TxkuUd6jyMlc5XV4ttsiTZKb24Z-G4DPHe6KhJVEc",
+      "x": "q0xi21uudhkC1QMykfYryN9bcDx480iJLSaRI05CWgY",
+      "y": "NhD-09xqrUgE2-qSt8g5imePgKPPNVpYoHmsTL2f4io"
+    },
+    "response": {
+      "_id": "waltid.wallet-mdoc-client-attestation.kms.vical-iaca-key",
+      "key": {
+        "type": "jwk",
+        "jwk": {
+          "kty": "EC",
+          "d": "5zvesctW1c9KlWtExySUUdu6CBEc-X4HzAt1dA4HvH8",
+          "crv": "P-256",
+          "kid": "S6TxkuUd6jyMlc5XV4ttsiTZKb24Z-G4DPHe6KhJVEc",
+          "x": "q0xi21uudhkC1QMykfYryN9bcDx480iJLSaRI05CWgY",
+          "y": "NhD-09xqrUgE2-qSt8g5imePgKPPNVpYoHmsTL2f4io"
+        }
+      },
+      "parent": "waltid.wallet-mdoc-client-attestation.kms"
+    },
+    "status": 200
+  },
+  {
+    "method": "POST",
+    "url": "http://waltid.enterprise.localhost:3000/v1/waltid.wallet-mdoc-client-attestation.kms.issuer-signing-key/kms-service-api/keys/import/jwk",
+    "body": {
+      "kty": "EC",
+      "d": "GA1U5hViiQiQIaEu84Xq4DfAoL54HB_FGDDJtPp4rC0",
+      "crv": "P-256",
+      "kid": "MUdS-lzlC_4qDFq2XFb6PxpRitd_gglJrlYe1VOVsh0",
+      "x": "dUpq6W-c6yLniF3k5Lj5j4rFysYXmnHTSK_aOb2JV_A",
+      "y": "urKlUBnHoHIeBP9YuCj9ZwVBewS4yNkaT1J64gQLnEw"
+    },
+    "response": {
+      "_id": "waltid.wallet-mdoc-client-attestation.kms.issuer-signing-key",
+      "key": {
+        "type": "jwk",
+        "jwk": {
+          "kty": "EC",
+          "d": "GA1U5hViiQiQIaEu84Xq4DfAoL54HB_FGDDJtPp4rC0",
+          "crv": "P-256",
+          "kid": "MUdS-lzlC_4qDFq2XFb6PxpRitd_gglJrlYe1VOVsh0",
+          "x": "dUpq6W-c6yLniF3k5Lj5j4rFysYXmnHTSK_aOb2JV_A",
+          "y": "urKlUBnHoHIeBP9YuCj9ZwVBewS4yNkaT1J64gQLnEw"
+        }
+      },
+      "parent": "waltid.wallet-mdoc-client-attestation.kms"
+    },
+    "status": 200
+  },
+  {
+    "method": "POST",
+    "url": "http://waltid.enterprise.localhost:3000/v1/waltid.wallet-mdoc-client-attestation.kms.attester-signing-key/kms-service-api/keys/import/jwk",
+    "body": {
+      "kty": "EC",
+      "d": "LdeE1GY68degnCA4f49mcjIOhWoubfeIs_KekzTeFm0",
+      "crv": "P-256",
+      "kid": "h0DQmZoTW_Qw4pNR5hszRscrSRaxB1anD9XCLyfh0lc",
+      "x": "qcYiEHtnh5ikzzycbk3Lfsi36b98KrSYdDbO9zPysK0",
+      "y": "9tJsFltI2Ddw95EI2mX9J7bu7UveP3vV280Buhiryyg"
+    },
+    "response": {
+      "_id": "waltid.wallet-mdoc-client-attestation.kms.attester-signing-key",
+      "key": {
+        "type": "jwk",
+        "jwk": {
+          "kty": "EC",
+          "d": "LdeE1GY68degnCA4f49mcjIOhWoubfeIs_KekzTeFm0",
+          "crv": "P-256",
+          "kid": "h0DQmZoTW_Qw4pNR5hszRscrSRaxB1anD9XCLyfh0lc",
+          "x": "qcYiEHtnh5ikzzycbk3Lfsi36b98KrSYdDbO9zPysK0",
+          "y": "9tJsFltI2Ddw95EI2mX9J7bu7UveP3vV280Buhiryyg"
+        }
+      },
+      "parent": "waltid.wallet-mdoc-client-attestation.kms"
+    },
+    "status": 200
+  },
+  {
+    "method": "POST",
+    "url": "http://waltid.enterprise.localhost:3000/v1/waltid.wallet-mdoc-client-attestation.kms.vical-signing-key/kms-service-api/keys/import/jwk",
+    "body": {
+      "kty": "EC",
+      "d": "LdeE1GY68degnCA4f49mcjIOhWoubfeIs_KekzTeFm0",
+      "crv": "P-256",
+      "kid": "h0DQmZoTW_Qw4pNR5hszRscrSRaxB1anD9XCLyfh0lc",
+      "x": "qcYiEHtnh5ikzzycbk3Lfsi36b98KrSYdDbO9zPysK0",
+      "y": "9tJsFltI2Ddw95EI2mX9J7bu7UveP3vV280Buhiryyg"
+    },
+    "response": {
+      "_id": "waltid.wallet-mdoc-client-attestation.kms.vical-signing-key",
+      "key": {
+        "type": "jwk",
+        "jwk": {
+          "kty": "EC",
+          "d": "LdeE1GY68degnCA4f49mcjIOhWoubfeIs_KekzTeFm0",
+          "crv": "P-256",
+          "kid": "h0DQmZoTW_Qw4pNR5hszRscrSRaxB1anD9XCLyfh0lc",
+          "x": "qcYiEHtnh5ikzzycbk3Lfsi36b98KrSYdDbO9zPysK0",
+          "y": "9tJsFltI2Ddw95EI2mX9J7bu7UveP3vV280Buhiryyg"
+        }
+      },
+      "parent": "waltid.wallet-mdoc-client-attestation.kms"
+    },
+    "status": 200
+  },
+  {
+    "method": "POST",
+    "url": "http://waltid.enterprise.localhost:3000/v1/waltid.wallet-mdoc-client-attestation.x509-service.vical-iaca-cert/x509-service-api/iso/iacas",
+    "body": {
+      "certificateData": {
+        "country": "US",
+        "commonName": "Journey Test IACA",
+        "issuerAlternativeNameConf": {
+          "uri": "https://journey.example/iaca"
+        }
+      },
+      "iacaKeyDesc": {
+        "type": "kms-hosted-key-descriptor",
+        "keyIdPath": "waltid.wallet-mdoc-client-attestation.kms.vical-iaca-key"
+      },
+      "vicalEntryComplementaryMetadata": {
+        "docType": [
+          "org.iso.18013.5.1.mDL"
+        ]
+      }
+    },
+    "response": {
+      "exception": true,
+      "id": "BadRequestException",
+      "status": "Bad Request",
+      "code": "400",
+      "message": "Certificate id 'vical-iaca-cert' already exists in attached x509 store dependency 'waltid.wallet-mdoc-client-attestation.x509-store'."
+    },
+    "status": 400
+  },
+  {
+    "method": "GET",
+    "url": "http://waltid.enterprise.localhost:3000/v1/waltid.wallet-mdoc-client-attestation.x509-store.vical-iaca-cert/x509-store-api/certificates",
+    "response": {
+      "_id": "waltid.wallet-mdoc-client-attestation.x509-store.vical-iaca-cert",
+      "data": {
+        "type": "vical-entry",
+        "pem": "-----BEGIN CERTIFICATE-----\r\nMIIBwjCCAWigAwIBAgIUKg1nDXEGSLX6Js/AcMJz85pH91AwCgYIKoZIzj0EAwIw\r\nKTELMAkGA1UEBhMCVVMxGjAYBgNVBAMMEUpvdXJuZXkgVGVzdCBJQUNBMB4XDTI2\r\nMDQxNjEzMTUwMFoXDTQ2MDQxMTEzMTUwMFowKTELMAkGA1UEBhMCVVMxGjAYBgNV\r\nBAMMEUpvdXJuZXkgVGVzdCBJQUNBMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE\r\nq0xi21uudhkC1QMykfYryN9bcDx480iJLSaRI05CWgY2EP7T3GqtSATb6pK3yDmK\r\nZ4+Ao881WligeaxMvZ/iKqNuMGwwHQYDVR0OBBYEFJivESE5Oobz+UKxHwhXykjS\r\nFVo4MBIGA1UdEwEB/wQIMAYBAf8CAQAwJwYDVR0SBCAwHoYcaHR0cHM6Ly9qb3Vy\r\nbmV5LmV4YW1wbGUvaWFjYTAOBgNVHQ8BAf8EBAMCAQYwCgYIKoZIzj0EAwIDSAAw\r\nRQIgSu7ygm+JUqfukY1bZQfGiWXuflNDGg2RWNfer1mpmsECIQDIQHMrR+i7EpZx\r\nRAr7ICw4u0a6gNzgO0keAeh3vhB70g==\r\n-----END CERTIFICATE-----",
+        "complementaryMetadata": {
+          "docType": [
+            "org.iso.18013.5.1.mDL"
+          ]
+        }
+      },
+      "parent": "waltid.wallet-mdoc-client-attestation.x509-store"
+    },
+    "status": 200
+  },
+  {
+    "method": "POST",
+    "url": "http://waltid.enterprise.localhost:3000/v1/waltid.wallet-mdoc-client-attestation.x509-service.vical-doc-signer-cert/x509-service-api/iso/document-signers",
+    "body": {
+      "iacaSigner": {
+        "type": "iaca-pem-cert-descriptor",
+        "iacaPemEncodedCertificate": "-----BEGIN CERTIFICATE-----\r\nMIIBwjCCAWigAwIBAgIUKg1nDXEGSLX6Js/AcMJz85pH91AwCgYIKoZIzj0EAwIw\r\nKTELMAkGA1UEBhMCVVMxGjAYBgNVBAMMEUpvdXJuZXkgVGVzdCBJQUNBMB4XDTI2\r\nMDQxNjEzMTUwMFoXDTQ2MDQxMTEzMTUwMFowKTELMAkGA1UEBhMCVVMxGjAYBgNV\r\nBAMMEUpvdXJuZXkgVGVzdCBJQUNBMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE\r\nq0xi21uudhkC1QMykfYryN9bcDx480iJLSaRI05CWgY2EP7T3GqtSATb6pK3yDmK\r\nZ4+Ao881WligeaxMvZ/iKqNuMGwwHQYDVR0OBBYEFJivESE5Oobz+UKxHwhXykjS\r\nFVo4MBIGA1UdEwEB/wQIMAYBAf8CAQAwJwYDVR0SBCAwHoYcaHR0cHM6Ly9qb3Vy\r\nbmV5LmV4YW1wbGUvaWFjYTAOBgNVHQ8BAf8EBAMCAQYwCgYIKoZIzj0EAwIDSAAw\r\nRQIgSu7ygm+JUqfukY1bZQfGiWXuflNDGg2RWNfer1mpmsECIQDIQHMrR+i7EpZx\r\nRAr7ICw4u0a6gNzgO0keAeh3vhB70g==\r\n-----END CERTIFICATE-----",
+        "iacaKeyDesc": {
+          "type": "kms-hosted-key-descriptor",
+          "keyIdPath": "waltid.wallet-mdoc-client-attestation.kms.vical-iaca-key"
+        }
+      },
+      "certificateData": {
+        "country": "US",
+        "commonName": "Journey Test Document Signer",
+        "crlDistributionPointUri": "https://journey.example/crl"
+      },
+      "dsKeyDescriptor": {
+        "type": "kms-hosted-key-descriptor",
+        "keyIdPath": "waltid.wallet-mdoc-client-attestation.kms.issuer-signing-key"
+      }
+    },
+    "response": {
+      "exception": true,
+      "id": "BadRequestException",
+      "status": "Bad Request",
+      "code": "400",
+      "message": "Certificate id 'vical-doc-signer-cert' already exists in attached x509 store dependency 'waltid.wallet-mdoc-client-attestation.x509-store'."
+    },
+    "status": 400
+  },
+  {
+    "method": "GET",
+    "url": "http://waltid.enterprise.localhost:3000/v1/waltid.wallet-mdoc-client-attestation.x509-store.vical-doc-signer-cert/x509-store-api/certificates",
+    "response": {
+      "_id": "waltid.wallet-mdoc-client-attestation.x509-store.vical-doc-signer-cert",
+      "data": {
+        "type": "base",
+        "pem": "-----BEGIN CERTIFICATE-----\r\nMIICITCCAcegAwIBAgIUbgWLKnmkFWBdxT11bLkz9Wf7v5AwCgYIKoZIzj0EAwIw\r\nKTELMAkGA1UEBhMCVVMxGjAYBgNVBAMMEUpvdXJuZXkgVGVzdCBJQUNBMB4XDTI2\r\nMDQxNjEzMTk1MloXDTI3MDcxNzEzMTk1MlowNDELMAkGA1UEBhMCVVMxJTAjBgNV\r\nBAMMHEpvdXJuZXkgVGVzdCBEb2N1bWVudCBTaWduZXIwWTATBgcqhkjOPQIBBggq\r\nhkjOPQMBBwNCAAR1Smrpb5zrIueIXeTkuPmPisXKxheacdNIr9o5vYlX8LqypVAZ\r\nx6ByHgT/WLgo/WcFQXsEuMjZGk9SeuIEC5xMo4HBMIG+MB8GA1UdIwQYMBaAFJiv\r\nESE5Oobz+UKxHwhXykjSFVo4MB0GA1UdDgQWBBRaCAXIplsEh1Lj+lOhyKr8Y+3Z\r\nbDAOBgNVHQ8BAf8EBAMCB4AwJwYDVR0SBCAwHoYcaHR0cHM6Ly9qb3VybmV5LmV4\r\nYW1wbGUvaWFjYTAVBgNVHSUBAf8ECzAJBgcogYxdBQECMCwGA1UdHwQlMCMwIaAf\r\noB2GG2h0dHBzOi8vam91cm5leS5leGFtcGxlL2NybDAKBggqhkjOPQQDAgNIADBF\r\nAiBLfXv/rOt+OI5RcBC8BQWWwRika29NXnvDssGhHBcY4QIhAMhrGkQ4Utu6W3ov\r\n8Za1f6ZKFBCG6KgUricpSGzs38Gy\r\n-----END CERTIFICATE-----"
+      },
+      "parent": "waltid.wallet-mdoc-client-attestation.x509-store"
+    },
+    "status": 200
+  },
+  {
+    "method": "POST",
+    "url": "http://waltid.enterprise.localhost:3000/v1/waltid.wallet-mdoc-client-attestation.x509-store.vical-signer-cert/x509-store-api/certificates",
+    "body": {
+      "type": "base",
+      "certificatePem": "-----BEGIN CERTIFICATE-----\nMIIBvzCCAWWgAwIBAgIUHNTXFwSkdNL7SxGEuppkO6n1K3kwCgYIKoZIzj0EAwIw\nKTEaMBgGA1UEAwwRVGVzdCBWSUNBTCBTaWduZXIxCzAJBgNVBAYTAlVTMB4XDTI2\nMDQxNjE1NDQwMFoXDTI3MDQxNjE1NDQwMFowKTEaMBgGA1UEAwwRVGVzdCBWSUNB\nTCBTaWduZXIxCzAJBgNVBAYTAlVTMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE\nqcYiEHtnh5ikzzycbk3Lfsi36b98KrSYdDbO9zPysK320mwWW0jYN3D3kQjaZf0n\ntu7tS94/e9XbzQG6GKvLKKNrMGkwDgYDVR0PAQH/BAQDAgEGMBIGA1UdEwEB/wQI\nMAYBAf8CAQAwJAYDVR0SBB0wG4YZaHR0cHM6Ly92aWNhbC5leGFtcGxlLmNvbTAd\nBgNVHQ4EFgQUsXebQewMx4nD1GjxgVjrXthDoekwCgYIKoZIzj0EAwIDSAAwRQIh\nAPOnDZOA0Ao/wo9OtUFwDTcaySQP3RGd4L5XTBpNE1dcAiBDZrEgy/GpAwn/or4b\nd9Y+NT4YdP0Ddouprk0BXbl+FA==\n-----END CERTIFICATE-----\n"
+    },
+    "response": {
+      "_id": "waltid.wallet-mdoc-client-attestation.x509-store.vical-signer-cert",
+      "data": {
+        "type": "base",
+        "pem": "-----BEGIN CERTIFICATE-----\nMIIBvzCCAWWgAwIBAgIUHNTXFwSkdNL7SxGEuppkO6n1K3kwCgYIKoZIzj0EAwIw\nKTEaMBgGA1UEAwwRVGVzdCBWSUNBTCBTaWduZXIxCzAJBgNVBAYTAlVTMB4XDTI2\nMDQxNjE1NDQwMFoXDTI3MDQxNjE1NDQwMFowKTEaMBgGA1UEAwwRVGVzdCBWSUNB\nTCBTaWduZXIxCzAJBgNVBAYTAlVTMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE\nqcYiEHtnh5ikzzycbk3Lfsi36b98KrSYdDbO9zPysK320mwWW0jYN3D3kQjaZf0n\ntu7tS94/e9XbzQG6GKvLKKNrMGkwDgYDVR0PAQH/BAQDAgEGMBIGA1UdEwEB/wQI\nMAYBAf8CAQAwJAYDVR0SBB0wG4YZaHR0cHM6Ly92aWNhbC5leGFtcGxlLmNvbTAd\nBgNVHQ4EFgQUsXebQewMx4nD1GjxgVjrXthDoekwCgYIKoZIzj0EAwIDSAAwRQIh\nAPOnDZOA0Ao/wo9OtUFwDTcaySQP3RGd4L5XTBpNE1dcAiBDZrEgy/GpAwn/or4b\nd9Y+NT4YdP0Ddouprk0BXbl+FA==\n-----END CERTIFICATE-----\n"
+      },
+      "parent": "waltid.wallet-mdoc-client-attestation.x509-store"
+    },
+    "status": 201
+  },
+  {
+    "method": "POST",
+    "url": "http://waltid.enterprise.localhost:3000/v1/waltid.wallet-mdoc-client-attestation.vical/resource-api/services/create",
+    "body": {
+      "type": "vical-service",
+      "_id": "waltid.wallet-mdoc-client-attestation.vical",
+      "signingKeyId": "waltid.wallet-mdoc-client-attestation.kms.vical-signing-key",
+      "signerCertificateId": "waltid.wallet-mdoc-client-attestation.x509-store.vical-signer-cert",
+      "dependencies": [
+        "waltid.wallet-mdoc-client-attestation.kms",
+        "waltid.wallet-mdoc-client-attestation.x509-store"
+      ]
+    },
+    "response": {
+      "type": "DuplicateTarget",
+      "status": 409,
+      "message": "Duplicate target for this operation - you are trying to save to resources at the same path. Overwriting targets like this is not allowed. The old resource at the target must be removed first.",
+      "target": "waltid.wallet-mdoc-client-attestation.vical.state",
+      "target_entry_type": "VicalFeedState"
+    },
+    "status": 409
+  },
+  {
+    "method": "POST",
+    "url": "http://waltid.enterprise.localhost:3000/v1/waltid.wallet-mdoc-client-attestation.vical/vical-service-api/publish",
+    "body": {
+      "vicalProvider": "Journey Test VICAL Provider"
+    },
+    "response": {
+      "versionIdPath": "waltid.wallet-mdoc-client-attestation.vical.versions.144ce176-b3f0-4271-9a6c-5796d3b5ef51",
+      "version": "1.0",
+      "entryCount": 1,
+      "vicalProvider": "Journey Test VICAL Provider",
+      "date": "2026-04-16T16:20:29.663087584Z",
+      "vicalIssueId": 10
+    },
+    "status": 200
+  },
+  {
+    "method": "POST",
+    "url": "http://waltid.enterprise.localhost:3000/v1/waltid.wallet-mdoc-client-attestation.client-attester/resource-api/services/create",
+    "body": {
+      "type": "client-attester-service",
+      "_id": "waltid.wallet-mdoc-client-attestation.client-attester",
+      "signingKeyId": "waltid.wallet-mdoc-client-attestation.kms.attester-signing-key"
+    },
+    "response": {
+      "type": "client-attester-service",
+      "dependencies": [
+        "waltid.wallet-mdoc-client-attestation.kms"
+      ],
+      "traversable": true,
+      "_id": "waltid.wallet-mdoc-client-attestation.client-attester",
+      "signingKeyId": "waltid.wallet-mdoc-client-attestation.kms.attester-signing-key",
+      "attestationValiditySeconds": 86400,
+      "parent": "waltid.wallet-mdoc-client-attestation"
+    },
+    "status": 201
+  },
+  {
+    "method": "POST",
+    "url": "http://waltid.enterprise.localhost:3000/v1/waltid.wallet-mdoc-client-attestation.client-attester/client-attester-api/dependencies/add",
+    "body": "waltid.wallet-mdoc-client-attestation.kms",
+    "response": {
+      "exception": true,
+      "id": "BadRequestException",
+      "status": "Bad Request",
+      "code": "400",
+      "message": "Path '\"waltid.wallet-mdoc-client-attestation.kms\"' not found in organization, thus cannot resolve as ServiceReference."
+    },
+    "status": 400,
+    "error": "HTTP 400: {\n  \"exception\": true,\n  \"id\": \"BadRequestException\",\n  \"status\": \"Bad Request\",\n  \"code\": \"400\",\n  \"message\": \"Path '\\\"waltid.wallet-mdoc-client-attestation.kms\\\"' not found in organization, thus cannot resolve as ServiceReference.\"\n}"
+  },
+  {
+    "method": "POST",
+    "url": "http://waltid.enterprise.localhost:3000/v1/waltid.wallet-mdoc-client-attestation.issuer2/resource-api/services/create",
+    "body": {
+      "type": "issuer2",
+      "_id": "waltid.wallet-mdoc-client-attestation.undefined",
+      "tokenKeyId": "waltid.wallet-mdoc-client-attestation.kms.issuer-signing-key",
+      "kms": "waltid.wallet-mdoc-client-attestation.kms",
+      "credentialConfigurations": {
+        "org.iso.18013.5.1.mDL": {
+          "format": "mso_mdoc",
+          "doctype": "org.iso.18013.5.1.mDL",
+          "scope": "org.iso.18013.5.1.mDL",
+          "credentialSigningAlgValuesSupported": [
+            {
+              "coseValue": -7
+            },
+            {
+              "coseValue": -9
+            }
+          ],
+          "cryptographicBindingMethodsSupported": [
+            "cose_key"
+          ],
+          "proofTypesSupported": {
+            "jwt": {
+              "proofSigningAlgValuesSupported": [
+                "ES256"
+              ]
+            }
+          }
+        }
+      },
+      "clientAttestationConfig": {
+        "required": true,
+        "verificationMethod": {
+          "type": "static-jwk",
+          "jwk": {
+            "kty": "EC",
+            "crv": "P-256",
+            "x": "qcYiEHtnh5ikzzycbk3Lfsi36b98KrSYdDbO9zPysK0",
+            "y": "9tJsFltI2Ddw95EI2mX9J7bu7UveP3vV280Buhiryyg"
+          }
+        },
+        "clockSkewSeconds": 300,
+        "replayWindowSeconds": 300
+      }
+    },
+    "response": {
+      "type": "issuer2",
+      "traversable": true,
+      "_id": "waltid.wallet-mdoc-client-attestation.issuer2",
+      "tokenKeyId": "waltid.wallet-mdoc-client-attestation.kms.issuer-signing-key",
+      "kms": "waltid.wallet-mdoc-client-attestation.kms",
+      "credentialConfigurations": {
+        "org.iso.18013.5.1.mDL": {
+          "format": "mso_mdoc",
+          "scope": "org.iso.18013.5.1.mDL",
+          "doctype": "org.iso.18013.5.1.mDL",
+          "credentialSigningAlgValuesSupported": [
+            {
+              "coseValue": -7
+            },
+            {
+              "coseValue": -9
+            }
+          ],
+          "cryptographicBindingMethodsSupported": [
+            "cose_key"
+          ],
+          "proofTypesSupported": {
+            "jwt": {
+              "proofSigningAlgValuesSupported": [
+                "ES256"
+              ]
+            }
+          }
+        }
+      },
+      "clientAttestationConfig": {
+        "required": true,
+        "verificationMethod": {
+          "type": "static-jwk",
+          "jwk": {
+            "kty": "EC",
+            "crv": "P-256",
+            "x": "qcYiEHtnh5ikzzycbk3Lfsi36b98KrSYdDbO9zPysK0",
+            "y": "9tJsFltI2Ddw95EI2mX9J7bu7UveP3vV280Buhiryyg"
+          }
+        },
+        "clockSkewSeconds": 300,
+        "replayWindowSeconds": 300
+      },
+      "parent": "waltid.wallet-mdoc-client-attestation"
+    },
+    "status": 201
+  },
+  {
+    "method": "GET",
+    "url": "http://waltid.enterprise.localhost:3000/.well-known/oauth-authorization-server/v2/waltid.wallet-mdoc-client-attestation.issuer2/issuer-service-api/openid4vci",
+    "response": {
+      "issuer": "http://waltid.enterprise.localhost:3000/v2/waltid.wallet-mdoc-client-attestation.issuer2/issuer-service-api/openid4vci",
+      "authorization_endpoint": "http://waltid.enterprise.localhost:3000/v2/waltid.wallet-mdoc-client-attestation.issuer2/issuer-service-api/openid4vci/authorize",
+      "token_endpoint": "http://waltid.enterprise.localhost:3000/v2/waltid.wallet-mdoc-client-attestation.issuer2/issuer-service-api/openid4vci/token",
+      "jwks_uri": "http://waltid.enterprise.localhost:3000/v2/waltid.wallet-mdoc-client-attestation.issuer2/issuer-service-api/openid4vci/jwks",
+      "response_types_supported": [
+        "code"
+      ],
+      "response_modes_supported": [
+        "query",
+        "fragment"
+      ],
+      "token_endpoint_auth_methods_supported": [
+        "attest_jwt_client_auth"
+      ],
+      "grant_types_supported": [
+        "authorization_code",
+        "urn:ietf:params:oauth:grant-type:pre-authorized_code"
+      ],
+      "client_attestation_signing_alg_values_supported": [
+        "ES256"
+      ],
+      "client_attestation_pop_signing_alg_values_supported": [
+        "ES256"
+      ],
+      "dpop_signing_alg_values_supported": [
+        "ES256"
+      ],
+      "code_challenge_methods_supported": [
+        "S256"
+      ],
+      "pre-authorized_grant_anonymous_access_supported": true,
+      "status_list_aggregation_endpoint": "http://waltid.enterprise.localhost:3000/v2/waltid.wallet-mdoc-client-attestation.issuer2/issuer-service-api/openid4vci/status-list-aggregation"
+    },
+    "status": 200
+  },
+  {
+    "method": "POST",
+    "url": "http://waltid.enterprise.localhost:3000/v2/waltid.wallet-mdoc-client-attestation.issuer2.mdl-profile/issuer-service-api/credentials/profiles",
+    "body": {
+      "name": "mdl-profile",
+      "credentialConfigurationId": "org.iso.18013.5.1.mDL",
+      "issuerKeyId": "waltid.wallet-mdoc-client-attestation.kms.issuer-signing-key",
+      "x5Chain": [
+        {
+          "pemEncodedCertificate": "-----BEGIN CERTIFICATE-----\r\nMIICITCCAcegAwIBAgIUbgWLKnmkFWBdxT11bLkz9Wf7v5AwCgYIKoZIzj0EAwIw\r\nKTELMAkGA1UEBhMCVVMxGjAYBgNVBAMMEUpvdXJuZXkgVGVzdCBJQUNBMB4XDTI2\r\nMDQxNjEzMTk1MloXDTI3MDcxNzEzMTk1MlowNDELMAkGA1UEBhMCVVMxJTAjBgNV\r\nBAMMHEpvdXJuZXkgVGVzdCBEb2N1bWVudCBTaWduZXIwWTATBgcqhkjOPQIBBggq\r\nhkjOPQMBBwNCAAR1Smrpb5zrIueIXeTkuPmPisXKxheacdNIr9o5vYlX8LqypVAZ\r\nx6ByHgT/WLgo/WcFQXsEuMjZGk9SeuIEC5xMo4HBMIG+MB8GA1UdIwQYMBaAFJiv\r\nESE5Oobz+UKxHwhXykjSFVo4MB0GA1UdDgQWBBRaCAXIplsEh1Lj+lOhyKr8Y+3Z\r\nbDAOBgNVHQ8BAf8EBAMCB4AwJwYDVR0SBCAwHoYcaHR0cHM6Ly9qb3VybmV5LmV4\r\nYW1wbGUvaWFjYTAVBgNVHSUBAf8ECzAJBgcogYxdBQECMCwGA1UdHwQlMCMwIaAf\r\noB2GG2h0dHBzOi8vam91cm5leS5leGFtcGxlL2NybDAKBggqhkjOPQQDAgNIADBF\r\nAiBLfXv/rOt+OI5RcBC8BQWWwRika29NXnvDssGhHBcY4QIhAMhrGkQ4Utu6W3ov\r\n8Za1f6ZKFBCG6KgUricpSGzs38Gy\r\n-----END CERTIFICATE-----"
+        }
+      ],
+      "credentialData": {
+        "given_name": "John",
+        "family_name": "Doe",
+        "birth_date": "1990-01-01"
+      },
+      "mDocNameSpacesDataMappingConfig": {}
+    },
+    "response": {
+      "exception": true,
+      "id": "IllegalArgumentException",
+      "status": "Bad Request",
+      "code": "400",
+      "message": "Unable to convert the supplied request body to the expected type: CredentialProfileCreateRequest, due to: Failed to convert request body to class id.walt.enterprise.services.issuer2.models.CredentialProfileCreateRequest",
+      "cause1_exception": "IllegalArgumentException",
+      "cause2_exception": "BadRequestException",
+      "cause3_exception": "BadRequestException",
+      "cause4_exception": "JsonConvertException",
+      "cause5_exception": "JsonDecodingException"
+    },
+    "status": 400,
+    "error": "HTTP 400: {\n  \"exception\": true,\n  \"id\": \"IllegalArgumentException\",\n  \"status\": \"Bad Request\",\n  \"code\": \"400\",\n  \"message\": \"Unable to convert the supplied request body to the expected type: CredentialProfileCreateRequest, due to: Failed to convert request body to class id.walt.enterprise.services.issuer2.models.CredentialProfileCreateRequest\",\n  \"cause1_exception\": \"IllegalArgumentException\",\n  \"cause2_exception\": \"BadRequestException\",\n  \"cause3_exception\": \"BadRequestException\",\n  \"cause4_exception\": \"JsonConvertException\",\n  \"cause5_exception\": \"JsonDecodingException\"\n}"
+  }
+]

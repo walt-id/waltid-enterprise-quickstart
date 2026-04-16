@@ -1,0 +1,5 @@
+{
+  "type": "verifier2",
+  "baseUrl": "http://waltid.enterprise.localhost:3000",
+  "clientId": "wallet-mdoc-client-attestation-verifier"
+}
