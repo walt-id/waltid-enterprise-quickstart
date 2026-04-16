@@ -800,6 +800,8 @@ class CompleteJourney {
   async createIssuerProfile() {
     this.log('Create issuer credential profile');
 
+    const ISO_NAMESPACE = 'org.iso.18013.5.1';
+    
     const request = {
       name: RESOURCES.issuerProfile,
       credentialConfigurationId: MDL_DOC_TYPE,
@@ -811,11 +813,33 @@ class CompleteJourney {
         },
       ],
       credentialData: {
-        given_name: 'John',
-        family_name: 'Doe',
-        birth_date: '1990-01-01',
+        [ISO_NAMESPACE]: {
+          family_name: 'Doe',
+          given_name: 'John',
+          birth_date: '1990-01-01',
+          issue_date: '2024-01-01',
+          expiry_date: '2029-01-01',
+          issuing_country: 'US',
+          issuing_authority: 'Test DMV',
+          document_number: 'DL123456789',
+          un_distinguishing_sign: 'USA',
+        },
       },
-      mDocNameSpacesDataMappingConfig: {},
+      mDocNameSpacesDataMappingConfig: {
+        [ISO_NAMESPACE]: {
+          mandatory: [
+            'family_name',
+            'given_name', 
+            'birth_date',
+            'issue_date',
+            'expiry_date',
+            'issuing_country',
+            'issuing_authority',
+            'document_number',
+            'un_distinguishing_sign',
+          ],
+        },
+      },
     };
 
     this.saveJson('create-issuer-profile-request.json', request);
