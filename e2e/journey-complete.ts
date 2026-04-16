@@ -164,7 +164,7 @@ class HttpClient {
              data.message?.includes('already in use') ||
              data.message?.includes('already attached') ||
              data.type === 'DuplicateTarget')) {
-          console.log(`   ⚠️  Resource already exists, continuing...`);
+          console.log(`   [WARN] Resource already exists, continuing...`);
           return { status: response.status, data, headers: Object.fromEntries(response.headers.entries()) };
         }
         
@@ -265,7 +265,7 @@ class SystemInit {
     const parsedConfig = parseSuperadminConfig(superadminConfigPath);
     
     if (parsedConfig) {
-      console.log(`   ℹ️  Using credentials from: ${superadminConfigPath}`);
+      console.log(`   [INFO] Using credentials from: ${superadminConfigPath}`);
       this.superadminToken = config.superadminToken || parsedConfig.token;
       this.superadminEmail = config.adminEmail || parsedConfig.email;
       this.superadminPassword = config.adminPassword || parsedConfig.password;
@@ -278,7 +278,7 @@ class SystemInit {
   }
 
   private log(msg: string) {
-    console.log(`\n▶️  ${msg}`);
+    console.log(`\n>> ${msg}`);
   }
 
   /**
@@ -296,12 +296,12 @@ class SystemInit {
       
       if (!response.ok) {
         const text = await response.text();
-        console.log(`   ⚠️  Database recreate returned ${response.status}: ${text}`);
+        console.log(`   [WARN] Database recreate returned ${response.status}: ${text}`);
       } else {
-        console.log('   ✓ Database collections recreated');
+        console.log('   [OK] Database collections recreated');
       }
     } catch (error: any) {
-      console.log(`   ⚠️  Database recreate failed (may not be in dev mode): ${error.message}`);
+      console.log(`   [WARN] Database recreate failed (may not be in dev mode): ${error.message}`);
     }
   }
 
@@ -326,18 +326,18 @@ class SystemInit {
     if (text.includes('exception') || !response.ok) {
       // Check if account already exists (that's fine)
       if (text.includes('already') || text.includes('exists')) {
-        console.log('   ⚠️  Superadmin account already exists');
+        console.log('   [WARN] Superadmin account already exists');
         return true;
       }
       // Check if token not registered (server needs restart with config)
       if (text.includes('No such token')) {
-        console.log('   ❌ Token not registered on server');
+        console.log('   [ERROR] Token not registered on server');
         return false;
       }
-      console.log(`   ⚠️  Superadmin account creation returned: ${text}`);
+      console.log(`   [WARN] Superadmin account creation returned: ${text}`);
       return false;
     } else {
-      console.log('   ✓ Superadmin account created');
+      console.log('   [OK] Superadmin account created');
       return true;
     }
   }
@@ -364,7 +364,7 @@ class SystemInit {
       const data = text ? JSON.parse(text) : {};
       this.superadminAuthToken = data.token || data.accessToken || '';
     } catch {
-      console.log(`   ⚠️  Superadmin login response: ${text}`);
+      console.log(`   [WARN] Superadmin login response: ${text}`);
       this.superadminAuthToken = '';
     }
     
@@ -399,7 +399,7 @@ class SystemInit {
       throw new Error('Database initialization failed: Unauthorized');
     }
     
-    console.log('   ✓ Database initialized');
+    console.log('   [OK] Database initialized');
   }
 
   /**
@@ -432,11 +432,11 @@ class SystemInit {
     const text = await response.text();
     
     if (text.includes('already') || text.includes('exists') || text.includes('DuplicateTarget')) {
-      console.log(`   ⚠️  Organization '${organization}' already exists`);
+      console.log(`   [WARN] Organization '${organization}' already exists`);
     } else if (!response.ok) {
-      console.log(`   ⚠️  Organization creation returned: ${text}`);
+      console.log(`   [WARN] Organization creation returned: ${text}`);
     } else {
-      console.log(`   ✓ Organization '${organization}' created`);
+      console.log(`   [OK] Organization '${organization}' created`);
     }
   }
 
@@ -468,11 +468,11 @@ class SystemInit {
     const text = await response.text();
     
     if (text.includes('already') || text.includes('exists')) {
-      console.log(`   ⚠️  Admin account already exists`);
+      console.log(`   [WARN] Admin account already exists`);
     } else if (!response.ok) {
-      console.log(`   ⚠️  Admin account creation returned: ${text}`);
+      console.log(`   [WARN] Admin account creation returned: ${text}`);
     } else {
-      console.log(`   ✓ Admin account created: ${this.config.adminEmail}`);
+      console.log(`   [OK] Admin account created: ${this.config.adminEmail}`);
     }
   }
 
@@ -480,7 +480,7 @@ class SystemInit {
    * Run full system initialization sequence
    */
   async runFullInit(): Promise<void> {
-    console.log('\n🚀 System Initialization Started\n');
+    console.log('[START] System Initialization Started\n');
     console.log('=' .repeat(60));
     
     // Step 1: Recreate DB (optional, for clean slate)
@@ -490,21 +490,21 @@ class SystemInit {
     const accountCreated = await this.createSuperadminAccount();
     
     if (!accountCreated) {
-      console.log('\n⚠️  Superadmin account could not be created.');
+      console.log('[WARN] Superadmin account could not be created.');
       console.log('   The registration token may not be registered on the server.');
       console.log('\n   To register the token, restart the server with the config file:');
       console.log('   config/superadmin-registration.conf');
       console.log('\n   Then run this command again.');
-      console.log('\n' + '=' .repeat(60));
+      console.log('=' .repeat(60));
       return;
     }
     
     // Step 3: Login as superadmin
     try {
       await this.superadminLogin();
-      console.log('   ✓ Superadmin logged in');
+      console.log('   [OK] Superadmin logged in');
     } catch (error: any) {
-      console.log(`\n⚠️  Could not login as superadmin: ${error.message}`);
+      console.log(`\n[WARN] Could not login as superadmin: ${error.message}`);
       console.log('   Make sure the server has the registration token configured.');
       return;
     }
@@ -518,8 +518,8 @@ class SystemInit {
     // Step 6: Create admin account
     await this.createAdminAccount();
     
-    console.log('\n' + '=' .repeat(60));
-    console.log('✅ System initialization complete!\n');
+    console.log('=' .repeat(60));
+    console.log('[SUCCESS] System initialization complete!\n');
   }
 }
 
@@ -557,7 +557,7 @@ class CompleteJourney {
 
   log(message: string) {
     const time = new Date().toLocaleTimeString('en-US', { hour12: false });
-    console.log(`\n▶️  ${message}`);
+    console.log(`\n>> ${message}`);
   }
 
   saveJson(filename: string, data: any) {
@@ -568,11 +568,11 @@ class CompleteJourney {
   async run() {
     mkdirSync(this.ctx.workdir!, { recursive: true });
 
-    console.log('🚀 Complete Journey Test Started');
-    console.log(`📂 Working directory: ${this.ctx.workdir}`);
-    console.log(`🌐 Base URL: ${this.config.baseUrl}:${this.config.port}`);
-    console.log(`🏢 Organization: ${this.config.organization}`);
-    console.log(`👤 Tenant: ${this.config.tenant}`);
+    console.log('[START] Complete Journey Test Started');
+    console.log(`Working directory: Working directory: ${this.ctx.workdir}`);
+    console.log(`Base URL: Base URL: ${this.config.baseUrl}:${this.config.port}`);
+    console.log(`Organization: Organization: ${this.config.organization}`);
+    console.log(`Tenant: Tenant: ${this.config.tenant}`);
     console.log('');
 
     try {
@@ -599,19 +599,19 @@ class CompleteJourney {
       await this.walletPresent();
       await this.assertFinalStatus();
 
-      console.log('\n✅ Complete journey finished successfully!');
-      console.log(`\n📂 Results saved in: ${this.ctx.workdir}`);
+      console.log('\n[SUCCESS] Complete journey finished successfully!');
+      console.log(`\nWorking directory: Results saved in: ${this.ctx.workdir}`);
 
       // Save HTTP log
       const httpLogPath = join(this.ctx.workdir!, 'http-log.json');
       writeFileSync(httpLogPath, JSON.stringify(this.client.getLog().concat(this.orgClient.getLog()), null, 2));
-      console.log(`📝 HTTP log saved: ${httpLogPath}`);
+      console.log(`Log saved: HTTP log saved: ${httpLogPath}`);
     } catch (error: any) {
-      console.error('\n❌ Journey failed:', error.message);
+      console.error('\n[ERROR] Journey failed:', error.message);
       // Save HTTP log even on failure
       const httpLogPath = join(this.ctx.workdir!, 'http-log.json');
       writeFileSync(httpLogPath, JSON.stringify(this.client.getLog().concat(this.orgClient.getLog()), null, 2));
-      console.log(`📝 HTTP log saved: ${httpLogPath}`);
+      console.log(`Log saved: HTTP log saved: ${httpLogPath}`);
       throw error;
     }
   }
@@ -636,7 +636,7 @@ class CompleteJourney {
     this.client.setToken(this.ctx.token);
     this.orgClient.setToken(this.ctx.token);
 
-    console.log('   ✓ Logged in successfully');
+    console.log('   [OK] Logged in successfully');
   }
 
   async createTenant() {
@@ -653,10 +653,10 @@ class CompleteJourney {
         request
       );
       this.saveJson('create-tenant-response.json', response.data);
-      console.log(`   ✓ Tenant created: ${this.ctx.tenantPath}`);
+      console.log(`   [OK] Tenant created: ${this.ctx.tenantPath}`);
     } catch (error: any) {
       if (error.message?.includes('already exists')) {
-        console.log(`   ✓ Tenant already exists: ${this.ctx.tenantPath}`);
+        console.log(`   [OK] Tenant already exists: ${this.ctx.tenantPath}`);
       } else {
         throw error;
       }
@@ -680,11 +680,11 @@ class CompleteJourney {
       );
       this.saveJson('init-wallet-response.json', response.data);
       this.ctx.walletKeyRef = `${this.ctx.tenantPath}.${RESOURCES.kms}.wallet_key`;
-      console.log(`   ✓ Wallet initialized: ${this.ctx.tenantPath}.${RESOURCES.wallet}`);
+      console.log(`   [OK] Wallet initialized: ${this.ctx.tenantPath}.${RESOURCES.wallet}`);
     } catch (error: any) {
       if (error.message?.includes('already exists') || error.message?.includes('already initialized')) {
         this.ctx.walletKeyRef = `${this.ctx.tenantPath}.${RESOURCES.kms}.wallet_key`;
-        console.log(`   ✓ Wallet already initialized`);
+        console.log(`   [OK] Wallet already initialized`);
       } else {
         throw error;
       }
@@ -707,10 +707,10 @@ class CompleteJourney {
         request
       );
       this.saveJson('create-verifier2-response.json', response.data);
-      console.log(`   ✓ Verifier2 created: ${this.ctx.tenantPath}.${RESOURCES.verifier2}`);
+      console.log(`   [OK] Verifier2 created: ${this.ctx.tenantPath}.${RESOURCES.verifier2}`);
     } catch (error: any) {
       if (error.message?.includes('already exists')) {
-        console.log(`   ✓ Verifier2 already exists`);
+        console.log(`   [OK] Verifier2 already exists`);
       } else {
         throw error;
       }
@@ -729,10 +729,10 @@ class CompleteJourney {
         kmsRequest
       );
       this.saveJson('create-kms-response.json', kmsResponse.data);
-      console.log(`   ✓ KMS: ${this.ctx.tenantPath}.${RESOURCES.kms}`);
+      console.log(`   [OK] KMS: ${this.ctx.tenantPath}.${RESOURCES.kms}`);
     } catch (error: any) {
       if (error.message?.includes('already exists')) {
-        console.log(`   ✓ KMS already exists`);
+        console.log(`   [OK] KMS already exists`);
       } else {
         throw error;
       }
@@ -747,10 +747,10 @@ class CompleteJourney {
         x509Request
       );
       this.saveJson('create-x509-service-response.json', x509Response.data);
-      console.log(`   ✓ X509 Service: ${this.ctx.tenantPath}.${RESOURCES.x509Service}`);
+      console.log(`   [OK] X509 Service: ${this.ctx.tenantPath}.${RESOURCES.x509Service}`);
     } catch (error: any) {
       if (error.message?.includes('already exists')) {
-        console.log(`   ✓ X509 Service already exists`);
+        console.log(`   [OK] X509 Service already exists`);
       } else {
         throw error;
       }
@@ -765,10 +765,10 @@ class CompleteJourney {
         storeRequest
       );
       this.saveJson('create-x509-store-response.json', storeResponse.data);
-      console.log(`   ✓ X509 Store: ${this.ctx.tenantPath}.${RESOURCES.x509Store}`);
+      console.log(`   [OK] X509 Store: ${this.ctx.tenantPath}.${RESOURCES.x509Store}`);
     } catch (error: any) {
       if (error.message?.includes('already exists')) {
-        console.log(`   ✓ X509 Store already exists`);
+        console.log(`   [OK] X509 Store already exists`);
       } else {
         throw error;
       }
@@ -784,10 +784,10 @@ class CompleteJourney {
         `${this.ctx.tenantPath}.${RESOURCES.kms}`,
         'text/plain'
       );
-      console.log('   ✓ Linked KMS');
+      console.log('   [OK] Linked KMS');
     } catch (error: any) {
       if (error.message?.includes('already')) {
-        console.log('   ✓ KMS already linked');
+        console.log('   [OK] KMS already linked');
       } else {
         throw error;
       }
@@ -799,10 +799,10 @@ class CompleteJourney {
         `${this.ctx.tenantPath}.${RESOURCES.x509Store}`,
         'text/plain'
       );
-      console.log('   ✓ Linked X509 Store');
+      console.log('   [OK] Linked X509 Store');
     } catch (error: any) {
       if (error.message?.includes('already')) {
-        console.log('   ✓ X509 Store already linked');
+        console.log('   [OK] X509 Store already linked');
       } else {
         throw error;
       }
@@ -828,10 +828,10 @@ class CompleteJourney {
           `/v1/${this.ctx.tenantPath}.${RESOURCES.kms}.${id}/kms-service-api/keys/import/jwk`,
           keyData
         );
-        console.log(`   ✓ ${name} imported`);
+        console.log(`   [OK] ${name} imported`);
       } catch (error: any) {
         if (error.message?.includes('already exists')) {
-          console.log(`   ✓ ${name} already exists`);
+          console.log(`   [OK] ${name} already exists`);
         } else {
           throw error;
         }
@@ -867,10 +867,10 @@ class CompleteJourney {
         request
       );
       this.saveJson('create-iaca-response.json', response.data);
-      console.log(`   ✓ IACA certificate created`);
+      console.log(`   [OK] IACA certificate created`);
     } catch (error: any) {
       if (error.message?.includes('already exists')) {
-        console.log(`   ✓ IACA certificate already exists`);
+        console.log(`   [OK] IACA certificate already exists`);
       } else {
         throw error;
       }
@@ -881,7 +881,7 @@ class CompleteJourney {
       `/v1/${this.ctx.tenantPath}.${RESOURCES.x509Store}.${CERT_IDS.vicalIacaCert}/x509-store-api/certificates`
     );
     this.ctx.iacaPem = certResp.data.data?.pem || certResp.data.certificatePem || certResp.data.pem;
-    console.log(`   ✓ IACA PEM retrieved`);
+    console.log(`   [OK] IACA PEM retrieved`);
   }
 
   async createDocumentSignerCertificate() {
@@ -915,10 +915,10 @@ class CompleteJourney {
         request
       );
       this.saveJson('create-doc-signer-response.json', response.data);
-      console.log(`   ✓ Document signer certificate created`);
+      console.log(`   [OK] Document signer certificate created`);
     } catch (error: any) {
       if (error.message?.includes('already exists')) {
-        console.log(`   ✓ Document signer certificate already exists`);
+        console.log(`   [OK] Document signer certificate already exists`);
       } else {
         throw error;
       }
@@ -929,7 +929,7 @@ class CompleteJourney {
       `/v1/${this.ctx.tenantPath}.${RESOURCES.x509Store}.${CERT_IDS.docSignerCert}/x509-store-api/certificates`
     );
     this.ctx.docSignerPem = certResp.data.data?.pem || certResp.data.certificatePem || certResp.data.pem;
-    console.log(`   ✓ Document signer PEM retrieved`);
+    console.log(`   [OK] Document signer PEM retrieved`);
   }
 
   async storeVicalSignerCertificate() {
@@ -952,10 +952,10 @@ class CompleteJourney {
         request
       );
       this.saveJson('store-vical-signer-cert-response.json', response.data);
-      console.log(`   ✓ VICAL signer certificate stored`);
+      console.log(`   [OK] VICAL signer certificate stored`);
     } catch (error: any) {
       if (error.message?.includes('already exists')) {
-        console.log(`   ✓ VICAL signer certificate already exists`);
+        console.log(`   [OK] VICAL signer certificate already exists`);
       } else {
         throw error;
       }
@@ -984,10 +984,10 @@ class CompleteJourney {
         request
       );
       this.saveJson('create-vical-service-response.json', response.data);
-      console.log(`   ✓ VICAL service created`);
+      console.log(`   [OK] VICAL service created`);
     } catch (error: any) {
       if (error.message?.includes('already exists')) {
-        console.log(`   ✓ VICAL service already exists`);
+        console.log(`   [OK] VICAL service already exists`);
       } else {
         throw error;
       }
@@ -1012,7 +1012,7 @@ class CompleteJourney {
     this.ctx.vicalVersionIdPath = response.data.versionIdPath?.path || response.data.versionIdPath || '';
     const entryCount = response.data.entryCount || 0;
 
-    console.log(`   ✓ VICAL published (version: ${this.ctx.vicalVersionIdPath}, entries: ${entryCount})`);
+    console.log(`   [OK] VICAL published (version: ${this.ctx.vicalVersionIdPath}, entries: ${entryCount})`);
   }
 
   async createClientAttester() {
@@ -1032,10 +1032,10 @@ class CompleteJourney {
         request
       );
       this.saveJson('create-client-attester-response.json', response.data);
-      console.log(`   ✓ Client attester created`);
+      console.log(`   [OK] Client attester created`);
     } catch (error: any) {
       if (error.message?.includes('already exists')) {
-        console.log(`   ✓ Client attester already exists`);
+        console.log(`   [OK] Client attester already exists`);
       } else {
         throw error;
       }
@@ -1051,10 +1051,10 @@ class CompleteJourney {
         'application/json',
         true // skipStringify - send as-is
       );
-      console.log(`   ✓ KMS dependency added to client attester`);
+      console.log(`   [OK] KMS dependency added to client attester`);
     } catch (error: any) {
       if (error.message?.includes('already') || error.message?.includes('not found')) {
-        console.log(`   ⚠️  KMS dependency issue (may already be added), continuing...`);
+        console.log(`   [WARN] KMS dependency issue (may already be added), continuing...`);
       } else {
         throw error;
       }
@@ -1115,10 +1115,10 @@ class CompleteJourney {
         request
       );
       this.saveJson('create-issuer2-response.json', response.data);
-      console.log(`   ✓ Issuer2 created with client attestation`);
+      console.log(`   [OK] Issuer2 created with client attestation`);
     } catch (error: any) {
       if (error.message?.includes('already exists')) {
-        console.log(`   ✓ Issuer2 already exists`);
+        console.log(`   [OK] Issuer2 already exists`);
       } else {
         throw error;
       }
@@ -1170,10 +1170,10 @@ class CompleteJourney {
         request
       );
       this.saveJson('create-issuer-profile-response.json', response.data);
-      console.log(`   ✓ Issuer profile created`);
+      console.log(`   [OK] Issuer profile created`);
     } catch (error: any) {
       if (error.message?.includes('already exists')) {
-        console.log(`   ✓ Issuer profile already exists`);
+        console.log(`   [OK] Issuer profile already exists`);
       } else {
         throw error;
       }
@@ -1191,10 +1191,10 @@ class CompleteJourney {
         'application/json',
         true // skipStringify - send as-is, don't JSON.stringify
       );
-      console.log(`   ✓ Client attester linked to wallet`);
+      console.log(`   [OK] Client attester linked to wallet`);
     } catch (error: any) {
       if (error.message?.includes('already')) {
-        console.log(`   ✓ Client attester already linked`);
+        console.log(`   [OK] Client attester already linked`);
       } else {
         throw error;
       }
@@ -1224,7 +1224,7 @@ class CompleteJourney {
       throw new Error('Wallet did not return clientAttestationJwt');
     }
 
-    console.log(`   ✓ Wallet attestation obtained (expires: ${expiresAt})`);
+    console.log(`   [OK] Wallet attestation obtained (expires: ${expiresAt})`);
   }
 
   async createCredentialOffer() {
@@ -1248,7 +1248,7 @@ class CompleteJourney {
       throw new Error('Could not extract credentialOffer');
     }
 
-    console.log(`   ✓ Credential offer created`);
+    console.log(`   [OK] Credential offer created`);
   }
 
   async walletReceiveCredential() {
@@ -1270,7 +1270,7 @@ class CompleteJourney {
     this.saveJson('wallet-receive-credential-response.json', response.data);
 
     const receivedCount = Array.isArray(response.data) ? response.data.length : 0;
-    console.log(`   ✓ Credential received (count: ${receivedCount})`);
+    console.log(`   [OK] Credential received (count: ${receivedCount})`);
   }
 
   async createVerificationSession() {
@@ -1328,7 +1328,7 @@ class CompleteJourney {
       throw new Error('Could not extract sessionId or bootstrapAuthorizationRequestUrl');
     }
 
-    console.log(`   ✓ Verification session created (ID: ${this.ctx.sessionId})`);
+    console.log(`   [OK] Verification session created (ID: ${this.ctx.sessionId})`);
   }
 
   async walletPresent() {
@@ -1347,7 +1347,7 @@ class CompleteJourney {
     );
     this.saveJson('wallet-present-response.json', response.data);
 
-    console.log(`   ✓ Credential presented`);
+    console.log(`   [OK] Credential presented`);
   }
 
   async assertFinalStatus() {
@@ -1364,7 +1364,7 @@ class CompleteJourney {
       throw new Error(`Expected SUCCESSFUL but got: ${finalStatus || '<empty>'}`);
     }
 
-    console.log(`   ✓ Final status: ${finalStatus}`);
+    console.log(`   [OK] Final status: ${finalStatus}`);
   }
 }
 
@@ -1395,7 +1395,7 @@ async function main() {
   if (args.includes('--recreate-db')) {
     const init = new SystemInit(systemConfig);
     await init.recreateDb();
-    console.log('\n✅ Database recreated');
+    console.log('\n[SUCCESS] Database recreated');
     return;
   }
   
@@ -1472,6 +1472,6 @@ Examples:
 }
 
 main().catch((error) => {
-  console.error('\n💥 Fatal error:', error);
+  console.error('\nFatal error: Fatal error:', error);
   process.exit(1);
 });
