@@ -1084,15 +1084,15 @@ class CompleteJourney {
           format: 'mso_mdoc',
           doctype: MDL_DOC_TYPE,
           scope: MDL_DOC_TYPE,
-          credentialSigningAlgValuesSupported: [
-            { coseValue: -7 },
-            { coseValue: -9 },
+          credential_signing_alg_values_supported: [
+            -7,
+            -9
           ],
-          cryptographicBindingMethodsSupported: ['cose_key'],
-          proofTypesSupported: {
+          cryptographic_binding_methods_supported: ['cose_key'],
+          proof_types_supported: {
             jwt: {
-              proofSigningAlgValuesSupported: ['ES256'],
-            },
+              proof_signing_alg_values_supported: ["ES256"]
+            }
           },
         },
       },
