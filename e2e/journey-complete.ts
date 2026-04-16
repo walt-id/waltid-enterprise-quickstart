@@ -551,7 +551,7 @@ class CompleteJourney {
       requestUrl: '',
     };
 
-    this.client = new HttpClient(`${config.baseUrl}:${config.port}`);
+    this.client = new HttpClient(`http://${config.baseUrl}:${config.port}`);
     this.orgClient = new HttpClient(this.ctx.orgBaseUrl!);
   }
 
@@ -1371,8 +1371,8 @@ const config: Config = {
   baseUrl: process.env.BASE_URL || 'enterprise.localhost',
   organization: process.env.ORGANIZATION || 'waltid',
   tenant: process.env.TENANT || 'wallet-mdoc-client-attestation',
-  email: process.env.EMAIL || 'replace-me@walt.id',
-  password: process.env.PASSWORD || 'replace-me',
+  email: process.env.EMAIL || 'superadmin@walt.id',
+  password: process.env.PASSWORD || 'super123456',
   port: parseInt(process.env.PORT || '3000'),
 };
 
