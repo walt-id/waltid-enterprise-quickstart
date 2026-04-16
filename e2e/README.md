@@ -64,17 +64,35 @@ yarn install
 
 ### Configuration
 
-Edit `journey-complete.ts` constants at the top:
+Edit `journey-complete.ts` constants at the top or use environment variables:
 
-```typescript
-const BASE_URL = 'http://waltid.enterprise.localhost:3000';
-const CREDENTIALS = {
-  email: 'admin@waltid.io',
-  password: 'password',
-};
+```bash
+# Environment variables
+export BASE_URL=enterprise.localhost
+export PORT=3000
+export ORGANIZATION=waltid
+export TENANT=wallet-mdoc-client-attestation
+export EMAIL=admin@waltid.io
+export PASSWORD=password
+export SUPERADMIN_TOKEN=init1234
 ```
 
-### Run
+### System Initialization
+
+For a fresh database, run the system init first:
+
+```bash
+# Full system init (clean slate - WARNING: deletes all data!)
+npx tsx journey-complete.ts --init-system
+
+# Or individual steps:
+npx tsx journey-complete.ts --recreate-db          # Recreate database
+npx tsx journey-complete.ts --create-superadmin    # Create superadmin account
+npx tsx journey-complete.ts --init-db              # Initialize database
+npx tsx journey-complete.ts --create-organization  # Create organization
+```
+
+### Run the Journey Test
 
 ```bash
 npx tsx journey-complete.ts
