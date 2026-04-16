@@ -715,7 +715,7 @@ class CompleteJourney {
         `/v1/${this.ctx.tenantPath}.${RESOURCES.clientAttester}/client-attester-api/dependencies/add`,
         `${this.ctx.tenantPath}.${RESOURCES.kms}`, // Raw string, no quotes
         'application/json',
-        false // Don't JSON.stringify the body
+        true // skipStringify - send as-is
       );
       console.log(`   ✓ KMS dependency added to client attester`);
     } catch (error: any) {
@@ -845,7 +845,7 @@ class CompleteJourney {
         `/v1/${this.ctx.tenantPath}.${RESOURCES.wallet}/wallet-service-api/dependencies/add`,
         `${this.ctx.tenantPath}.${RESOURCES.clientAttester}`, // Raw string, no quotes
         'application/json',
-        false // Don't JSON.stringify
+        true // skipStringify - send as-is, don't JSON.stringify
       );
       console.log(`   ✓ Client attester linked to wallet`);
     } catch (error: any) {
