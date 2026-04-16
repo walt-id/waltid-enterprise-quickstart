@@ -1371,15 +1371,15 @@ const config: Config = {
   baseUrl: process.env.BASE_URL || 'enterprise.localhost',
   organization: process.env.ORGANIZATION || 'waltid',
   tenant: process.env.TENANT || 'wallet-mdoc-client-attestation',
-  email: process.env.EMAIL || 'superadmin@walt.id',
-  password: process.env.PASSWORD || 'super123456',
+  email: process.env.EMAIL || 'replace-me@walt.id',
+  password: process.env.PASSWORD || 'replace-me',
   port: parseInt(process.env.PORT || '3000'),
 };
 
 const systemConfig: SuperadminConfig = {
   baseUrl: 'enterprise.localhost',
   port: config.port,
-  superadminToken: process.env.SUPERADMIN_TOKEN || '1234567890-my-token',
+  superadminToken: process.env.SUPERADMIN_TOKEN || 'replace-me',
   organization: config.organization,
   adminEmail: config.email,
   adminPassword: config.password,
