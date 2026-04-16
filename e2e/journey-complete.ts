@@ -1435,7 +1435,7 @@ System Init Options:
   --init-db             Initialize database (runs initial-setup)
   --create-organization Create the configured organization
   --init-system         Run full system initialization sequence:
-                        recreate-db → create-superadmin → init-db → create-organization
+                        recreate-db -> create-superadmin -> init-db -> create-organization
   --full-init           Alias for --init-system
 
 Journey Test Options:
