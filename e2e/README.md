@@ -72,9 +72,9 @@ export BASE_URL=enterprise.localhost
 export PORT=3000
 export ORGANIZATION=waltid
 export TENANT=wallet-mdoc-client-attestation
-export EMAIL=admin@waltid.io
-export PASSWORD=password
-export SUPERADMIN_TOKEN=init1234
+export EMAIL=replace@walt.id
+export PASSWORD=replace
+export SUPERADMIN_TOKEN=replace
 ```
 
 ### System Initialization

@@ -208,17 +208,73 @@ interface SuperadminConfig {
   organization: string;
   adminEmail: string;
   adminPassword: string;
+  configDir?: string;
+}
+
+interface ParsedSuperadminConfig {
+  token: string;
+  email: string;
+  password: string;
+}
+
+/**
+ * Parse superadmin-registration.conf file to extract token, email, and password
+ */
+function parseSuperadminConfig(configPath: string): ParsedSuperadminConfig | null {
+  try {
+    if (!existsSync(configPath)) {
+      return null;
+    }
+    
+    const content = readFileSync(configPath, 'utf-8');
+    
+    // Extract token (first key in tokens = { "token": ... })
+    const tokenMatch = content.match(/tokens\s*=\s*\{\s*"([^"]+)"/);
+    const token = tokenMatch ? tokenMatch[1] : null;
+    
+    // Extract email
+    const emailMatch = content.match(/email\s*=\s*"([^"]+)"/);
+    const email = emailMatch ? emailMatch[1] : null;
+    
+    // Extract password
+    const passwordMatch = content.match(/password\s*=\s*"([^"]+)"/);
+    const password = passwordMatch ? passwordMatch[1] : null;
+    
+    if (token && email && password) {
+      return { token, email, password };
+    }
+    return null;
+  } catch (error) {
+    return null;
+  }
 }
 
 class SystemInit {
   private baseUrl: string;
   private superadminToken: string = '';
+  private superadminEmail: string = '';
+  private superadminPassword: string = '';
   private superadminAuthToken: string = '';
 
   constructor(private config: SuperadminConfig) {
     this.baseUrl = `http://${config.baseUrl}:${config.port}`;
-    // Default superadmin token from config file or use provided
-    this.superadminToken = config.superadminToken || 'init1234';
+    
+    // Try to read from superadmin-registration.conf first
+    const configDir = config.configDir || join(__dirname, '..', 'config');
+    const superadminConfigPath = join(configDir, 'superadmin-registration.conf');
+    const parsedConfig = parseSuperadminConfig(superadminConfigPath);
+    
+    if (parsedConfig) {
+      console.log(`   ℹ️  Using credentials from: ${superadminConfigPath}`);
+      this.superadminToken = config.superadminToken || parsedConfig.token;
+      this.superadminEmail = config.adminEmail || parsedConfig.email;
+      this.superadminPassword = config.adminPassword || parsedConfig.password;
+    } else {
+      // Fallback to provided or default values
+      this.superadminToken = config.superadminToken || '1234567890-my-token';
+      this.superadminEmail = config.adminEmail || 'superadmin@walt.id';
+      this.superadminPassword = config.adminPassword || 'super123456';
+    }
   }
 
   private log(msg: string) {
@@ -1281,15 +1337,15 @@ const config: Config = {
   baseUrl: process.env.BASE_URL || 'enterprise.localhost',
   organization: process.env.ORGANIZATION || 'waltid',
   tenant: process.env.TENANT || 'wallet-mdoc-client-attestation',
-  email: process.env.EMAIL || 'admin@waltid.io',
-  password: process.env.PASSWORD || 'password',
+  email: process.env.EMAIL || 'superadmin@walt.id',
+  password: process.env.PASSWORD || 'super123456',
   port: parseInt(process.env.PORT || '3000'),
 };
 
 const systemConfig: SuperadminConfig = {
   baseUrl: 'enterprise.localhost',
   port: config.port,
-  superadminToken: process.env.SUPERADMIN_TOKEN || 'init1234',
+  superadminToken: process.env.SUPERADMIN_TOKEN || '1234567890-my-token',
   organization: config.organization,
   adminEmail: config.email,
   adminPassword: config.password,
