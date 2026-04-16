@@ -337,6 +337,9 @@ class SystemInit {
   /**
    * Login as superadmin to get auth token
    */
+  /**
+   * Login as superadmin to get auth token
+   */
   async superadminLogin(): Promise<string> {
     const response = await fetch(`${this.baseUrl}/v1/superadmin/login`, {
       method: 'POST',
@@ -347,11 +350,18 @@ class SystemInit {
       body: JSON.stringify({ token: this.superadminToken }),
     });
     
-    const data = await response.json();
-    this.superadminAuthToken = data.token || data.accessToken || '';
+    const text = await response.text();
+    
+    try {
+      const data = text ? JSON.parse(text) : {};
+      this.superadminAuthToken = data.token || data.accessToken || '';
+    } catch {
+      console.log(`   ⚠️  Superadmin login response: ${text}`);
+      this.superadminAuthToken = '';
+    }
     
     if (!this.superadminAuthToken) {
-      throw new Error('Failed to get superadmin auth token');
+      throw new Error(`Failed to get superadmin auth token. Response: ${text}`);
     }
     
     return this.superadminAuthToken;
