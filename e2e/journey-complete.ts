@@ -307,8 +307,9 @@ class SystemInit {
 
   /**
    * Create superadmin account using registration token
+   * @returns true if account was created or already exists, false if token not registered
    */
-  async createSuperadminAccount(): Promise<void> {
+  async createSuperadminAccount(): Promise<boolean> {
     this.log('Creating superadmin account');
     
     const response = await fetch(`${this.baseUrl}/v1/superadmin/create-by-token`, {
@@ -323,14 +324,21 @@ class SystemInit {
     const text = await response.text();
     
     if (text.includes('exception') || !response.ok) {
-      // Check if account already exists
+      // Check if account already exists (that's fine)
       if (text.includes('already') || text.includes('exists')) {
         console.log('   ⚠️  Superadmin account already exists');
-      } else {
-        console.log(`   ⚠️  Superadmin account creation returned: ${text}`);
+        return true;
       }
+      // Check if token not registered (server needs restart with config)
+      if (text.includes('No such token')) {
+        console.log('   ❌ Token not registered on server');
+        return false;
+      }
+      console.log(`   ⚠️  Superadmin account creation returned: ${text}`);
+      return false;
     } else {
       console.log('   ✓ Superadmin account created');
+      return true;
     }
   }
 
@@ -479,11 +487,27 @@ class SystemInit {
     await this.recreateDb();
     
     // Step 2: Create superadmin account
-    await this.createSuperadminAccount();
+    const accountCreated = await this.createSuperadminAccount();
+    
+    if (!accountCreated) {
+      console.log('\n⚠️  Superadmin account could not be created.');
+      console.log('   The registration token may not be registered on the server.');
+      console.log('\n   To register the token, restart the server with the config file:');
+      console.log('   config/superadmin-registration.conf');
+      console.log('\n   Then run this command again.');
+      console.log('\n' + '=' .repeat(60));
+      return;
+    }
     
     // Step 3: Login as superadmin
-    await this.superadminLogin();
-    console.log('   ✓ Superadmin logged in');
+    try {
+      await this.superadminLogin();
+      console.log('   ✓ Superadmin logged in');
+    } catch (error: any) {
+      console.log(`\n⚠️  Could not login as superadmin: ${error.message}`);
+      console.log('   Make sure the server has the registration token configured.');
+      return;
+    }
     
     // Step 4: Initialize database
     await this.initDb();
