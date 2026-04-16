@@ -1,9 +1,0 @@
-{
-  "type": "x509-service",
-  "dependencies": [
-    "waltid.wallet-mdoc-client-attestation.kms",
-    "waltid.wallet-mdoc-client-attestation.x509-store"
-  ],
-  "_id": "waltid.wallet-mdoc-client-attestation.x509-service",
-  "parent": "waltid.wallet-mdoc-client-attestation"
-}

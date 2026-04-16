@@ -91,7 +91,7 @@ cd waltid-enterprise-quickstart
 
 **Run The Stack**
 ```bash
-docker-compose up
+docker compose up
 ```
 
 Once the docker-compose is running, you can visit [enterprise.localhost:3000/swagger](http://enterprise.localhost:3000/swagger) to access the Enterprise Stack APIs.

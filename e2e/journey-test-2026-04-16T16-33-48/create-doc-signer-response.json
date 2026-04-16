@@ -1,7 +1,0 @@
-{
-  "exception": true,
-  "id": "BadRequestException",
-  "status": "Bad Request",
-  "code": "400",
-  "message": "Certificate id 'vical-doc-signer-cert' already exists in attached x509 store dependency 'waltid.wallet-mdoc-client-attestation.x509-store'."
-}

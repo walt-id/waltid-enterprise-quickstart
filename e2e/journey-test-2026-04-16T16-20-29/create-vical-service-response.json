@@ -1,7 +1,0 @@
-{
-  "type": "DuplicateTarget",
-  "status": 409,
-  "message": "Duplicate target for this operation - you are trying to save to resources at the same path. Overwriting targets like this is not allowed. The old resource at the target must be removed first.",
-  "target": "waltid.wallet-mdoc-client-attestation.vical.state",
-  "target_entry_type": "VicalFeedState"
-}

@@ -27,9 +27,15 @@
  * 20. Create verification session
  * 21. Wallet present credential
  * 22. Assert final status = SUCCESSFUL
+ * 
+ * System Init Commands (--init-system):
+ * - recreate-db: Recreate all database collections
+ * - superadmin-create-account: Create superadmin account from token
+ * - init-db: Initialize database
+ * - create-organization: Create root organization
  */
 
-import { readFileSync, writeFileSync, mkdirSync } from 'fs';
+import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
@@ -191,7 +197,245 @@ class HttpClient {
   }
 }
 
+// ============================================================================
+// System Initialization Functions
+// ============================================================================
+
+interface SuperadminConfig {
+  baseUrl: string;
+  port: number;
+  superadminToken?: string;
+  organization: string;
+  adminEmail: string;
+  adminPassword: string;
+}
+
+class SystemInit {
+  private baseUrl: string;
+  private superadminToken: string = '';
+  private superadminAuthToken: string = '';
+
+  constructor(private config: SuperadminConfig) {
+    this.baseUrl = `http://${config.baseUrl}:${config.port}`;
+    // Default superadmin token from config file or use provided
+    this.superadminToken = config.superadminToken || 'init1234';
+  }
+
+  private log(msg: string) {
+    console.log(`\n▶️  ${msg}`);
+  }
+
+  /**
+   * Recreate all database collections (dev endpoint)
+   * WARNING: This deletes all data!
+   */
+  async recreateDb(): Promise<void> {
+    this.log('Recreating database collections');
+    
+    try {
+      const response = await fetch(`${this.baseUrl}/v1/dev/database-recreate`, {
+        method: 'POST',
+        headers: { 'accept': '*/*' },
+      });
+      
+      if (!response.ok) {
+        const text = await response.text();
+        console.log(`   ⚠️  Database recreate returned ${response.status}: ${text}`);
+      } else {
+        console.log('   ✓ Database collections recreated');
+      }
+    } catch (error: any) {
+      console.log(`   ⚠️  Database recreate failed (may not be in dev mode): ${error.message}`);
+    }
+  }
+
+  /**
+   * Create superadmin account using registration token
+   */
+  async createSuperadminAccount(): Promise<void> {
+    this.log('Creating superadmin account');
+    
+    const response = await fetch(`${this.baseUrl}/v1/superadmin/create-by-token`, {
+      method: 'POST',
+      headers: {
+        'accept': '*/*',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(this.superadminToken),
+    });
+    
+    const text = await response.text();
+    
+    if (text.includes('exception') || !response.ok) {
+      // Check if account already exists
+      if (text.includes('already') || text.includes('exists')) {
+        console.log('   ⚠️  Superadmin account already exists');
+      } else {
+        console.log(`   ⚠️  Superadmin account creation returned: ${text}`);
+      }
+    } else {
+      console.log('   ✓ Superadmin account created');
+    }
+  }
+
+  /**
+   * Login as superadmin to get auth token
+   */
+  async superadminLogin(): Promise<string> {
+    const response = await fetch(`${this.baseUrl}/v1/superadmin/login`, {
+      method: 'POST',
+      headers: {
+        'accept': '*/*',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ token: this.superadminToken }),
+    });
+    
+    const data = await response.json();
+    this.superadminAuthToken = data.token || data.accessToken || '';
+    
+    if (!this.superadminAuthToken) {
+      throw new Error('Failed to get superadmin auth token');
+    }
+    
+    return this.superadminAuthToken;
+  }
+
+  /**
+   * Initialize database (requires superadmin auth)
+   */
+  async initDb(): Promise<void> {
+    this.log('Initializing database');
+    
+    if (!this.superadminAuthToken) {
+      await this.superadminLogin();
+    }
+    
+    const response = await fetch(`${this.baseUrl}/v1/admin/initial-setup`, {
+      method: 'POST',
+      headers: {
+        'accept': '*/*',
+        'Authorization': `Bearer ${this.superadminAuthToken}`,
+      },
+    });
+    
+    const text = await response.text();
+    
+    if (text.includes('Unauthorized')) {
+      throw new Error('Database initialization failed: Unauthorized');
+    }
+    
+    console.log('   ✓ Database initialized');
+  }
+
+  /**
+   * Create an organization (requires superadmin auth)
+   */
+  async createOrganization(orgId?: string): Promise<void> {
+    const organization = orgId || this.config.organization;
+    this.log(`Creating organization: ${organization}`);
+    
+    if (!this.superadminAuthToken) {
+      await this.superadminLogin();
+    }
+    
+    const response = await fetch(`${this.baseUrl}/v1/admin/organizations`, {
+      method: 'POST',
+      headers: {
+        'accept': '*/*',
+        'Authorization': `Bearer ${this.superadminAuthToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        _id: organization,
+        profile: {
+          name: `${organization} Organization`,
+        },
+        baseUrl: `http://${organization}.enterprise.localhost:3000`,
+      }),
+    });
+    
+    const text = await response.text();
+    
+    if (text.includes('already') || text.includes('exists') || text.includes('DuplicateTarget')) {
+      console.log(`   ⚠️  Organization '${organization}' already exists`);
+    } else if (!response.ok) {
+      console.log(`   ⚠️  Organization creation returned: ${text}`);
+    } else {
+      console.log(`   ✓ Organization '${organization}' created`);
+    }
+  }
+
+  /**
+   * Create an admin account in the organization
+   */
+  async createAdminAccount(): Promise<void> {
+    this.log(`Creating admin account: ${this.config.adminEmail}`);
+    
+    if (!this.superadminAuthToken) {
+      await this.superadminLogin();
+    }
+    
+    const response = await fetch(`${this.baseUrl}/v1/admin/accounts/create`, {
+      method: 'POST',
+      headers: {
+        'accept': '*/*',
+        'Authorization': `Bearer ${this.superadminAuthToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        organization: this.config.organization,
+        email: this.config.adminEmail,
+        password: this.config.adminPassword,
+        role: 'admin',
+      }),
+    });
+    
+    const text = await response.text();
+    
+    if (text.includes('already') || text.includes('exists')) {
+      console.log(`   ⚠️  Admin account already exists`);
+    } else if (!response.ok) {
+      console.log(`   ⚠️  Admin account creation returned: ${text}`);
+    } else {
+      console.log(`   ✓ Admin account created: ${this.config.adminEmail}`);
+    }
+  }
+
+  /**
+   * Run full system initialization sequence
+   */
+  async runFullInit(): Promise<void> {
+    console.log('\n🚀 System Initialization Started\n');
+    console.log('=' .repeat(60));
+    
+    // Step 1: Recreate DB (optional, for clean slate)
+    await this.recreateDb();
+    
+    // Step 2: Create superadmin account
+    await this.createSuperadminAccount();
+    
+    // Step 3: Login as superadmin
+    await this.superadminLogin();
+    console.log('   ✓ Superadmin logged in');
+    
+    // Step 4: Initialize database
+    await this.initDb();
+    
+    // Step 5: Create organization
+    await this.createOrganization();
+    
+    // Step 6: Create admin account
+    await this.createAdminAccount();
+    
+    console.log('\n' + '=' .repeat(60));
+    console.log('✅ System initialization complete!\n');
+  }
+}
+
+// ============================================================================
 // Journey Runner
+// ============================================================================
 class CompleteJourney {
   private client: HttpClient;
   private orgClient: HttpClient;
@@ -1034,16 +1278,108 @@ class CompleteJourney {
 
 // Main execution
 const config: Config = {
-  baseUrl: process.env.BASE_URL || 'http://enterprise.localhost',
+  baseUrl: process.env.BASE_URL || 'enterprise.localhost',
   organization: process.env.ORGANIZATION || 'waltid',
   tenant: process.env.TENANT || 'wallet-mdoc-client-attestation',
-  email: process.env.EMAIL || 'superadmin@walt.id',
-  password: process.env.PASSWORD || 'super123456',
+  email: process.env.EMAIL || 'admin@waltid.io',
+  password: process.env.PASSWORD || 'password',
   port: parseInt(process.env.PORT || '3000'),
 };
 
-const journey = new CompleteJourney(config);
-journey.run().catch((error) => {
+const systemConfig: SuperadminConfig = {
+  baseUrl: 'enterprise.localhost',
+  port: config.port,
+  superadminToken: process.env.SUPERADMIN_TOKEN || 'init1234',
+  organization: config.organization,
+  adminEmail: config.email,
+  adminPassword: config.password,
+};
+
+// Parse command line arguments
+const args = process.argv.slice(2);
+
+async function main() {
+  // Handle system init commands
+  if (args.includes('--recreate-db')) {
+    const init = new SystemInit(systemConfig);
+    await init.recreateDb();
+    console.log('\n✅ Database recreated');
+    return;
+  }
+  
+  if (args.includes('--init-db')) {
+    const init = new SystemInit(systemConfig);
+    await init.createSuperadminAccount();
+    await init.initDb();
+    return;
+  }
+  
+  if (args.includes('--create-superadmin')) {
+    const init = new SystemInit(systemConfig);
+    await init.createSuperadminAccount();
+    return;
+  }
+  
+  if (args.includes('--create-organization')) {
+    const init = new SystemInit(systemConfig);
+    await init.createSuperadminAccount();
+    await init.createOrganization();
+    return;
+  }
+  
+  if (args.includes('--init-system') || args.includes('--full-init')) {
+    const init = new SystemInit(systemConfig);
+    await init.runFullInit();
+    return;
+  }
+  
+  if (args.includes('--help') || args.includes('-h')) {
+    console.log(`
+Usage: npx tsx journey-complete.ts [options]
+
+System Init Options:
+  --recreate-db         Recreate all database collections (WARNING: deletes all data!)
+  --create-superadmin   Create superadmin account from token
+  --init-db             Initialize database (runs initial-setup)
+  --create-organization Create the configured organization
+  --init-system         Run full system initialization sequence:
+                        recreate-db → create-superadmin → init-db → create-organization
+  --full-init           Alias for --init-system
+
+Journey Test Options:
+  (no options)          Run the complete mDoc + Client Attestation + VICAL journey
+
+Environment Variables:
+  BASE_URL              Enterprise stack base URL (default: enterprise.localhost)
+  PORT                  Port number (default: 3000)
+  ORGANIZATION          Organization ID (default: waltid)
+  TENANT                Tenant ID (default: wallet-mdoc-client-attestation)
+  EMAIL                 Admin email (default: admin@waltid.io)
+  PASSWORD              Admin password (default: password)
+  SUPERADMIN_TOKEN      Superadmin registration token (default: init1234)
+
+Examples:
+  # Full system init (clean slate)
+  npx tsx journey-complete.ts --init-system
+
+  # Just recreate the database
+  npx tsx journey-complete.ts --recreate-db
+
+  # Run the journey test
+  npx tsx journey-complete.ts
+
+  # Run with custom organization
+  ORGANIZATION=myorg npx tsx journey-complete.ts --init-system
+`);
+    return;
+  }
+  
+  // Default: run the journey test
+  const journey = new CompleteJourney(config);
+  await journey.run();
+}
+
+main().catch((error) => {
   console.error('\n💥 Fatal error:', error);
   process.exit(1);
 });

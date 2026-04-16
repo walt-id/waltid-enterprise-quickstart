@@ -115,6 +115,7 @@ services:
       - mongodb_network
     depends_on:
       - mongodb
+    command: "--log-level=trace"
 
 volumes:
   mongo-keyfile-vol:
