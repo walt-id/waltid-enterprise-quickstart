@@ -351,14 +351,20 @@ class SystemInit {
   /**
    * Login as superadmin to get auth token
    */
+  /**
+   * Login as superadmin to get auth token
+   */
   async superadminLogin(): Promise<string> {
-    const response = await fetch(`${this.baseUrl}/v1/superadmin/login`, {
+    const response = await fetch(`${this.baseUrl}/auth/account/emailpass`, {
       method: 'POST',
       headers: {
-        'accept': '*/*',
+        'accept': 'application/json',
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ token: this.superadminToken }),
+      body: JSON.stringify({
+        email: this.superadminEmail,
+        password: this.superadminPassword,
+      }),
     });
     
     const text = await response.text();
