@@ -255,9 +255,12 @@ class SystemInit {
   private superadminEmail: string = '';
   private superadminPassword: string = '';
   private superadminAuthToken: string = '';
+  private adminBaseUrl: string;  // For admin operations (no org prefix)
 
   constructor(private config: SuperadminConfig) {
     this.baseUrl = `http://${config.baseUrl}:${config.port}`;
+    // Admin URL without organization prefix for /v1/admin/* endpoints
+    this.adminBaseUrl = `http://enterprise.localhost:${config.port}`;
     
     // Try to read from superadmin-registration.conf first
     const configDir = config.configDir || join(__dirname, '..', 'config');
@@ -292,7 +295,7 @@ class SystemInit {
     this.log('Recreating database collections');
     
     try {
-      const response = await fetch(`${this.baseUrl}/v1/dev/database-recreate`, {
+      const response = await fetch(`${this.adminBaseUrl}/v1/dev/database-recreate`, {
         method: 'POST',
         headers: { 'accept': '*/*' },
       });
@@ -355,7 +358,7 @@ class SystemInit {
    * Login as superadmin to get auth token
    */
   async superadminLogin(): Promise<string> {
-    const response = await fetch(`${this.baseUrl}/auth/account/emailpass`, {
+    const response = await fetch(`${this.adminBaseUrl}/auth/account/emailpass`, {
       method: 'POST',
       headers: {
         'accept': 'application/json',
@@ -394,7 +397,7 @@ class SystemInit {
       await this.superadminLogin();
     }
     
-    const response = await fetch(`${this.baseUrl}/v1/admin/initial-setup`, {
+    const response = await fetch(`${this.adminBaseUrl}/v1/admin/initial-setup`, {
       method: 'POST',
       headers: {
         'accept': '*/*',
@@ -422,7 +425,7 @@ class SystemInit {
       await this.superadminLogin();
     }
     
-    const response = await fetch(`${this.baseUrl}/v1/admin/organizations`, {
+    const response = await fetch(`${this.adminBaseUrl}/v1/admin/organizations`, {
       method: 'POST',
       headers: {
         'accept': '*/*',
@@ -461,7 +464,7 @@ class SystemInit {
       await this.superadminLogin();
     }
     
-    const response = await fetch(`${this.baseUrl}/v1/admin/accounts/create`, {
+    const response = await fetch(`${this.adminBaseUrl}/v1/admin/accounts/create`, {
       method: 'POST',
       headers: {
         'accept': '*/*',
