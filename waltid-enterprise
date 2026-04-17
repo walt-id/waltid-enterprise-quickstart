@@ -1356,6 +1356,34 @@ create_service() {
     fi
 }
 
+create_service_dependency() {
+
+    get_user_auth_token AUTH_TOKEN
+
+    SERVICE_NAME=$1
+    SERVICE_TYPE=$2
+    DEPENDENCY_REF=$3
+
+    SERVICE_ID="$ROOT_ORGANIZATION.$TENANT.$SERVICE_NAME"
+
+    response=$(curl -X 'POST' \
+        "http://$ROOT_ORGANIZATION.enterprise.localhost:3000/v1/$SERVICE_ID/$SERVICE_TYPE/dependencies/add" \
+        -H 'accept: */*' \
+        -H "Authorization: Bearer $AUTH_TOKEN" \
+        -H 'Content-Type: application/json' \
+        -d "$DEPENDENCY_REF" 2> /dev/null)
+
+    if [[ $response == *"exception"* ]]; then
+        error "Service Dependency of '$SERVICE_ID' to '$DEPENDENCY_REF' could not be created."
+        error "$response"
+        result=-1
+    else
+        info "Service Dependency of '$SERVICE_ID' to '$DEPENDENCY_REF' successfully created."
+        echo "$response"
+    fi
+}
+
+
 create_kms_service() {
     create_service "kms" "kms1"
 }
@@ -1405,6 +1433,7 @@ generate_status_key() {
 
 create_did_service() {
    create_service "did" "$DID_SERVICE"
+   create_service_dependency "$DID_SERVICE" "did-service-api/dids" "$ROOT_ORGANIZATION.$TENANT.kms1"
 }
 
 create_did() {
