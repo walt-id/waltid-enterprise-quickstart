@@ -441,6 +441,9 @@ class SystemInit {
     
     if (text.includes('already') || text.includes('exists') || text.includes('DuplicateTarget')) {
       console.log(`   [WARN] Organization '${organization}' already exists`);
+    } else if (text.includes('Unknown host alias')) {
+      console.log(`   [WARN] Organization created but host alias not configured`);
+      console.log(`          Configure '${organization}.enterprise.localhost' in server settings`);
     } else if (!response.ok) {
       console.log(`   [WARN] Organization creation returned: ${text}`);
     } else {
