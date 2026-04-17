@@ -266,7 +266,10 @@ class SystemInit {
     
     if (parsedConfig) {
       console.log(`   [INFO] Using credentials from: ${superadminConfigPath}`);
-      this.superadminToken = config.superadminToken || parsedConfig.token;
+      // Use parsed config values, but allow env var overrides
+      this.superadminToken = (config.superadminToken && config.superadminToken !== 'replace-me') 
+        ? config.superadminToken 
+        : parsedConfig.token;
       this.superadminEmail = config.adminEmail || parsedConfig.email;
       this.superadminPassword = config.adminPassword || parsedConfig.password;
     } else {
