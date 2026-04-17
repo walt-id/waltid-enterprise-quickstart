@@ -97,7 +97,10 @@ services:
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile
     networks:
-      - mongodb_network
+      mongodb_network:
+        aliases:
+          - enterprise.localhost
+          - waltid.enterprise.localhost
     depends_on:
       - waltid-enterprise
 
@@ -107,8 +110,6 @@ services:
     #   - LOG_LEVEL=trace
     ports:
       - "3000:3000"
-    extra_hosts:
-      - "waltid.enterprise.localhost:host-gateway"
     volumes:
       - ./config:/config
     networks:
