@@ -434,7 +434,6 @@ class SystemInit {
         profile: {
           name: `${organization} Organization`,
         },
-        baseUrl: `http://${organization}.enterprise.localhost:3000`,
       }),
     });
     
@@ -524,10 +523,10 @@ class SystemInit {
     // Step 5: Create organization
     await this.createOrganization();
     
-    // Step 6: Create admin account
-    await this.createAdminAccount();
+    // Note: Admin account is the superadmin that was just created
+    // No separate admin account creation needed
     
-    console.log('=' .repeat(60));
+    console.log('\n' + '=' .repeat(60));
     console.log('[SUCCESS] System initialization complete!\n');
   }
 }
