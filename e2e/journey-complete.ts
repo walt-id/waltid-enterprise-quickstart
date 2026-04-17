@@ -324,8 +324,8 @@ class SystemInit {
     const text = await response.text();
     
     if (text.includes('exception') || !response.ok) {
-      // Check if account already exists (that's fine)
-      if (text.includes('already') || text.includes('exists')) {
+      // Check if account already exists or token already used (that's fine)
+      if (text.includes('already') || text.includes('exists') || text.includes('already used')) {
         console.log('   [WARN] Superadmin account already exists');
         return true;
       }
