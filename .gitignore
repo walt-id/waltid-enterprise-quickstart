@@ -1,2 +1,7 @@
 .idea
 /data
+.did_key
+.auth_token
+.user_auth_token
+.user_id
+

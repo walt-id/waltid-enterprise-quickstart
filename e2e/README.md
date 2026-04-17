@@ -20,7 +20,7 @@ Complete TypeScript implementation of the enterprise mDoc issuance journey with 
 1. Login
 2. Create tenant
 3. Initialize wallet
-4. Create verifier2
+4. Create verifier
 5. Create KMS, X509 Service, X509 Store
 6. Link X509 dependencies
 7. Import keys (all 4)
@@ -30,15 +30,18 @@ Complete TypeScript implementation of the enterprise mDoc issuance journey with 
 11. Create VICAL service
 12. Publish VICAL
 13. Create client attester service
-14. Create issuer2 with client attestation
-15. Create issuer credential profile
+14. Create issuer (client attestation config)
+15. Create issuer credential profile (ISO 18013-5)
 16. Attach client attester to wallet
 17. Wallet obtains client attestation
-18. Create credential offer
+18. Create credential offer (client attestation required)
 19. Wallet receive credential
 20. Create verification session
 21. Wallet present credential
-22. Assert final status = SUCCESSFUL
+22. Assert final status (including VICAL check) = SUCCESSFUL
+
+
+
 
 ## Quick Start
 
@@ -121,23 +124,6 @@ Other Options:
   --help, -h            Show usage information
 ```
 
-## Features
-
-### Idempotent Execution
-- Safe to re-run multiple times
-- Handles HTTP 409 (DuplicateTarget) gracefully
-- Skips existing resources automatically
-
-### Comprehensive Logging
-- All HTTP requests/responses logged to `http-log.json`
-- Intermediate payloads saved as individual JSON files
-- Step-by-step progress output
-
-### Production-Ready
-- Full error handling with descriptive messages
-- Type-safe TypeScript implementation
-- Complete interfaces for all API requests/responses
-
 ## Key and Certificate Inventory
 
 ### Static Keys (Imported from Files)
@@ -155,7 +141,6 @@ Other Options:
 | Document Signer | Dynamic | IACA key (chained) | Signs issued mDocs |
 | VICAL Signer | Static (PEM) | Self-signed | Authenticates VICAL publications |
 
-Note: VICAL signer certificate (`vical-signer-cert.pem`) must match `vical-signing-key.json`.
 
 ## Architecture
 
@@ -187,21 +172,8 @@ Logs are automatically saved to `journey-test-<timestamp>/`:
 - `<step-name>-request.json` - Request payloads
 - `<step-name>-response.json` - Response data
 
-### Common Issues
-
-1. **HTTP 404 on publish**: Server config issue, VICAL service needs restart
-2. **HTTP 409 DuplicateTarget**: Resource already exists (script handles this)
-3. **Key-certificate mismatch**: Regenerate `vical-signer-cert.pem` from JWK
-4. **"Path not found"**: Ensure KMS/X509 services were created successfully
-5. **"unknown scheme" fetch error**: Missing http:// prefix in URL configuration
-
 ### Test Against Different Environment
 
 ```bash
 BASE_URL=my-enterprise.example.com PORT=443 npx tsx journey-complete.ts
 ```
-
-## Related Documentation
-
-- **Bash version**: Located in parent directory
-- **Integration test**: `waltid-unified-build/.../MdocClientAttestationVicalJourneyIntegrationTest.kt`
