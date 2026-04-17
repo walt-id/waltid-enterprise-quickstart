@@ -94,10 +94,17 @@ services:
     ports:
       - "80:80"
       - "443:443"
+    expose:
+      - "3000"  # Internal only, for container-to-container calls
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile
     networks:
-      - mongodb_network
+      mongodb_network:
+        aliases:
+          # These aliases allow other containers to reach Caddy via these hostnames
+          # Used for port 80 and 3000 internal calls
+          - enterprise.localhost
+          - waltid.enterprise.localhost
     depends_on:
       - waltid-enterprise
 
@@ -107,10 +114,6 @@ services:
     #   - LOG_LEVEL=trace
     ports:
       - "3000:3000"
-    extra_hosts:
-      # Internal calls to *.enterprise.localhost:3000 should go to self
-      - "enterprise.localhost:127.0.0.1"
-      - "waltid.enterprise.localhost:127.0.0.1"
     volumes:
       - ./config:/config
     networks:
