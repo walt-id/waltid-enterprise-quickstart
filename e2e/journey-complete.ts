@@ -318,7 +318,7 @@ class SystemInit {
         'accept': '*/*',
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify(this.superadminToken),
+      body: this.superadminToken,  // Send raw token string, not JSON-encoded
     });
     
     const text = await response.text();
@@ -1379,7 +1379,7 @@ const config: Config = {
 };
 
 const systemConfig: SuperadminConfig = {
-  baseUrl: 'enterprise.localhost',
+  baseUrl: `${config.organization}.enterprise.localhost`,
   port: config.port,
   superadminToken: process.env.SUPERADMIN_TOKEN || 'replace-me',
   organization: config.organization,
