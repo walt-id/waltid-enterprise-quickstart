@@ -1282,16 +1282,28 @@ class CompleteJourney {
 
     const ISO_NAMESPACE = 'org.iso.18013.5.1';
     
+    // Build the full x5c chain: [Document Signer (leaf), IACA (root)]
+    // This allows verifiers to validate the chain and check trust anchors
+    const x5Chain = [
+      {
+        type: "pem-encoded-x509-certificate-descriptor",
+        pemEncodedCertificate: this.ctx.docSignerPem,
+      },
+    ];
+    
+    // Add IACA cert if available (makes the chain complete for trust list verification)
+    if (this.ctx.iacaPem) {
+      x5Chain.push({
+        type: "pem-encoded-x509-certificate-descriptor",
+        pemEncodedCertificate: this.ctx.iacaPem,
+      });
+    }
+    
     const request = {
       name: RESOURCES.issuerProfile,
       credentialConfigurationId: MDL_DOC_TYPE,
       issuerKeyId: `${this.ctx.tenantPath}.${RESOURCES.kms}.${KEY_IDS.issuerSigningKey}`,
-      x5Chain: [
-        {
-          type: "pem-encoded-x509-certificate-descriptor",
-          pemEncodedCertificate: this.ctx.docSignerPem,
-        },
-      ],
+      x5Chain,
       credentialData: {
         [ISO_NAMESPACE]: {
           family_name: 'Doe',
