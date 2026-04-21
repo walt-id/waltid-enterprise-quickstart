@@ -50,6 +50,8 @@ interface Config {
   email: string;
   password: string;
   port: number;
+  trustRegistryUrl?: string;      // URL of waltid-trust-registry-service (e.g., http://127.0.0.1:7000)
+  useEtsiTrustList?: boolean;     // Enable ETSI Trust List policy in verification
 }
 
 interface HttpResponse<T = any> {
@@ -71,6 +73,7 @@ interface JourneyContext {
   offerId: string;
   sessionId: string;
   requestUrl: string;
+  trustRegistrySourceId?: string;  // ID of the loaded trust source
 }
 
 // Constants
@@ -543,6 +546,7 @@ class SystemInit {
 class CompleteJourney {
   private client: HttpClient;
   private orgClient: HttpClient;
+  private trustRegistryClient: HttpClient | null = null;
   private ctx: Partial<JourneyContext> = {};
   private config: Config;
 
@@ -563,10 +567,16 @@ class CompleteJourney {
       offerId: '',
       sessionId: '',
       requestUrl: '',
+      trustRegistrySourceId: '',
     };
 
     this.client = new HttpClient(`http://${config.baseUrl}:${config.port}`);
     this.orgClient = new HttpClient(this.ctx.orgBaseUrl!);
+    
+    // Initialize trust registry client if URL is configured
+    if (config.trustRegistryUrl) {
+      this.trustRegistryClient = new HttpClient(config.trustRegistryUrl);
+    }
   }
 
   log(message: string) {
@@ -587,6 +597,9 @@ class CompleteJourney {
     console.log(`Base URL: Base URL: ${this.config.baseUrl}:${this.config.port}`);
     console.log(`Organization: Organization: ${this.config.organization}`);
     console.log(`Tenant: Tenant: ${this.config.tenant}`);
+    if (this.config.useEtsiTrustList) {
+      console.log(`ETSI Trust List: ENABLED (registry: ${this.config.trustRegistryUrl})`);
+    }
     console.log('');
 
     try {
@@ -602,6 +615,12 @@ class CompleteJourney {
       await this.storeVicalSignerCertificate();
       await this.createVicalService();
       await this.publishVical();
+      
+      // Setup ETSI Trust Registry if enabled (after IACA cert is created)
+      if (this.config.useEtsiTrustList) {
+        await this.setupEtsiTrustRegistry();
+      }
+      
       await this.createClientAttester();
       await this.createIssuer2();
       await this.createIssuerProfile();
@@ -618,13 +637,21 @@ class CompleteJourney {
 
       // Save HTTP log
       const httpLogPath = join(this.ctx.workdir!, 'http-log.json');
-      writeFileSync(httpLogPath, JSON.stringify(this.client.getLog().concat(this.orgClient.getLog()), null, 2));
+      const allLogs = this.client.getLog().concat(this.orgClient.getLog());
+      if (this.trustRegistryClient) {
+        allLogs.push(...this.trustRegistryClient.getLog());
+      }
+      writeFileSync(httpLogPath, JSON.stringify(allLogs, null, 2));
       console.log(`Log saved: HTTP log saved: ${httpLogPath}`);
     } catch (error: any) {
       console.error('\n[ERROR] Journey failed:', error.message);
       // Save HTTP log even on failure
       const httpLogPath = join(this.ctx.workdir!, 'http-log.json');
-      writeFileSync(httpLogPath, JSON.stringify(this.client.getLog().concat(this.orgClient.getLog()), null, 2));
+      const allLogs = this.client.getLog().concat(this.orgClient.getLog());
+      if (this.trustRegistryClient) {
+        allLogs.push(...this.trustRegistryClient.getLog());
+      }
+      writeFileSync(httpLogPath, JSON.stringify(allLogs, null, 2));
       console.log(`Log saved: HTTP log saved: ${httpLogPath}`);
       throw error;
     }
@@ -1029,6 +1056,111 @@ class CompleteJourney {
     console.log(`   [OK] VICAL published (version: ${this.ctx.vicalVersionIdPath}, entries: ${entryCount})`);
   }
 
+  /**
+   * Setup ETSI Trust Registry with the IACA certificate
+   * 
+   * This creates a LoTE (List of Trusted Entities) source in the trust-registry-service
+   * containing the IACA certificate used in this journey, allowing the etsi-trust-list
+   * policy to validate the credential's issuer certificate chain.
+   */
+  async setupEtsiTrustRegistry() {
+    this.log('Setup ETSI Trust Registry');
+
+    if (!this.trustRegistryClient) {
+      throw new Error('Trust registry client not configured. Set TRUST_REGISTRY_URL environment variable.');
+    }
+
+    if (!this.ctx.iacaPem) {
+      throw new Error('IACA certificate not available. Run createIacaCertificate() first.');
+    }
+
+    // Compute SHA-256 fingerprint of the IACA certificate for the trust list
+    // We'll use a simple approach - extract the base64 DER and compute hash
+    const iacaDerBase64 = this.ctx.iacaPem!
+      .replace('-----BEGIN CERTIFICATE-----', '')
+      .replace('-----END CERTIFICATE-----', '')
+      .replace(/\s/g, '');
+    
+    // For the hash, we'll just use a placeholder that the trust registry will compute
+    // The trust registry accepts PEM and extracts the fingerprint internally
+    const sourceId = `journey-test-${Date.now()}`;
+    
+    // Create a LoTE-format JSON source with the IACA certificate
+    const loteSource = {
+      listMetadata: {
+        listId: sourceId,
+        listType: 'mdl-issuers',
+        territory: 'US',
+        issueDate: new Date().toISOString(),
+        nextUpdate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(), // 1 year
+        sequenceNumber: '1',
+      },
+      trustedEntities: [
+        {
+          entityId: 'journey-test-iaca',
+          entityType: 'PID_PROVIDER', // Using PID_PROVIDER as a general issuer type
+          legalName: 'Journey Test IACA',
+          country: 'US',
+          services: [
+            {
+              serviceId: 'mdl-issuing',
+              serviceType: 'MDL_ISSUER',
+              status: 'GRANTED',
+              statusStart: new Date().toISOString(),
+              identities: [
+                {
+                  matchType: 'CERTIFICATE_PEM',
+                  value: this.ctx.iacaPem,
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+
+    this.saveJson('etsi-trust-registry-lote-source.json', loteSource);
+
+    // Load the source into the trust registry
+    const loadRequest = {
+      sourceId: sourceId,
+      content: JSON.stringify(loteSource),
+      sourceUrl: 'local://journey-test',
+    };
+
+    this.saveJson('etsi-trust-registry-load-request.json', loadRequest);
+
+    try {
+      const response = await this.trustRegistryClient.post(
+        '/trust-registry/sources/load',
+        loadRequest
+      );
+      this.saveJson('etsi-trust-registry-load-response.json', response.data);
+
+      if (!response.data.success) {
+        throw new Error(`Trust registry load failed: ${response.data.error || 'unknown error'}`);
+      }
+
+      this.ctx.trustRegistrySourceId = sourceId;
+      console.log(`   [OK] Trust source loaded: ${sourceId}`);
+      console.log(`        Entities: ${response.data.entitiesLoaded || 0}`);
+      console.log(`        Services: ${response.data.servicesLoaded || 0}`);
+      console.log(`        Identities: ${response.data.identitiesLoaded || 0}`);
+    } catch (error: any) {
+      console.error(`   [ERROR] Failed to load trust source: ${error.message}`);
+      throw error;
+    }
+
+    // Verify the source was loaded by listing sources
+    try {
+      const sourcesResponse = await this.trustRegistryClient.get('/trust-registry/sources');
+      this.saveJson('etsi-trust-registry-sources.json', sourcesResponse.data);
+      console.log(`   [OK] Trust registry now has ${sourcesResponse.data.length || 0} source(s)`);
+    } catch (error: any) {
+      console.log(`   [WARN] Could not list sources: ${error.message}`);
+    }
+  }
+
   async createClientAttester() {
     this.log('Create client attester service');
 
@@ -1288,9 +1420,37 @@ class CompleteJourney {
   }
 
   async createVerificationSession() {
-    this.log('Create verifier2 session with VICAL policy');
+    const policiesDescription = this.config.useEtsiTrustList 
+      ? 'VICAL + ETSI Trust List policies' 
+      : 'VICAL policy';
+    this.log(`Create verifier2 session with ${policiesDescription}`);
 
     const vicalUrl = `${this.ctx.orgBaseUrl}/v1/${this.ctx.tenantPath}.${RESOURCES.vical}/vical-service-api/latest`;
+
+    // Build the policies array
+    const vcPolicies: any[] = [
+      {
+        "policy": "signature"
+      },
+      {
+        "policy": "vical",
+        "vicalUrl": vicalUrl,
+        "enableDocumentTypeValidation": true,
+        "enableTrustedChainRoot": true
+      },
+    ];
+
+    // Add ETSI Trust List policy if enabled
+    if (this.config.useEtsiTrustList && this.config.trustRegistryUrl) {
+      vcPolicies.push({
+        "policy": "etsi-trust-list",
+        "trustRegistryUrl": this.config.trustRegistryUrl,
+        "expectedEntityType": "PID_PROVIDER",  // Match what we registered
+        "allowStaleSource": true,  // For demo purposes
+        "requireAuthenticated": false  // Demo mode - no signature validation
+      });
+      console.log(`   [INFO] ETSI Trust List policy added (registry: ${this.config.trustRegistryUrl})`);
+    }
 
     const request = {
       flow_type: "cross_device",
@@ -1312,17 +1472,7 @@ class CompleteJourney {
           ],
         },
         policies: {
-          vc_policies: [
-            {
-              "policy": "signature"
-            },
-            {
-              "policy": "vical",
-              "vicalUrl": vicalUrl,
-              "enableDocumentTypeValidation": true,
-              "enableTrustedChainRoot": true
-            },
-          ],
+          vc_policies: vcPolicies,
         },
       },
     };
@@ -1390,6 +1540,8 @@ const config: Config = {
   email: process.env.EMAIL || 'superadmin@walt.id',
   password: process.env.PASSWORD || 'super123456',
   port: parseInt(process.env.PORT || '3000'),
+  trustRegistryUrl: process.env.TRUST_REGISTRY_URL || 'http://127.0.0.1:7000',
+  useEtsiTrustList: false,  // Set via --etsi-trust-lists flag
 };
 
 const systemConfig: SuperadminConfig = {
@@ -1454,6 +1606,10 @@ System Init Options:
 
 Journey Test Options:
   (no options)          Run the complete mDoc + Client Attestation + VICAL journey
+  --etsi-trust-lists    Enable ETSI Trust List verification policy:
+                        1. Loads IACA certificate into waltid-trust-registry-service
+                        2. Adds etsi-trust-list policy to verification session
+                        Requires TRUST_REGISTRY_URL to be set or default (http://127.0.0.1:7000)
 
 Environment Variables:
   BASE_URL              Enterprise stack base URL (default: enterprise.localhost)
@@ -1463,6 +1619,7 @@ Environment Variables:
   EMAIL                 Admin email (default: admin@waltid.io)
   PASSWORD              Admin password (default: password)
   SUPERADMIN_TOKEN      Superadmin registration token (default: init1234)
+  TRUST_REGISTRY_URL    URL of waltid-trust-registry-service (default: http://127.0.0.1:7000)
 
 Examples:
   # Full system init (clean slate)
@@ -1474,10 +1631,23 @@ Examples:
   # Run the journey test
   npx tsx journey-complete.ts
 
+  # Run with ETSI Trust List verification
+  npx tsx journey-complete.ts --etsi-trust-lists
+
+  # Run with custom trust registry URL
+  TRUST_REGISTRY_URL=http://localhost:8080 npx tsx journey-complete.ts --etsi-trust-lists
+
   # Run with custom organization
   ORGANIZATION=myorg npx tsx journey-complete.ts --init-system
 `);
     return;
+  }
+  
+  // Check for ETSI Trust List flag
+  if (args.includes('--etsi-trust-lists')) {
+    config.useEtsiTrustList = true;
+    console.log('[CONFIG] ETSI Trust List verification ENABLED');
+    console.log(`         Trust Registry URL: ${config.trustRegistryUrl}`);
   }
   
   // Default: run the journey test
