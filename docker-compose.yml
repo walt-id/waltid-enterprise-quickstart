@@ -87,26 +87,26 @@ services:
     depends_on:
       - mongodb
 
-  caddy:
-    image: caddy:2-alpine
-    container_name: caddy
-    restart: unless-stopped
-    ports:
-      - "80:80"
-      - "443:443"
-    expose:
-      - "3000"  # Internal only, for container-to-container calls
-    volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile
-    networks:
-      mongodb_network:
-        aliases:
-          # These aliases allow other containers to reach Caddy via these hostnames
-          # Used for port 80 and 3000 internal calls
-          - enterprise.localhost
-          - waltid.enterprise.localhost
-    depends_on:
-      - waltid-enterprise
+  # caddy:
+  #   image: caddy:2-alpine
+  #   container_name: caddy
+  #   restart: unless-stopped
+  #   ports:
+  #     - "80:80"
+  #     - "443:443"
+  #   expose:
+  #     - "3000"  # Internal only, for container-to-container calls
+  #   volumes:
+  #     - ./Caddyfile:/etc/caddy/Caddyfile
+  #   networks:
+  #     mongodb_network:
+  #       aliases:
+  #         # These aliases allow other containers to reach Caddy via these hostnames
+  #         # Used for port 80 and 3000 internal calls
+  #         - enterprise.localhost
+  #         - waltid.enterprise.localhost
+  #   depends_on:
+  #     - waltid-enterprise
 
   waltid-enterprise:
     image: waltid/waltid-enterprise-api:${ENTERPRISE_API_DOCKER_IMAGE_TAG}
