@@ -108,6 +108,13 @@ spec:
             name: '{{ include "enterprise-stack.fullname" . }}-api-service'
             port:
               name: http
+      - path: /v2/
+        pathType: Prefix
+        backend:
+          service:
+            name: '{{ include "enterprise-stack.fullname" . }}-api-service'
+            port:
+              name: http
       - path: /.well-known/
         pathType: ImplementationSpecific
         backend:
