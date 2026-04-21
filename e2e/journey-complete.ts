@@ -1540,7 +1540,7 @@ const config: Config = {
   email: process.env.EMAIL || 'superadmin@walt.id',
   password: process.env.PASSWORD || 'super123456',
   port: parseInt(process.env.PORT || '3000'),
-  trustRegistryUrl: process.env.TRUST_REGISTRY_URL || 'http://127.0.0.1:3000',
+  trustRegistryUrl: process.env.TRUST_REGISTRY_URL || 'http://127.0.0.1:7005',
   useEtsiTrustList: false,  // Set via --etsi-trust-lists flag
 };
 
@@ -1609,7 +1609,7 @@ Journey Test Options:
   --etsi-trust-lists    Enable ETSI Trust List verification policy:
                         1. Loads IACA certificate into waltid-trust-registry-service
                         2. Adds etsi-trust-list policy to verification session
-                        Requires TRUST_REGISTRY_URL to be set or default (http://127.0.0.1:3000)
+                        Requires TRUST_REGISTRY_URL to be set or default (http://127.0.0.1:7005)
 
 Environment Variables:
   BASE_URL              Enterprise stack base URL (default: enterprise.localhost)
@@ -1619,7 +1619,7 @@ Environment Variables:
   EMAIL                 Admin email (default: admin@waltid.io)
   PASSWORD              Admin password (default: password)
   SUPERADMIN_TOKEN      Superadmin registration token (default: init1234)
-  TRUST_REGISTRY_URL    URL of waltid-trust-registry-service (default: http://127.0.0.1:3000)
+  TRUST_REGISTRY_URL    URL of waltid-trust-registry-service (default: http://127.0.0.1:7005)
 
 Examples:
   # Full system init (clean slate)
