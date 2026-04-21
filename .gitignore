@@ -4,4 +4,6 @@
 .auth_token
 .user_auth_token
 .user_id
-
+.did
+.vc_offer
+e2e/node_modules/
