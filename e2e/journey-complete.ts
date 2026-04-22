@@ -1299,6 +1299,40 @@ class CompleteJourney {
     } catch (error: any) {
       console.log(`   [WARN] Could not list enterprise sources: ${error.message}`);
     }
+    
+    // Link the trust registry to the verifier2 service
+    await this.linkVerifier2ToTrustRegistry();
+  }
+  
+  /**
+   * Link Verifier2 to Trust Registry Service
+   * 
+   * Updates the verifier2 service to reference the trust-registry service,
+   * enabling the ETSITrustListPolicy to resolve certificates without HTTP calls.
+   */
+  async linkVerifier2ToTrustRegistry() {
+    this.log('Link Verifier2 to Enterprise Trust Registry');
+    
+    const trustRegistryTarget = `${this.ctx.tenantPath}.${RESOURCES.trustRegistry}`;
+    
+    // Update verifier2 service with trust registry link
+    const patchRequest = {
+      trustRegistryService: trustRegistryTarget
+    };
+    
+    this.saveJson('link-verifier2-trust-registry-request.json', patchRequest);
+    
+    try {
+      const response = await this.orgClient.patch(
+        `/v1/${this.ctx.tenantPath}.${RESOURCES.verifier2}/resource-api/services/update`,
+        patchRequest
+      );
+      this.saveJson('link-verifier2-trust-registry-response.json', response.data);
+      console.log(`   [OK] Verifier2 linked to trust registry: ${trustRegistryTarget}`);
+    } catch (error: any) {
+      console.error(`   [ERROR] Failed to link verifier2 to trust registry: ${error.message}`);
+      throw error;
+    }
   }
 
   async createClientAttester() {
@@ -1598,18 +1632,17 @@ class CompleteJourney {
     // Add ETSI Trust List policy if enabled
     if (this.config.useEtsiTrustList) {
       if (this.config.useEnterpriseTrustRegistry) {
-        // Enterprise mode: use trustLists array with inline loading
-        // The enterprise trust registry service will be linked to verifier2
-        // and the policy will use the inline trustLists parameter
-        const trustRegistryApiUrl = `${this.ctx.orgBaseUrl}/v1/${this.ctx.tenantPath}.${RESOURCES.trustRegistry}/trust-registry-api`;
+        // Enterprise mode: no trustRegistryUrl needed!
+        // The verifier2 service is linked to the trust-registry service,
+        // and the ETSITrustListPolicy will use the enterprise resolver.
         vcPolicies.push({
           "policy": "etsi-trust-list",
-          "trustRegistryUrl": trustRegistryApiUrl,  // Point to enterprise service
+          // No trustRegistryUrl - uses enterprise service via internal resolution
           "expectedEntityType": "PID_PROVIDER",
           "allowStaleSource": true,
           "requireAuthenticated": false
         });
-        console.log(`   [INFO] ETSI Trust List policy added (enterprise registry: ${trustRegistryApiUrl})`);
+        console.log(`   [INFO] ETSI Trust List policy added (enterprise service via internal resolution)`);
       } else if (this.config.trustRegistryUrl) {
         // External service mode
         vcPolicies.push({
