@@ -200,6 +200,10 @@ class HttpClient {
   async post<T = any>(path: string, body?: any, contentType?: string): Promise<HttpResponse<T>> {
     return this.request<T>('POST', path, body, contentType);
   }
+
+  async patch<T = any>(path: string, body?: any): Promise<HttpResponse<T>> {
+    return this.request<T>('PATCH', path, body);
+  }
 }
 
 // ============================================================================
@@ -612,7 +616,13 @@ class CompleteJourney {
       await this.login();
       await this.createTenant();
       await this.createWallet();
-      await this.createVerifier2();
+      
+      // Create verifier2 early (without trust registry link) for non-enterprise mode
+      // For enterprise mode, we create it later after trust registry is ready
+      if (!this.config.useEnterpriseTrustRegistry) {
+        await this.createVerifier2();
+      }
+      
       await this.createServices();
       await this.linkX509Dependencies();
       await this.importKeys();
@@ -627,6 +637,8 @@ class CompleteJourney {
         if (this.config.useEnterpriseTrustRegistry) {
           await this.createEnterpriseTrustRegistry();
           await this.loadTrustSourceIntoEnterpriseRegistry();
+          // Now create verifier2 WITH trust registry link
+          await this.createVerifier2WithTrustRegistry();
         } else {
           await this.setupEtsiTrustRegistry();
         }
@@ -763,6 +775,41 @@ class CompleteJourney {
     } catch (error: any) {
       if (error.message?.includes('already exists')) {
         console.log(`   [OK] Verifier2 already exists`);
+      } else {
+        throw error;
+      }
+    }
+  }
+
+  /**
+   * Create Verifier2 with Trust Registry link
+   * 
+   * Creates the verifier2 service with a reference to the trust-registry service,
+   * enabling direct service resolution for ETSI Trust List policy.
+   */
+  async createVerifier2WithTrustRegistry() {
+    this.log('Create Verifier2 with Trust Registry link');
+    const trustRegistryTarget = `${this.ctx.tenantPath}.${RESOURCES.trustRegistry}`;
+    
+    const request = {
+      type: 'verifier2',
+      baseUrl: this.ctx.orgBaseUrl,
+      clientId: VERIFIER2_CLIENT_ID,
+      trustRegistryService: trustRegistryTarget,
+    };
+
+    this.saveJson('create-verifier2-with-trust-registry-request.json', request);
+
+    try {
+      const response = await this.orgClient.post(
+        `/v1/${this.ctx.tenantPath}.${RESOURCES.verifier2}/resource-api/services/create`,
+        request
+      );
+      this.saveJson('create-verifier2-with-trust-registry-response.json', response.data);
+      console.log(`   [OK] Verifier2 created with trust registry link: ${trustRegistryTarget}`);
+    } catch (error: any) {
+      if (error.message?.includes('already exists')) {
+        console.log(`   [WARN] Verifier2 already exists (may not have trust registry link)`);
       } else {
         throw error;
       }
@@ -1298,40 +1345,6 @@ class CompleteJourney {
       console.log(`   [OK] Enterprise trust registry now has ${sourcesResponse.data?.length || 0} source(s)`);
     } catch (error: any) {
       console.log(`   [WARN] Could not list enterprise sources: ${error.message}`);
-    }
-    
-    // Link the trust registry to the verifier2 service
-    await this.linkVerifier2ToTrustRegistry();
-  }
-  
-  /**
-   * Link Verifier2 to Trust Registry Service
-   * 
-   * Updates the verifier2 service to reference the trust-registry service,
-   * enabling the ETSITrustListPolicy to resolve certificates without HTTP calls.
-   */
-  async linkVerifier2ToTrustRegistry() {
-    this.log('Link Verifier2 to Enterprise Trust Registry');
-    
-    const trustRegistryTarget = `${this.ctx.tenantPath}.${RESOURCES.trustRegistry}`;
-    
-    // Update verifier2 service with trust registry link
-    const patchRequest = {
-      trustRegistryService: trustRegistryTarget
-    };
-    
-    this.saveJson('link-verifier2-trust-registry-request.json', patchRequest);
-    
-    try {
-      const response = await this.orgClient.patch(
-        `/v1/${this.ctx.tenantPath}.${RESOURCES.verifier2}/resource-api/services/update`,
-        patchRequest
-      );
-      this.saveJson('link-verifier2-trust-registry-response.json', response.data);
-      console.log(`   [OK] Verifier2 linked to trust registry: ${trustRegistryTarget}`);
-    } catch (error: any) {
-      console.error(`   [ERROR] Failed to link verifier2 to trust registry: ${error.message}`);
-      throw error;
     }
   }
 
