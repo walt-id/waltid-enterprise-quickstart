@@ -54,40 +54,9 @@ spec:
         - containerPort: 3000
           name: http-api
         volumeMounts:
-          - name: waltid-enterprise-api-config
-            mountPath: /config/_features.conf
-            readOnly: true
-            subPath: _features.conf
-          - name: waltid-enterprise-api-config
-            mountPath: /config/auth.conf
-            readOnly: true
-            subPath: auth.conf
-          - name: waltid-enterprise-api-config
-            mountPath: /config/database.conf
-            readOnly: true
-            subPath: database.conf
-          - name: waltid-enterprise-api-config
-            mountPath: /config/superadmin-registration.conf
-            readOnly: true
-            subPath: superadmin-registration.conf
-          - name: waltid-enterprise-api-config
-            mountPath: /config/enterprise.conf
-            readOnly: true
-            subPath: enterprise.conf
-          - name: waltid-enterprise-api-config
-            mountPath: /config/web.conf
-            readOnly: true
-            subPath: web.conf
-          - name: waltid-enterprise-api-config
-            mountPath: /config/resource-access.conf
-            readOnly: true
-            subPath: resource-access.conf
-          {{- if .Values.loggingConf }}
-          - name: waltid-enterprise-api-config
-            mountPath: /config/klogging.json
-            readOnly: true
-            subPath: klogging.json
-          {{- end }}
+        - name: waltid-enterprise-api-config
+          mountPath: /config
+          readOnly: true
       volumes:
         - name: waltid-enterprise-api-config
           configMap:
