@@ -1788,7 +1788,7 @@ async function importTrustListFromFile(config: Config, filePath: string): Promis
   // Login first
   console.log('\n>> Authenticating...');
   
-  const loginResponse = await fetch(`${baseUrl}/auth/login`, {
+  const loginResponse = await fetch(`${baseUrl}/auth/account/emailpass`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email: config.email, password: config.password }),
@@ -1799,8 +1799,8 @@ async function importTrustListFromFile(config: Config, filePath: string): Promis
     process.exit(1);
   }
   
-  const loginData = await loginResponse.json() as { token?: string };
-  const token = loginData.token;
+  const loginData = await loginResponse.json() as { token?: string; accessToken?: string; data?: { token?: string } };
+  const token = loginData.token || loginData.accessToken || loginData.data?.token;
   
   if (!token) {
     console.error('No token received from login');
@@ -1878,11 +1878,10 @@ async function importTrustListFromFile(config: Config, filePath: string): Promis
   );
   
   if (sourcesResponse.ok) {
-    const sourcesData = await sourcesResponse.json() as { sources?: Array<{ sourceId: string; displayName?: string; entitiesCount?: number }> };
-    const sources = sourcesData.sources || [];
+    const sources = await sourcesResponse.json() as Array<{ sourceId: string; displayName?: string; entitiesCount?: number }>;
     console.log(`   [OK] Trust registry now has ${sources.length} source(s):`);
     for (const src of sources) {
-      console.log(`        - ${src.sourceId}${src.displayName ? ` (${src.displayName})` : ''}: ${src.entitiesCount || 0} entities`);
+      console.log(`        - ${src.sourceId}${src.displayName ? ` (${src.displayName})` : ''}`);
     }
   }
   
