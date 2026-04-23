@@ -15,6 +15,14 @@ spec:
       annotations:
         latest-restart: {{ now | unixEpoch | quote }}
     spec:
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app: waltid-enterprise-api
+              {{- include "enterprise-stack.selectorLabels" . | nindent 14 }}
       securityContext:
         runAsNonRoot: true
         runAsUser: 10001
