@@ -1,3 +1,4 @@
+# Port 80 - standard HTTP access
 http://*.enterprise.localhost, http://enterprise.localhost {
 	@didjson path_regexp didjson ^/.+/did\.json$
 	handle @didjson {
@@ -18,10 +19,15 @@ http://*.enterprise.localhost, http://enterprise.localhost {
 	handle /v2/* {
 		reverse_proxy waltid-enterprise:3000
 	}
-    handle /.well-known/* {
-        reverse_proxy waltid-enterprise:3000
-    }
+	handle /.well-known/* {
+		reverse_proxy waltid-enterprise:3000
+	}
 	handle {
 		reverse_proxy waltid-enterprise-ui:3000
 	}
+}
+
+# Port 3000 - internal API calls (for container-to-container communication)
+http://*.enterprise.localhost:3000, http://enterprise.localhost:3000 {
+	reverse_proxy waltid-enterprise:3000
 }
