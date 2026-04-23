@@ -1749,6 +1749,146 @@ class CompleteJourney {
   }
 }
 
+/**
+ * Import a trust list file into the Enterprise Trust Registry.
+ * 
+ * This standalone function allows importing trust lists (TSL XML, LoTE JSON, PILOT)
+ * into an existing trust-registry service in the enterprise stack.
+ * 
+ * @param config - Configuration with baseUrl, organization, tenant, etc.
+ * @param filePath - Path to the trust list file
+ */
+async function importTrustListFromFile(config: Config, filePath: string): Promise<void> {
+  console.log('\n=== Import Trust List into Enterprise Trust Registry ===\n');
+  
+  // Check if file exists
+  if (!existsSync(filePath)) {
+    console.error(`Error: File not found: ${filePath}`);
+    process.exit(1);
+  }
+  
+  // Read file content
+  const content = readFileSync(filePath, 'utf-8');
+  const fileName = filePath.split('/').pop() || 'unknown';
+  const isXml = content.trim().startsWith('<') || fileName.endsWith('.xml');
+  const isJson = content.trim().startsWith('{') || content.trim().startsWith('[') || fileName.endsWith('.json');
+  
+  console.log(`File: ${filePath}`);
+  console.log(`Format: ${isXml ? 'XML (TSL/PILOT)' : isJson ? 'JSON (LoTE)' : 'Unknown'}`);
+  console.log(`Size: ${content.length} bytes`);
+  
+  // Create HTTP client
+  const baseUrl = `http://${config.organization}.${config.baseUrl}:${config.port}`;
+  const tenantPath = `${config.organization}.${config.tenant}`;
+  
+  console.log(`\nTarget: ${baseUrl}`);
+  console.log(`Tenant: ${tenantPath}`);
+  console.log(`Service: ${RESOURCES.trustRegistry}`);
+  
+  // Login first
+  console.log('\n>> Authenticating...');
+  
+  const loginResponse = await fetch(`${baseUrl}/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: config.email, password: config.password }),
+  });
+  
+  if (!loginResponse.ok) {
+    console.error(`Authentication failed: ${loginResponse.status} ${loginResponse.statusText}`);
+    process.exit(1);
+  }
+  
+  const loginData = await loginResponse.json() as { token?: string };
+  const token = loginData.token;
+  
+  if (!token) {
+    console.error('No token received from login');
+    process.exit(1);
+  }
+  
+  console.log('   [OK] Authenticated');
+  
+  // Generate source ID from filename
+  const sourceId = fileName.replace(/\.[^.]+$/, '').replace(/[^a-zA-Z0-9-_]/g, '-');
+  
+  // Determine if we should load from URL or content
+  // For local files, we load via content
+  const loadRequest: {
+    sourceId: string;
+    content?: string;
+    url?: string;
+    validateSignature: boolean;
+  } = {
+    sourceId: sourceId,
+    content: content,
+    validateSignature: false,  // Local files typically aren't signed
+  };
+  
+  console.log(`\n>> Loading trust source: ${sourceId}`);
+  
+  const loadResponse = await fetch(
+    `${baseUrl}/v1/${tenantPath}.${RESOURCES.trustRegistry}/trust-registry-api/sources/load`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify(loadRequest),
+    }
+  );
+  
+  if (!loadResponse.ok) {
+    const errorText = await loadResponse.text();
+    console.error(`\n[ERROR] Failed to load trust source: ${loadResponse.status}`);
+    console.error(errorText);
+    process.exit(1);
+  }
+  
+  const loadData = await loadResponse.json() as {
+    success?: boolean;
+    sourceId?: string;
+    entitiesLoaded?: number;
+    servicesLoaded?: number;
+    identitiesLoaded?: number;
+    error?: string;
+  };
+  
+  if (!loadData.success) {
+    console.error(`\n[ERROR] Trust source load failed: ${loadData.error || 'unknown error'}`);
+    process.exit(1);
+  }
+  
+  console.log(`   [OK] Trust source loaded successfully!`);
+  console.log(`\n   Source ID: ${loadData.sourceId || sourceId}`);
+  console.log(`   Entities:  ${loadData.entitiesLoaded || 0}`);
+  console.log(`   Services:  ${loadData.servicesLoaded || 0}`);
+  console.log(`   Identities: ${loadData.identitiesLoaded || 0}`);
+  
+  // List all sources to confirm
+  console.log('\n>> Verifying loaded sources...');
+  
+  const sourcesResponse = await fetch(
+    `${baseUrl}/v1/${tenantPath}.${RESOURCES.trustRegistry}/trust-registry-api/sources`,
+    {
+      method: 'GET',
+      headers: { 'Authorization': `Bearer ${token}` },
+    }
+  );
+  
+  if (sourcesResponse.ok) {
+    const sourcesData = await sourcesResponse.json() as { sources?: Array<{ sourceId: string; displayName?: string; entitiesCount?: number }> };
+    const sources = sourcesData.sources || [];
+    console.log(`   [OK] Trust registry now has ${sources.length} source(s):`);
+    for (const src of sources) {
+      console.log(`        - ${src.sourceId}${src.displayName ? ` (${src.displayName})` : ''}: ${src.entitiesCount || 0} entities`);
+    }
+  }
+  
+  console.log('\n[SUCCESS] Trust list imported successfully!\n');
+}
+
 // Main execution
 const config: Config = {
   baseUrl: process.env.BASE_URL || 'enterprise.localhost',
@@ -1809,6 +1949,20 @@ async function main() {
     return;
   }
   
+  // Handle --import-trust-list command
+  const importTrustListIndex = args.findIndex(arg => arg === '--import-trust-list');
+  if (importTrustListIndex !== -1) {
+    const filePath = args[importTrustListIndex + 1];
+    if (!filePath) {
+      console.error('Error: --import-trust-list requires a file path argument');
+      console.error('Usage: npx tsx journey-complete.ts --import-trust-list <path-to-trust-list-file>');
+      process.exit(1);
+    }
+    
+    await importTrustListFromFile(config, filePath);
+    return;
+  }
+  
   if (args.includes('--help') || args.includes('-h')) {
     console.log(`
 Usage: npx tsx journey-complete.ts [options]
@@ -1821,6 +1975,13 @@ System Init Options:
   --init-system         Run full system initialization sequence:
                         recreate-db -> create-superadmin -> init-db -> create-organization
   --full-init           Alias for --init-system
+
+Trust Registry Commands:
+  --import-trust-list <file>
+                        Import a trust list file into the Enterprise Trust Registry.
+                        Supports TSL XML, LoTE JSON, and PILOT formats.
+                        The trust-registry service must already exist in the tenant.
+                        Example: --import-trust-list /path/to/trust_list.xml
 
 Journey Test Options:
   (no options)          Run the complete mDoc + Client Attestation + VICAL journey
@@ -1860,6 +2021,9 @@ Examples:
 
   # Run with ETSI Trust List verification (enterprise service - no external deps)
   npx tsx journey-complete.ts --enterprise-trust-registry
+
+  # Import a trust list file into enterprise trust registry
+  npx tsx journey-complete.ts --import-trust-list ./samples/trust_list.xml
 
   # Run with custom external trust registry URL
   TRUST_REGISTRY_URL=http://localhost:8080 npx tsx journey-complete.ts --etsi-trust-lists
