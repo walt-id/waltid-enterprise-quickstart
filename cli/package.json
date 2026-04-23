@@ -1,0 +1,29 @@
+{
+  "name": "walt-id-client-attestation-journey",
+  "version": "1.0.0",
+  "description": "mDoc + Client Attestation + VICAL customer journey test (TypeScript)",
+  "type": "module",
+  "main": "journey.ts",
+  "scripts": {
+    "start": "tsx journey.ts",
+    "build": "tsc",
+    "test": "tsx journey.ts"
+  },
+  "keywords": [
+    "walt.id",
+    "mdoc",
+    "client-attestation",
+    "vical",
+    "typescript"
+  ],
+  "author": "walt.id",
+  "license": "Apache-2.0",
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "tsx": "^4.7.0",
+    "typescript": "^5.3.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

@@ -87,19 +87,44 @@ services:
     depends_on:
       - mongodb
 
+  caddy:
+    image: caddy:2-alpine
+    container_name: caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+    networks:
+      - mongodb_network
+    depends_on:
+      - waltid-enterprise
+      - waltid-enterprise-ui
+
   waltid-enterprise:
     image: waltid/waltid-enterprise-api:${ENTERPRISE_API_DOCKER_IMAGE_TAG}
     # environment:
     #   - LOG_LEVEL=trace
     ports:
       - "3000:3000"
+    extra_hosts:
+      - "waltid.enterprise.localhost:host-gateway"
     volumes:
       - ./config:/config
     networks:
       - mongodb_network
     depends_on:
       - mongodb
-    command: "--log-level=trace"
+
+  waltid-enterprise-ui:
+    image: waltid/waltid-enterprise-ui:${ENTERPRISE_API_DOCKER_IMAGE_TAG}
+    ports:
+      - "3001:3000"
+    networks:
+      - mongodb_network
+    depends_on:
+      - waltid-enterprise
 
 volumes:
   mongo-keyfile-vol:
