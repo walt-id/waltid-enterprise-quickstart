@@ -15,6 +15,13 @@ Complete TypeScript implementation of the enterprise mDoc issuance journey with 
 - **`package.json`** - Node.js dependencies
 - **`tsconfig.json`** - TypeScript configuration
 
+### Features
+- **mDoc Issuance** - Full ISO 18013-5 mobile driving license flow
+- **Client Attestation** - Wallet attestation enforcement
+- **VICAL** - Verifiable Issuer Certificate Authority List
+- **ETSI Trust Lists** - Enterprise trust registry integration
+- **Trust List Import** - Import TSL XML, LoTE JSON, or PILOT format trust lists
+
 ## Journey Steps
 
 1. Login
@@ -118,12 +125,66 @@ System Init Options:
   --init-system         Run full system initialization sequence
   --full-init           Alias for --init-system
 
+Trust Registry Commands:
+  --import-trust-list <file>
+                        Import a trust list file into the Enterprise Trust Registry.
+                        Supports TSL XML, LoTE JSON, and PILOT formats.
+                        The trust-registry service must already exist in the tenant.
+
 Journey Test Options:
   (no options)          Run the complete mDoc + Client Attestation + VICAL journey
+  --etsi-trust-lists    Enable ETSI Trust List verification using external service
+  --enterprise-trust-registry
+                        Use Enterprise Trust Registry Service (no external deps)
 
 Other Options:
   --help, -h            Show usage information
 ```
+
+## ETSI Trust List Verification
+
+The journey test supports ETSI Trust List verification for validating credential issuer certificates against trust lists.
+
+### Option 1: Enterprise Trust Registry (Recommended)
+
+```bash
+# Run journey with enterprise trust registry
+npx tsx journey-complete.ts --enterprise-trust-registry
+```
+
+This will:
+1. Create a `trust-registry` service in the tenant
+2. Load the IACA certificate as a trust source
+3. Link the trust registry to verifier2
+4. Add `etsi-trust-list` policy to verification sessions
+
+### Option 2: External Trust Registry Service
+
+```bash
+# Start the external trust registry service first
+TRUST_REGISTRY_URL=http://localhost:7005 npx tsx journey-complete.ts --etsi-trust-lists
+```
+
+### Importing Custom Trust Lists
+
+Once a trust-registry service exists, you can import additional trust lists:
+
+```bash
+# Import a TSL XML file (e.g., South African DFID trust list)
+npx tsx journey-complete.ts --import-trust-list /path/to/trust_list.xml
+
+# Import a LoTE JSON file
+npx tsx journey-complete.ts --import-trust-list /path/to/lote_source.json
+
+# Example with the sample ZA trust list
+npx tsx journey-complete.ts --import-trust-list ~/dev/walt-id/waltid-architecture/enterprise/trust-lists/samples/trust_list_structure_xml.xml
+```
+
+The command will:
+- Detect the file format (XML or JSON)
+- Load the trust source into the enterprise trust registry
+- Report entities, services, and identities loaded
+- List all sources in the registry after import
 
 ## Key and Certificate Inventory
 
