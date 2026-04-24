@@ -60,6 +60,7 @@ cd waltid-enterprise-quickstart
 | **create-did-service**         | Create DID service in the tenant.                                           |
 | **create-did**                 | Create a did:key for credential issuance.                                   |
 | **create-issuer-service**      | Create issuer service in the tenant.                                        |
+| **create-verifier2-service**   | Create verifier2 service in the tenant.                                     |
 | **issue-jwt-vc**               | Issue a W3C JWT credential.                                                 |
 | **list-organizations**         | List all organizations under the superadmin account.                        |
 | **list-accounts**              | List all accounts.                                                          |
@@ -90,7 +91,7 @@ cd waltid-enterprise-quickstart
 
 **Run The Stack**
 ```bash
-docker-compose up
+docker compose up
 ```
 
 Once the docker-compose is running, you can visit [enterprise.localhost:3000/swagger](http://enterprise.localhost:3000/swagger) to access the Enterprise Stack APIs.
@@ -116,7 +117,6 @@ Licensed under our Enterprise License.
 <div align="center">
 <img src="./assets/walt-banner.png" alt="walt.id banner" />
 </div>
-
 
 
 

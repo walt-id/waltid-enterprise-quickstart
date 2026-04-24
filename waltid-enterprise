@@ -1050,7 +1050,7 @@ superadmin_create_account() {
 
     info "Registering token \"${superadmin_token}\" provided in the config/superadmin-registration.conf file"
     response=$(curl -X 'POST' \
-        'http://localhost:3000/v1/superadmin/create-by-token' \
+        'http://enterprise.localhost:3000/v1/superadmin/create-by-token' \
         -H 'accept: */*' \
         -H 'Content-Type: application/json' \
         -d "${superadmin_token}" 2> /dev/null)
@@ -1071,7 +1071,7 @@ superadmin_login() {
 
     info "Logging in super admin with credentials provided in the superadmin-registration.conf file"
     response=$(curl -X 'POST' \
-        'http://localhost:3000/auth/account/emailpass' \
+        'http://enterprise.localhost:3000/auth/account/emailpass' \
         -H 'accept: application/json' \
         -H 'Content-Type: application/json' \
         -d "{
@@ -1097,7 +1097,7 @@ init_db() {
 
     info "Initializing the database based on the config/database.conf file"
     response=$(curl -X 'POST' \
-        'http://localhost:3000/v1/admin/initial-setup' \
+        'http://enterprise.localhost:3000/v1/admin/initial-setup' \
         -H 'accept: */*' \
         -H "Authorization: Bearer $AUTH_TOKEN" \
         -d '' 2> /dev/null)
@@ -1117,7 +1117,7 @@ recreate_collections() {
 
     info "Recreating all database collections..."
     response=$(curl -X 'POST' \
-        'http://localhost:3000/v1/dev/database-recreate' \
+        'http://enterprise.localhost:3000/v1/dev/database-recreate' \
         -H 'accept: */*' \
         -d '' 2> /dev/null)
 
@@ -1142,7 +1142,7 @@ create_organization() {
 
     info "Creating organization '$ORG_ID'..." 
     response=$(curl -X 'POST' \
-        'http://localhost:3000/v1/admin/organizations' \
+        'http://enterprise.localhost:3000/v1/admin/organizations' \
         -H 'accept: */*' \
         -H "Authorization: Bearer $AUTH_TOKEN" \
         -H 'Content-Type: application/json' \
@@ -1176,7 +1176,7 @@ create_user_account() {
 
     info "Creating '$USER_EMAIL' account..."
     response=$(curl -X 'POST' \
-        'http://localhost:3000/v1/admin/account/register' \
+        'http://enterprise.localhost:3000/v1/admin/account/register' \
         -H 'accept: application/json' \
         -H "Authorization: Bearer $AUTH_TOKEN" \
         -H 'Content-Type: application/json' \
@@ -1254,7 +1254,7 @@ add_admin_role_to_user() {
 
     info "Adding role '$ROLE' to user '$USER_ID' from organization '$ROOT_ORGANIZATION'..."
     response=$(curl -X 'POST' \
-        "http://localhost:3000/v1/admin/account/$USER_ID/roles/add/$ROOT_ORGANIZATION/$ROLE" \
+        "http://enterprise.localhost:3000/v1/admin/account/$USER_ID/roles/add/$ROOT_ORGANIZATION/$ROLE" \
         -H 'accept: application/json' \
         -H "Authorization: Bearer $AUTH_TOKEN" \
         -d '' 2> /dev/null)
@@ -1356,6 +1356,34 @@ create_service() {
     fi
 }
 
+create_service_dependency() {
+
+    get_user_auth_token AUTH_TOKEN
+
+    SERVICE_NAME=$1
+    SERVICE_TYPE=$2
+    DEPENDENCY_REF=$3
+
+    SERVICE_ID="$ROOT_ORGANIZATION.$TENANT.$SERVICE_NAME"
+
+    response=$(curl -X 'POST' \
+        "http://$ROOT_ORGANIZATION.enterprise.localhost:3000/v1/$SERVICE_ID/$SERVICE_TYPE/dependencies/add" \
+        -H 'accept: */*' \
+        -H "Authorization: Bearer $AUTH_TOKEN" \
+        -H 'Content-Type: application/json' \
+        -d "$DEPENDENCY_REF" 2> /dev/null)
+
+    if [[ $response == *"exception"* ]]; then
+        error "Service Dependency of '$SERVICE_ID' to '$DEPENDENCY_REF' could not be created."
+        error "$response"
+        result=-1
+    else
+        info "Service Dependency of '$SERVICE_ID' to '$DEPENDENCY_REF' successfully created."
+        echo "$response"
+    fi
+}
+
+
 create_kms_service() {
     create_service "kms" "kms1"
 }
@@ -1405,6 +1433,7 @@ generate_status_key() {
 
 create_did_service() {
    create_service "did" "$DID_SERVICE"
+   create_service_dependency "$DID_SERVICE" "did-service-api/dids" "$ROOT_ORGANIZATION.$TENANT.kms1"
 }
 
 create_did() {
@@ -1503,6 +1532,32 @@ create_issuer_service() {
     fi
 }
 
+create_verifier2_service() {
+    
+    VERIFIER2_SERVICE_ID="$ROOT_ORGANIZATION.$TENANT.verifier2"
+
+    get_user_auth_token AUTH_TOKEN
+
+    response=$(curl -X 'POST' \
+        "http://$ROOT_ORGANIZATION.enterprise.localhost:3000/v1/$VERIFIER2_SERVICE_ID/resource-api/services/create" \
+        -H 'accept: */*' \
+        -H "Authorization: Bearer $AUTH_TOKEN" \
+        -H 'Content-Type: application/json' \
+        -d '{
+            "type": "verifier2",
+            "baseUrl": "http://waltid.enterprise.localhost:3000",
+            "clientId": "decentralized_identifier:did:key:abc123"
+        }' 2> /dev/null)
+
+    if [[ $response == *"exception"* ]]; then
+        error "Verifier2 Service $VERIFIER2_SERVICE_ID could not be created."
+        error "$response"
+        result=-1
+    else
+        info "Verifier2 Service $VERIFIER2_SERVICE_ID successfully created."
+    fi
+}
+
 create_verifier_service() {
     
     VERIFIER_SERVICE_ID="$ROOT_ORGANIZATION.$TENANT.verifier1"
@@ -1516,7 +1571,7 @@ create_verifier_service() {
         -H 'Content-Type: application/json' \
         -d '{
             "type": "verifier",
-            "baseUrl": "http://localhost:3000"
+            "baseUrl": "http://enterprise.localhost:3000"
         }' 2> /dev/null)
 
     if [[ $response == *"exception"* ]]; then
@@ -1686,7 +1741,7 @@ list_organizations() {
     get_superadmin_auth_token AUTH_TOKEN
 
     response=$(curl -X 'GET' \
-        'http://localhost:3000/v1/admin/organizations?maxPageSize=100&page=0' \
+        'http://enterprise.localhost:3000/v1/admin/organizations?maxPageSize=100&page=0' \
         -H 'accept: application/json' \
         -H "Authorization: Bearer $AUTH_TOKEN" 2> /dev/null)
 
@@ -1707,7 +1762,7 @@ list_accounts() {
     get_superadmin_auth_token AUTH_TOKEN
 
     response=$(curl -X 'GET' \
-        'http://localhost:3000/v1/admin/accounts?maxPageSize=100&page=0' \
+        'http://enterprise.localhost:3000/v1/admin/accounts?maxPageSize=100&page=0' \
         -H 'accept: application/json' \
         -H "Authorization: Bearer $AUTH_TOKEN" 2> /dev/null)
 
@@ -1954,6 +2009,7 @@ Commands:
   create-did-service                Create DID service in the tenant
   create-did                        Create a did:key for the credential issuance
   create-issuer-service             Create issuer service in the tenenant
+  create-verifier2-service          Create verifier2 service in the tenant
   issue-jwt-vc                      Issue a W3C JWT credential
   wallet-setup                      Convenient way to initialize the wallet service and all its dependant services
   wallet-credential-receive         Receive a previously issued credential
@@ -2045,6 +2101,10 @@ case "$1" in
         init
         create_issuer_service
         ;;
+    create-verifier2-service)
+        init
+        create_verifier2_service
+        ;;
     # create-verifier-service)
     #     init
     #     create_verifier_service
@@ -2101,5 +2161,4 @@ case "$1" in
         help
         ;;
 esac
-
 
