@@ -1,0 +1,7 @@
+node_modules
+.output
+.nuxt
+.cache
+.walt-config.json
+dist
+.env
