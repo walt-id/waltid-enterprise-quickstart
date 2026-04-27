@@ -267,6 +267,10 @@ class HttpClient {
     return this.request<T>('PATCH', path, body);
   }
 
+  async put<T = any>(path: string, body?: any): Promise<HttpResponse<T>> {
+    return this.request<T>('PUT', path, body);
+  }
+
   async delete<T = any>(path: string): Promise<HttpResponse<T>> {
     return this.request<T>('DELETE', path);
   }
@@ -1667,28 +1671,32 @@ class WaltCLI {
       console.log('\n--- Step 1: Create Trust Registry Service ---');
       await this.setupCreateTrustRegistry();
       
-      // Step 2: Import public trust lists from URLs
-      console.log('\n--- Step 2: Import Public Trust Lists ---');
+      // Step 2: Link Verifier2 to Trust Registry
+      console.log('\n--- Step 2: Link Verifier2 to Trust Registry ---');
+      await this.flowLinkVerifier2ToTrustRegistry();
+      
+      // Step 3: Import public trust lists from URLs
+      console.log('\n--- Step 3: Import Public Trust Lists ---');
       await this.flowImportPublicTrustLists();
       
-      // Step 3: Load our IACA certificate into trust registry
-      console.log('\n--- Step 3: Load Local IACA Certificate ---');
+      // Step 4: Load our IACA certificate into trust registry
+      console.log('\n--- Step 4: Load Local IACA Certificate ---');
       await this.flowLoadIacaIntoTrustRegistry();
       
-      // Step 4: List loaded trust sources
-      console.log('\n--- Step 4: List Trust Sources ---');
+      // Step 5: List loaded trust sources
+      console.log('\n--- Step 5: List Trust Sources ---');
       await this.flowListTrustSources();
       
-      // Step 5: Create verification session with etsi-trust-list policy
-      console.log('\n--- Step 5: Create Verification Session with ETSI Trust List Policy ---');
+      // Step 6: Create verification session with etsi-trust-list policy
+      console.log('\n--- Step 6: Create Verification Session with ETSI Trust List Policy ---');
       await this.flowCreateEtsiVerificationSession();
       
-      // Step 6: Wallet presents credential
-      console.log('\n--- Step 6: Present Credential ---');
+      // Step 7: Wallet presents credential
+      console.log('\n--- Step 7: Present Credential ---');
       await this.runWalletPresent();
       
-      // Step 7: Assert success
-      console.log('\n--- Step 7: Verify Result ---');
+      // Step 8: Assert success
+      console.log('\n--- Step 8: Verify Result ---');
       await this.runAssertFinalStatus();
       
       console.log('\n========================================');
@@ -1698,6 +1706,59 @@ class WaltCLI {
       this.saveHttpLog();
       console.log(`Logs saved to: ${this.ctx.workdir}`);
     }
+  }
+
+  /**
+   * Link the Verifier2 service to the Trust Registry service.
+   * This allows the etsi-trust-list policy to resolve certificates against the enterprise registry.
+   */
+  async flowLinkVerifier2ToTrustRegistry(): Promise<void> {
+    const step = this.nextStep();
+    this.log('Link Verifier2 to Trust Registry', 'FLOW');
+    
+    const trustRegistryTarget = `${this.ctx.tenantPath}.${RESOURCES.trustRegistry}`;
+    const verifier2Target = `${this.ctx.tenantPath}.${RESOURCES.verifier2}`;
+    
+    // First, get current verifier2 configuration
+    const currentConfig = await this.orgClient.get(
+      `/v1/${verifier2Target}/verifier2-service-api/configuration/view`
+    );
+    this.saveJson('verifier2-config-before.json', currentConfig.data, step);
+    
+    // Check if already linked
+    if (currentConfig.data.trustRegistryService === trustRegistryTarget) {
+      console.log(`   [SKIP] Verifier2 already linked to trust registry`);
+      return;
+    }
+    
+    // Update configuration with trust registry link
+    const updatedConfig = {
+      ...currentConfig.data,
+      trustRegistryService: trustRegistryTarget,
+    };
+    this.saveJson('verifier2-config-update-request.json', updatedConfig, step);
+    
+    try {
+      await this.orgClient.put(
+        `/v1/${verifier2Target}/verifier2-service-api/configuration/update`,
+        updatedConfig
+      );
+      console.log(`   [OK] Verifier2 linked to trust registry: ${trustRegistryTarget}`);
+    } catch (error: any) {
+      console.log(`   [WARN] Failed to update verifier2 config: ${error.message}`);
+      throw error;
+    }
+    
+    // Verify the update
+    const verifyConfig = await this.orgClient.get(
+      `/v1/${verifier2Target}/verifier2-service-api/configuration/view`
+    );
+    this.saveJson('verifier2-config-after.json', verifyConfig.data, step);
+    
+    if (verifyConfig.data.trustRegistryService !== trustRegistryTarget) {
+      throw new Error('Trust registry link was not persisted');
+    }
+    console.log(`   [OK] Link verified`);
   }
 
   /**
