@@ -73,12 +73,41 @@ These commands execute use cases (issue/verify credentials). Assumes setup is co
 | `--run-wallet-present` | Wallet presents credential |
 | `--run-assert-final-status` | Assert final verification status is SUCCESSFUL |
 
-### Flow Commands (Placeholders)
+### Flow Commands
 
 | Command | Description |
 |---------|-------------|
-| `--flow-etsi-trust-lists` | Run ETSI trust lists verification flow |
-| `--flow-credential-revocation` | Run credential revocation flow |
+| `--flow-etsi-trust-lists` | Run ETSI trust lists verification flow (see below) |
+| `--flow-credential-revocation` | Run credential revocation flow (placeholder) |
+
+#### ETSI Trust Lists Flow (`--flow-etsi-trust-lists`)
+
+Demonstrates trust list verification using the Enterprise Trust Registry Service. This flow assumes the primary setup has been run first (tenant, wallet, credentials exist).
+
+**Steps:**
+1. Create trust registry service (if not exists)
+2. Link Verifier2 to Trust Registry
+3. Import public trust lists:
+   - **EWC Pilot** (JSON/LoTE format, unauthenticated)
+   - **Austrian TSL** (XML format, XMLDSig signature validated → `VALIDATED`)
+4. Load local IACA certificate into trust registry (LoTE format)
+5. List trust sources with authenticity states
+6. Create verification session with policies: `signature`, `vical`, `etsi-trust-list`
+7. Present credential
+8. Verify result
+
+**Authenticity States:**
+- ✅ `VALIDATED` - XMLDSig signature verified (passes `requireAuthenticated: true`)
+- ⚠️ `SKIPPED_DEMO` - No signature validation (fails `requireAuthenticated: true`)
+
+**Usage:**
+```bash
+# First run full setup
+npx tsx walt.ts
+
+# Then run the ETSI flow
+npx tsx walt.ts --flow-etsi-trust-lists
+```
 
 ### Other Commands
 
