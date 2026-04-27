@@ -1,18 +1,17 @@
 # walt.ts - Enterprise Stack CLI Tool
 
-A comprehensive CLI for setting up and running use cases against the walt.id Enterprise stack.
+A comprehensive CLI for setting up and running use cases against the walt.id Enterprise stack. The primary use case is issuing and verifying an mDL (mobile Driver's License) credential.
 
 ## Quick Start
 
 ```bash
-cd cli
 npm install
 
-# Full setup + run (default)
-npx tsx walt.ts
-
-# Recreate database and start fresh
+# First time: recreate DB, create superadmin/org/admin, run full setup + primary use case
 npx tsx walt.ts --recreate
+
+# Subsequent runs: re-run setup + primary use case without recreating the DB
+npx tsx walt.ts
 ```
 
 ## Commands Reference
@@ -21,9 +20,8 @@ npx tsx walt.ts --recreate
 
 | Command | Description |
 |---------|-------------|
-| `--recreate` | Recreate database and run full setup + primary use case |
-| `--init-system` | Run system initialization only (no setup/run) |
-| `--setup-recreate` | Recreate database only (alias for --init-system) |
+| `--recreate` | Recreate DB, create superadmin/org/admin, run full setup + primary use case |
+| `--setup-recreate` | Run system initialization only (recreate DB, create superadmin/org/admin) |
 | `--setup-create-superadmin` | Create superadmin account |
 | `--setup-create-organization` | Create organization |
 | `--setup-create-admin-role` | Check/report admin role (auto-created with org) |
@@ -68,7 +66,7 @@ These commands execute use cases (issue/verify credentials). Assumes setup is co
 
 | Command | Description |
 |---------|-------------|
-| `--run-all` | Run primary use case (issue + verify mDL) |
+| `--run-all` | Run primary use case |
 | `--run-create-credential-offer` | Create credential offer |
 | `--run-wallet-receive-credential` | Wallet receives credential via pre-authorized flow |
 | `--run-create-verification-session` | Create verifier2 verification session |
@@ -163,7 +161,6 @@ export BASE_URL=https://enterprise.test.waltid.cloud
 export ORGANIZATION=waltid-cli
 # Note: PORT is auto-omitted for HTTPS URLs
 
-npx tsx walt.ts --setup-login
 npx tsx walt.ts --setup-all
 ```
 
