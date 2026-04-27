@@ -204,3 +204,8 @@ The script is tolerant to already-provisioned resources:
 - Node.js 18+
 - Enterprise stack running at configured URL
 - Superadmin credentials in `config/superadmin-registration.conf`
+
+
+
+LEGACY SCRIPT:
+npx tsx journey-complete.ts --enterprise-trust-registry
