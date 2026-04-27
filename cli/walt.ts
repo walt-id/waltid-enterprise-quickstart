@@ -1764,7 +1764,7 @@ class WaltCLI {
   /**
    * Import public trust lists from well-known URLs.
    * Demonstrates loading different trust list formats:
-   * - TSL XML (ETSI TS 119 612) - Austrian TSL
+   * - TSL XML (ETSI TS 119 612) - Austrian TSL (with signature validation for authenticated demo)
    * - LoTE JSON (ETSI TS 119 602) - EWC Pilot format  
    * - EU LoTL (List of Trusted Lists) - Contains pointers
    */
@@ -1773,14 +1773,14 @@ class WaltCLI {
       {
         sourceId: 'ewc-pilot',
         url: 'https://ewc-consortium.github.io/ewc-trust-list/EWC-TL',
-        description: 'EWC Pilot Trust List (JSON format)',
+        description: 'EWC Pilot Trust List (JSON/LoTE format, unauthenticated)',
         validateSignature: false, // EWC pilot list is not signed
       },
       {
-        sourceId: 'at-tsl', 
+        sourceId: 'at-tsl-authenticated', 
         url: 'https://www.signatur.rtr.at/currenttl.xml',
-        description: 'Austrian Trusted Service List (XML/TSL format)',
-        validateSignature: false, // Skip for demo - signature validation is slow
+        description: 'Austrian TSL (XML format, XMLDSig VALIDATED)',
+        validateSignature: true, // Enable signature validation → AuthenticityState.VALIDATED
       },
       // Note: EU LoTL contains pointers to member state TSLs, not actual entities
       // Uncomment to test pointer-only loading:
@@ -1917,6 +1917,7 @@ class WaltCLI {
 
   /**
    * List all loaded trust sources in the trust registry.
+   * Shows authenticity state to demonstrate authenticated vs unauthenticated sources.
    */
   async flowListTrustSources(): Promise<void> {
     const step = this.nextStep();
@@ -1933,12 +1934,21 @@ class WaltCLI {
       sourceFamily?: string;
       territory?: string;
       entitiesCount?: number;
+      authenticityState?: string;
     }>;
     
     console.log(`   [OK] Trust registry has ${sources.length} source(s):`);
     for (const src of sources) {
-      console.log(`        - ${src.sourceId} (${src.sourceFamily || 'unknown'}, ${src.territory || '?'})`);
+      const authIcon = src.authenticityState === 'VALIDATED' ? '✅' : '⚠️';
+      console.log(`        ${authIcon} ${src.sourceId}`);
+      console.log(`           Family: ${src.sourceFamily || 'unknown'}, Territory: ${src.territory || '?'}`);
+      console.log(`           Authenticity: ${src.authenticityState || 'UNKNOWN'}`);
     }
+    
+    // Explain the authenticity states
+    console.log('');
+    console.log('   ✅ VALIDATED = XMLDSig signature verified (requireAuthenticated: true will pass)');
+    console.log('   ⚠️  SKIPPED_DEMO = No signature validation (requireAuthenticated: true will fail)');
   }
 
   /**
@@ -1965,7 +1975,7 @@ class WaltCLI {
         policy: 'etsi-trust-list',
         expectedEntityType: 'PID_PROVIDER',
         allowStaleSource: true,
-        requireAuthenticated: false,
+        requireAuthenticated: true,
       },
     ];
     
