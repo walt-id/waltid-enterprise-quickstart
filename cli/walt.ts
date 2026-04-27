@@ -1939,7 +1939,7 @@ class WaltCLI {
     
     console.log(`   [OK] Trust registry has ${sources.length} source(s):`);
     for (const src of sources) {
-      const authIcon = src.authenticityState === 'VALIDATED' ? '✅' : '⚠️';
+      const authIcon = src.authenticityState === 'VALIDATED' ? '[y]' : '[n]';
       console.log(`        ${authIcon} ${src.sourceId}`);
       console.log(`           Family: ${src.sourceFamily || 'unknown'}, Territory: ${src.territory || '?'}`);
       console.log(`           Authenticity: ${src.authenticityState || 'UNKNOWN'}`);
@@ -1947,8 +1947,8 @@ class WaltCLI {
     
     // Explain the authenticity states
     console.log('');
-    console.log('   ✅ VALIDATED = XMLDSig signature verified (requireAuthenticated: true will pass)');
-    console.log('   ⚠️  SKIPPED_DEMO = No signature validation (requireAuthenticated: true will fail)');
+    console.log('   [y] VALIDATED = XMLDSig signature verified (requireAuthenticated: true will pass)');
+    console.log('   [n]️  SKIPPED_DEMO = No signature validation (requireAuthenticated: true will fail)');
   }
 
   /**
@@ -1975,7 +1975,7 @@ class WaltCLI {
         policy: 'etsi-trust-list',
         expectedEntityType: 'PID_PROVIDER',
         allowStaleSource: true,
-        requireAuthenticated: true,
+        requireAuthenticated: false, // not required for demo
       },
     ];
     
