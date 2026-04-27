@@ -59,7 +59,7 @@ For detailed documentation, see **[cli/README.md](cli/README.md)**.
 
 ## 2. Docker-Compose: Run The Enterprise Stack
 
-Use docker-compose to bring up the Enterprise Stack API, UI (soon) and a MongoDB database (storage of the Enterprise Stack).  
+Use docker-compose to bring up the Enterprise Stack API, UI and a MongoDB database (storage of the Enterprise Stack).  
 
 You can update the version of the enterprise stack via the `.env` file. 
 
@@ -80,9 +80,9 @@ cd waltid-enterprise-quickstart
 ```bash
 docker compose up
 ```
-In case you want to run the admin UI as well, run:
+In case you want to only run the API, run:
 ```bash
-docker compose -f docker-compose-ui.yml -up
+docker compose -f docker-compose-api.yml up
 ```
 
 Once the docker-compose is running, you can visit [enterprise.localhost:3000/swagger](http://enterprise.localhost:3000/swagger) to access the Enterprise Stack APIs.
