@@ -19,60 +19,47 @@ Explore enterprise features via our CLI tool and/or bring up the whole stack usi
 
 ⚠️ Please note: You need to be an Enterprise Stack customer & have access to the private enterprise stack images, to use this quickstart.
 
-## 1. Enterprise CLI: Explore Enterprise Features via CLI 
+## 1. Enterprise CLI
 
-### Use the CLI
+A TypeScript CLI tool for setting up and testing the walt.id Enterprise Stack.
 
-**Clone the repo**
+### Quick Start
 
 ```bash
+# Clone the repo
 git clone https://github.com/walt-id/waltid-enterprise-quickstart.git
-```
-
-**Change Working Directory**
-```bash
 cd waltid-enterprise-quickstart
+
+# Install dependencies
+cd cli
+npm install
+
+# Run full setup + primary use case (mDL issuance & verification)
+npx tsx walt.ts
+
+# Or recreate database and start fresh
+npx tsx walt.ts --recreate
 ```
 
-**Run the CLI**
-```bash
-./waltid-enterprise
-```
+### Common Commands
 
-### CLI Commands
+| Command | Description |
+|---------|-------------|
+| `npx tsx walt.ts` | Full setup + primary use case (default) |
+| `npx tsx walt.ts --recreate` | Recreate database and run full setup |
+| `npx tsx walt.ts --setup-all` | Run all setup commands |
+| `npx tsx walt.ts --run-all` | Run primary use case only |
+| `npx tsx walt.ts --help` | Show all available commands |
 
-| Command                        | Description                                                                 |
-|--------------------------------|-----------------------------------------------------------------------------|
-| **run**                        | Run the Enterprise Stack.                                                   |
-| **wizard**                     | Start a step-by-step wizard to guide you through all important operations.  |
-| **expert mode**                | Switch to expert mode for advanced operations.                              |
-|                                |                                                                             |
-| **superadmin-create-account**  | Create the super admin account.                                             |
-| **init-db**                    | Initialize the database.                                                    |
-| **superadmin-login**           | Log in as the super admin.                                                  |
-| **create-organization**        | Create an organization or the root organization.                            |
-| **create-user-account**        | Create a new user account.                                                  |
-| **add-admin-role**             | Assign the 'admin' role to the user previously created.                     |
-| **user-admin-login**           | Log in as a user with admin role.                                           |
-| **create-tenant**              | Create a tenant in the organization created with the superadmin user.       |
-| **create-kms-service**         | Create KMS service in the tenant.                                           |
-| **generate-did-key**           | Generate a key to be later used on DID creation.                            |
-| **create-did-service**         | Create DID service in the tenant.                                           |
-| **create-did**                 | Create a did:key for credential issuance.                                   |
-| **create-issuer-service**      | Create issuer service in the tenant.                                        |
-| **create-verifier2-service**   | Create verifier2 service in the tenant.                                     |
-| **issue-jwt-vc**               | Issue a W3C JWT credential.                                                 |
-| **list-organizations**         | List all organizations under the superadmin account.                        |
-| **list-accounts**              | List all accounts.                                                          |
-| **list-org-resources**         | List organization's resources.                                              |
-| **list-tenant-resources**      | List tenant's resources.                                                    |
-| **recreate-db**                | Delete all data and restart the database from scratch.                      |
+### Configuration
 
+Superadmin credentials are read from `config/superadmin-registration.conf`.
 
+For detailed documentation, see **[cli/README.md](cli/README.md)**.
 
 ## 2. Docker-Compose: Run The Enterprise Stack
 
-Use docker-compose to bring up the Enterprise Stack API, UI (soon) and a MongoDB database (storage of the Enterprise Stack).  
+Use docker-compose to bring up the Enterprise Stack API, UI and a MongoDB database (storage of the Enterprise Stack).  
 
 You can update the version of the enterprise stack via the `.env` file. 
 
@@ -91,7 +78,11 @@ cd waltid-enterprise-quickstart
 
 **Run The Stack**
 ```bash
-docker-compose up
+docker compose up
+```
+In case you want to only run the API, run:
+```bash
+docker compose -f docker-compose-api.yml up
 ```
 
 Once the docker-compose is running, you can visit [enterprise.localhost:3000/swagger](http://enterprise.localhost:3000/swagger) to access the Enterprise Stack APIs.
@@ -117,6 +108,3 @@ Licensed under our Enterprise License.
 <div align="center">
 <img src="./assets/walt-banner.png" alt="walt.id banner" />
 </div>
-
-
-
