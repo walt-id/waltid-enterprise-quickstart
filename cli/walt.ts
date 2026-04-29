@@ -1711,6 +1711,8 @@ class WaltCLI {
   /**
    * Link the Verifier2 service to the Trust Registry service.
    * This allows the etsi-trust-list policy to resolve certificates against the enterprise registry.
+   * 
+   * Uses the new dependencies API (POST /dependencies/add) instead of the old trustRegistryService field.
    */
   async flowLinkVerifier2ToTrustRegistry(): Promise<void> {
     const step = this.nextStep();
@@ -1719,46 +1721,53 @@ class WaltCLI {
     const trustRegistryTarget = `${this.ctx.tenantPath}.${RESOURCES.trustRegistry}`;
     const verifier2Target = `${this.ctx.tenantPath}.${RESOURCES.verifier2}`;
     
-    // First, get current verifier2 configuration
-    const currentConfig = await this.orgClient.get(
-      `/v1/${verifier2Target}/verifier2-service-api/configuration/view`
+    // First, check current dependencies
+    const currentDeps = await this.orgClient.get(
+      `/v1/${verifier2Target}/verifier2-service-api/dependencies/list`
     );
-    this.saveJson('verifier2-config-before.json', currentConfig.data, step);
+    this.saveJson('verifier2-deps-before.json', currentDeps.data, step);
     
-    // Check if already linked
-    if (currentConfig.data.trustRegistryService === trustRegistryTarget) {
+    // Check if already linked (dependency path includes the trust registry target)
+    const alreadyLinked = Array.isArray(currentDeps.data) && 
+      currentDeps.data.some((dep: any) => 
+        (typeof dep === 'string' && dep === trustRegistryTarget) ||
+        (dep?._id === trustRegistryTarget)
+      );
+    
+    if (alreadyLinked) {
       console.log(`   [SKIP] Verifier2 already linked to trust registry`);
       return;
     }
     
-    // Update configuration with trust registry link
-    const updatedConfig = {
-      ...currentConfig.data,
-      trustRegistryService: trustRegistryTarget,
-    };
-    this.saveJson('verifier2-config-update-request.json', updatedConfig, step);
-    
+    // Add trust registry as dependency using the dependencies API
     try {
-      await this.orgClient.put(
-        `/v1/${verifier2Target}/verifier2-service-api/configuration/update`,
-        updatedConfig
+      await this.orgClient.post(
+        `/v1/${verifier2Target}/verifier2-service-api/dependencies/add`,
+        trustRegistryTarget,  // Body is just the target path string
+        'text/plain'  // Must be text/plain, not application/json
       );
       console.log(`   [OK] Verifier2 linked to trust registry: ${trustRegistryTarget}`);
     } catch (error: any) {
-      console.log(`   [WARN] Failed to update verifier2 config: ${error.message}`);
+      console.log(`   [WARN] Failed to add dependency: ${error.message}`);
       throw error;
     }
     
-    // Verify the update
-    const verifyConfig = await this.orgClient.get(
-      `/v1/${verifier2Target}/verifier2-service-api/configuration/view`
+    // Verify the dependency was added
+    const verifyDeps = await this.orgClient.get(
+      `/v1/${verifier2Target}/verifier2-service-api/dependencies/list`
     );
-    this.saveJson('verifier2-config-after.json', verifyConfig.data, step);
+    this.saveJson('verifier2-deps-after.json', verifyDeps.data, step);
     
-    if (verifyConfig.data.trustRegistryService !== trustRegistryTarget) {
-      throw new Error('Trust registry link was not persisted');
+    const nowLinked = Array.isArray(verifyDeps.data) && 
+      verifyDeps.data.some((dep: any) => 
+        (typeof dep === 'string' && dep === trustRegistryTarget) ||
+        (dep?._id === trustRegistryTarget)
+      );
+    
+    if (!nowLinked) {
+      throw new Error('Trust registry dependency was not persisted');
     }
-    console.log(`   [OK] Link verified`);
+    console.log(`   [OK] Dependency link verified`);
   }
 
   /**
