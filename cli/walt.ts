@@ -1801,9 +1801,26 @@ class WaltCLI {
       // },
     ];
     
+    // Get existing sources to check for duplicates
+    let existingSources: string[] = [];
+    try {
+      const sourcesResp = await this.orgClient.get(
+        `/v1/${this.ctx.tenantPath}.${RESOURCES.trustRegistry}/trust-registry-api/sources`
+      );
+      existingSources = (sourcesResp.data || []).map((s: any) => s.sourceId || s.id);
+    } catch (error: any) {
+      // If we can't list sources, continue with import attempts
+    }
+    
     for (const trustList of publicTrustLists) {
       const step = this.nextStep();
       this.log(`Import: ${trustList.description}`, 'FLOW');
+      
+      // Check if source already exists
+      if (existingSources.includes(trustList.sourceId)) {
+        console.log(`   [SKIP] ${trustList.sourceId} already loaded`);
+        continue;
+      }
       
       const request = {
         sourceId: trustList.sourceId,
@@ -1837,10 +1854,30 @@ class WaltCLI {
   /**
    * Create a LoTE-format trust source containing our local IACA certificate.
    * This allows verifying credentials issued in the journey against the trust registry.
+   * Idempotent: checks if a journey-iaca source already exists before creating.
    */
   async flowLoadIacaIntoTrustRegistry(): Promise<void> {
     const step = this.nextStep();
     this.log('Load local IACA certificate into trust registry', 'FLOW');
+    
+    // Check if journey-iaca source already exists
+    try {
+      const sourcesResp = await this.orgClient.get(
+        `/v1/${this.ctx.tenantPath}.${RESOURCES.trustRegistry}/trust-registry-api/sources`
+      );
+      const existingSource = (sourcesResp.data || []).find((s: any) => 
+        s.sourceId?.startsWith('journey-iaca') || s.id?.startsWith('journey-iaca')
+      );
+      if (existingSource) {
+        const existingId = existingSource.sourceId || existingSource.id;
+        console.log(`   [SKIP] Journey IACA source already exists: ${existingId}`);
+        this.ctx.trustRegistrySourceId = existingId;
+        return;
+      }
+    } catch (error: any) {
+      // If we can't list sources, continue with creation attempt
+      this.log(`Warning: Could not check existing sources: ${error.message}`, 'FLOW');
+    }
     
     // First, retrieve the IACA certificate PEM
     let iacaPem = this.ctx.iacaPem;
