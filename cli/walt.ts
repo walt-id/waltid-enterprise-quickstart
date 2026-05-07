@@ -118,6 +118,9 @@ interface WaltContext {
   sessionId: string;
   requestUrl: string;
   trustRegistrySourceId: string;
+  
+  // Credential status state
+  issuerSessionIdWithStatus: string;
 }
 
 // Resource names
@@ -133,6 +136,7 @@ const RESOURCES = {
   issuerProfile: 'mdl-profile',
   trustRegistry: 'trust-registry',
   credentialStore: 'credentialstore',
+  credentialStatus: 'credential-status',
 };
 
 const KEY_IDS = {
@@ -140,6 +144,10 @@ const KEY_IDS = {
   issuerSigningKey: 'issuer-signing-key',
   vicalSigningKey: 'vical-signing-key',
   attesterSigningKey: 'attester-signing-key',
+};
+
+const STATUS_CONFIG_IDS = {
+  tokenStatusListCwt: 'token-status-list-cwt',
 };
 
 const CERT_IDS = {
@@ -354,15 +362,18 @@ class WaltCLI {
     const clientUrl = buildBaseUrl(config.baseUrl, config.port);
     const orgUrl = buildOrgUrl(config.baseUrl, config.organization, config.port);
     
-    // Generate workdir name with date and count
-    const date = new Date().toISOString().split('T')[0];
-    const existingDirs = existsSync(process.cwd()) 
-      ? readdirSync(process.cwd()).filter(d => d.startsWith(`walt-log-${date}`))
+    // Generate workdir name with date, time, and count
+    const now = new Date();
+    const date = now.toISOString().split('T')[0];
+    const time = now.toTimeString().split(' ')[0].replace(/:/g, '-'); // HH-MM-SS
+    const logDir = process.cwd() + "/logs"
+    const existingDirs = existsSync(logDir) 
+      ? readdirSync(logDir).filter(d => d.startsWith(`walt-log-${date}-${time}`))
       : [];
     const count = existingDirs.length + 1;
     
     this.ctx = {
-      workdir: join(process.cwd(), `walt-log-${date}-${String(count).padStart(3, '0')}`),
+      workdir: join(logDir, `walt-log-${date}-${time}-${String(count).padStart(3, '0')}`),
       tenantPath: `${config.organization}.${config.tenant}`,
       orgBaseUrl: orgUrl,
       token: '',
@@ -378,6 +389,7 @@ class WaltCLI {
       sessionId: '',
       requestUrl: '',
       trustRegistrySourceId: '',
+      issuerSessionIdWithStatus: '',
     };
 
     this.client = new HttpClient(clientUrl);
@@ -413,6 +425,40 @@ class WaltCLI {
     const prefix = stepNum || String(this.ctx.stepCounter).padStart(3, '0');
     const path = join(this.ctx.workdir, `${prefix}-${filename}`);
     writeFileSync(path, JSON.stringify(data, null, 2));
+  }
+
+  private saveRequest(filename: string, method: string, endpoint: string, body: any, stepNum?: string) {
+    mkdirSync(this.ctx.workdir, { recursive: true });
+    const prefix = stepNum || String(this.ctx.stepCounter).padStart(3, '0');
+    const path = join(this.ctx.workdir, `${prefix}-${filename}`);
+    
+    const requestData = {
+      timestamp: new Date().toISOString(),
+      method,
+      endpoint,
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer [REDACTED]',
+      },
+      body,
+    };
+    
+    writeFileSync(path, JSON.stringify(requestData, null, 2));
+  }
+
+  private saveResponse(filename: string, status: number, data: any, stepNum?: string) {
+    mkdirSync(this.ctx.workdir, { recursive: true });
+    const prefix = stepNum || String(this.ctx.stepCounter).padStart(3, '0');
+    const path = join(this.ctx.workdir, `${prefix}-${filename}`);
+    
+    const responseData = {
+      timestamp: new Date().toISOString(),
+      status,
+      statusText: status === 200 ? 'OK' : status === 201 ? 'Created' : status === 204 ? 'No Content' : 'Unknown',
+      body: data,
+    };
+    
+    writeFileSync(path, JSON.stringify(responseData, null, 2));
   }
 
   private saveHttpLog() {
@@ -803,10 +849,12 @@ class WaltCLI {
       email: loginEmail,
       password: loginPassword,
     };
-    this.saveJson('login-request.json', request, step);
+    
+    this.saveRequest('login-request.json', 'POST', '/auth/account/emailpass', request, step);
 
     const response = await this.client.post('/auth/account/emailpass', request);
-    this.saveJson('login-response.json', response.data, step);
+    
+    this.saveResponse('login-response.json', response.status, response.data, step);
 
     this.ctx.token = response.data.token || response.data.accessToken || response.data.data?.token;
     if (!this.ctx.token) {
@@ -1425,17 +1473,157 @@ class WaltCLI {
     console.log(`   [OK] Wallet attestation obtained (expires: ${response.data.expiresAt || 'unknown'})`);
   }
 
+  async clearWalletCredentials(): Promise<void> {
+    const step = this.nextStep();
+    this.log('Clear all credentials from wallet', 'SETUP');
+
+    try {
+      // Delete all credentials
+      const deleteResponse = await this.orgClient.delete(
+        `/v1/${this.ctx.tenantPath}.${RESOURCES.credentialStore}/credential-store-service-api/credentials/delete-all`
+      );
+      
+      const credentialsDeleted = deleteResponse.data.deleted
+
+      console.log(`   [OK] Wallet credentials cleared (deleted: ${credentialsDeleted})`);
+    } catch (error: any) {
+      console.log(`   [WARN] Could not clear wallet credentials: ${error.message}`);
+    }
+  }
+
+  async setupCreateCredentialStatusService(): Promise<void> {
+    const step = this.nextStep();
+    this.log('Create credential status service', 'SETUP');
+
+    const { created } = await this.tolerantCreate(
+      'Credential status service',
+      async () => {
+        const request = {
+          type: 'credential-status',
+          config: {
+            registry: {
+              type: 'in-memory',
+            },
+          },
+        };
+        this.saveJson('create-credential-status-service-request.json', request, step);
+
+        const response = await this.orgClient.post(
+          `/v1/${this.ctx.tenantPath}.${RESOURCES.credentialStatus}/resource-api/services/create`,
+          request
+        );
+        this.saveJson('create-credential-status-service-response.json', response.data, step);
+        return response;
+      }
+    );
+
+    if (created) {
+      console.log(`   [OK] Credential status service created`);
+    }
+
+    // Link KMS dependency
+    try {
+      await this.orgClient.post(
+        `/v1/${this.ctx.tenantPath}.${RESOURCES.credentialStatus}/credential-status-service-api/dependencies/add`,
+        `${this.ctx.tenantPath}.${RESOURCES.kms}`,
+        'text/plain'
+      );
+      console.log(`   [OK] Linked KMS to credential status service`);
+    } catch (error: any) {
+      if (error.status === 409 || error.message?.includes('already')) {
+        console.log(`   [SKIP] KMS already linked to credential status service`);
+      } else {
+        throw error;
+      }
+    }
+  }
+
+  async setupCreateStatusConfiguration(): Promise<void> {
+    const step = this.nextStep();
+    this.log('Create TokenStatusList CWT configuration', 'SETUP');
+
+    // Ensure we have the document signer certificate
+    if (!this.ctx.docSignerPem) {
+      try {
+        const certResponse = await this.orgClient.get(
+          `/v1/${this.ctx.tenantPath}.${RESOURCES.x509Store}.${CERT_IDS.docSignerCert}/x509-store-api/certificates`
+        );
+        this.ctx.docSignerPem = certResponse.data.data?.pem || certResponse.data.certificatePem || certResponse.data.pem;
+        console.log(`   [INFO] Retrieved document signer certificate from x509-store`);
+      } catch (e) {
+        throw new Error('Document signer certificate not found. Run setup-create-document-signer-certificate first.');
+      }
+    }
+
+    const { created } = await this.tolerantCreate(
+      'Status configuration',
+      async () => {
+        const request = {
+          kid: `${this.ctx.tenantPath}.${RESOURCES.kms}.${KEY_IDS.issuerSigningKey}`,
+          x5Chain: [this.ctx.docSignerPem],
+          config: {
+            type: 'TokenStatusList',
+            format: 'CWT',
+          },
+        };
+        this.saveJson('create-status-configuration-request.json', request, step);
+
+        const response = await this.orgClient.post(
+          `/v1/${this.ctx.tenantPath}.${RESOURCES.credentialStatus}.${STATUS_CONFIG_IDS.tokenStatusListCwt}/credential-status-service-api/status-credential/create`,
+          request
+        );
+        this.saveJson('create-status-configuration-response.json', response.data, step);
+        return response;
+      }
+    );
+
+    if (created) {
+      console.log(`   [OK] TokenStatusList CWT configuration created`);
+    }
+  }
+
+  async setupLinkIssuerToCredentialStatus(): Promise<void> {
+    const step = this.nextStep();
+    this.log('Link credential status service to issuer', 'SETUP');
+
+    try {
+      await this.orgClient.post(
+        `/v2/${this.ctx.tenantPath}.${RESOURCES.issuer}/issuer-service-api/dependencies/add`,
+        `${this.ctx.tenantPath}.${RESOURCES.credentialStatus}`,
+        'text/plain'
+      );
+      console.log(`   [OK] Credential status service linked to issuer`);
+    } catch (error: any) {
+      if (error.status === 409 || error.message?.includes('already')) {
+        console.log(`   [SKIP] Credential status service already linked to issuer`);
+      } else {
+        throw error;
+      }
+    }
+  }
+
   // --------------------------------------------------------------------------
   // Run Commands (use case execution)
   // --------------------------------------------------------------------------
 
-  async runCreateCredentialOffer(): Promise<void> {
+  async runCreateCredentialOffer(includeStatus: boolean = false): Promise<void> {
     const step = this.nextStep();
-    this.log('Create credential offer', 'RUN');
+    this.log(`Create credential offer${includeStatus ? ' (with status)' : ''}`, 'RUN');
 
-    const request = {
+    const request: any = {
       authMethod: 'PRE_AUTHORIZED',
     };
+    
+    // Add credential status if requested
+    if (includeStatus) {
+      request.runtimeOverrides = {
+        credentialStatus: {
+            statusCredentialConfig: `${this.ctx.tenantPath}.${RESOURCES.credentialStatus}.${STATUS_CONFIG_IDS.tokenStatusListCwt}`,
+            initialStatus: '0x0', // VALID
+          },
+      };
+    }
+    
     this.saveJson('create-offer-request.json', request, step);
 
     const response = await this.orgClient.post(
@@ -1449,7 +1637,26 @@ class WaltCLI {
       throw new Error('Could not extract credentialOffer');
     }
     
-    console.log(`   [OK] Credential offer created`);
+    // Extract session ID from offer URL for later status updates if status is enabled
+    if (includeStatus && this.ctx.offerId) {
+      try {
+        // Parse the offer URL to extract session ID
+        const offerUrl = new URL(this.ctx.offerId);
+        const credentialOfferUri = offerUrl.searchParams.get('credential_offer_uri');
+        if (credentialOfferUri) {
+          const offerUriUrl = new URL(credentialOfferUri);
+          const sessionId = offerUriUrl.searchParams.get('id');
+          if (sessionId) {
+            this.ctx.issuerSessionIdWithStatus = `${this.ctx.tenantPath}.${RESOURCES.issuer}.${sessionId}`;
+            console.log(`   [INFO] Issuer session ID for status updates: ${this.ctx.issuerSessionIdWithStatus}`);
+          }
+        }
+      } catch (error) {
+        console.log(`   [WARN] Could not extract session ID from offer URL`);
+      }
+    }
+    
+    console.log(`   [OK] Credential offer created${includeStatus ? ' with status tracking' : ''}`);
   }
 
   async runWalletReceiveCredential(): Promise<void> {
@@ -1474,21 +1681,40 @@ class WaltCLI {
     console.log(`   [OK] Credential received (count: ${receivedCount})`);
   }
 
-  async runCreateVerificationSession(): Promise<void> {
+  async runCreateVerificationSession(includeStatusPolicy: boolean = false, includeVicalPolicy: boolean = true): Promise<void> {
     const step = this.nextStep();
-    this.log('Create verifier2 session', 'RUN');
+    const policies: string[] = [];
+    if (includeStatusPolicy) policies.push('status');
+    if (includeVicalPolicy) policies.push('vical');
+    const policyDesc = policies.length > 0 ? `signature, ${policies.join(', ')}` : 'signature';
+    
+    this.log(`Create verifier2 session (${policyDesc})`, 'RUN');
 
-    const vicalUrl = `${this.ctx.orgBaseUrl}/v1/${this.ctx.tenantPath}.${RESOURCES.vical}/vical-service-api/latest`;
-
-    const vcPolicies = [
+    const vcPolicies: any[] = [
       { policy: 'signature' },
-      {
+    ];
+    
+    // Add VICAL policy if requested
+    if (includeVicalPolicy) {
+      const vicalUrl = `${this.ctx.orgBaseUrl}/v1/${this.ctx.tenantPath}.${RESOURCES.vical}/vical-service-api/latest`;
+      vcPolicies.push({
         policy: 'vical',
         vicalUrl: vicalUrl,
         enableDocumentTypeValidation: true,
         enableTrustedChainRoot: true,
-      },
-    ];
+      });
+    }
+    
+    // Add status policy if requested
+    if (includeStatusPolicy) {
+      vcPolicies.push({
+        policy: 'credential-status',
+        argument: {
+          discriminator: 'ietf',
+          value: 0, // Expecting VALID (0x0)
+        },
+      });
+    }
 
     const request = {
       flow_type: 'cross_device',
@@ -1530,6 +1756,7 @@ class WaltCLI {
     }
 
     console.log(`   [OK] Verification session created (ID: ${this.ctx.sessionId})`);
+    console.log(`        Policies: ${policyDesc}`);
   }
 
   async runWalletPresent(): Promise<void> {
@@ -1570,6 +1797,97 @@ class WaltCLI {
   }
 
   // --------------------------------------------------------------------------
+  // Credential Status / Revocation Run Commands
+  // --------------------------------------------------------------------------
+
+  async runRevokeCredential(): Promise<void> {
+    const step = this.nextStep();
+    this.log('Revoke credential (set status to INVALID)', 'RUN');
+
+    if (!this.ctx.issuerSessionIdWithStatus) {
+      throw new Error('No issuer session ID available. Create a credential offer with status first.');
+    }
+
+    const request = {
+      session: this.ctx.issuerSessionIdWithStatus,
+      status: '0x1', // INVALID
+    };
+    this.saveJson('revoke-credential-request.json', request, step);
+
+    const response = await this.orgClient.put(
+      `/v1/${this.ctx.tenantPath}.${RESOURCES.credentialStatus}.${STATUS_CONFIG_IDS.tokenStatusListCwt}/credential-status-service-api/status-credential/status/update`,
+      request
+    );
+    this.saveJson('revoke-credential-response.json', response.data, step);
+
+    console.log(`   [OK] Credential revoked (status set to 0x1 INVALID)`);
+  }
+
+  async runUnrevokeCredential(): Promise<void> {
+    const step = this.nextStep();
+    this.log('Unrevoke credential (reset status to VALID)', 'RUN');
+
+    if (!this.ctx.issuerSessionIdWithStatus) {
+      throw new Error('No issuer session ID available. Create a credential offer with status first.');
+    }
+
+    const request = {
+      session: this.ctx.issuerSessionIdWithStatus,
+      status: '0x0', // VALID
+    };
+    this.saveJson('unrevoke-credential-request.json', request, step);
+
+    const response = await this.orgClient.put(
+      `/v1/${this.ctx.tenantPath}.${RESOURCES.credentialStatus}.${STATUS_CONFIG_IDS.tokenStatusListCwt}/credential-status-service-api/status-credential/status/update`,
+      request
+    );
+    this.saveJson('unrevoke-credential-response.json', response.data, step);
+
+    console.log(`   [OK] Credential unrevoked (status reset to 0x0 VALID)`);
+  }
+
+  async runUpdateCredentialStatus(status: string): Promise<void> {
+    const step = this.nextStep();
+    this.log(`Update credential status to ${status}`, 'RUN');
+
+    if (!this.ctx.issuerSessionIdWithStatus) {
+      throw new Error('No issuer session ID available. Create a credential offer with status first.');
+    }
+
+    const request = {
+      session: this.ctx.issuerSessionIdWithStatus,
+      status,
+    };
+    this.saveJson('update-status-request.json', request, step);
+
+    const response = await this.orgClient.put(
+      `/v1/${this.ctx.tenantPath}.${RESOURCES.credentialStatus}.${STATUS_CONFIG_IDS.tokenStatusListCwt}/credential-status-service-api/status-credential/status/update`,
+      request
+    );
+    this.saveJson('update-status-response.json', response.data, step);
+
+    console.log(`   [OK] Credential status updated to ${status}`);
+  }
+
+  async runAssertFinalStatusFailed(): Promise<void> {
+    const step = this.nextStep();
+    this.log('Check verifier2 final session status (expecting FAILED)', 'RUN');
+
+    const response = await this.orgClient.get(
+      `/v1/${this.ctx.tenantPath}.${RESOURCES.verifier2}.${this.ctx.sessionId}/verifier2-service-api/verification-session/info`
+    );
+    this.saveJson('final-session-info-failed.json', response.data, step);
+
+    const finalStatus = response.data.session?.status;
+
+    if (finalStatus !== 'FAILED') {
+      throw new Error(`Expected FAILED but got: ${finalStatus || '<empty>'}`);
+    }
+
+    console.log(`   [OK] Final status: ${finalStatus} (as expected for revoked credential)`);
+  }
+
+  // --------------------------------------------------------------------------
   // Additional Setup Commands
   // --------------------------------------------------------------------------
 
@@ -1597,6 +1915,32 @@ class WaltCLI {
     if (created) {
       console.log(`   [OK] Trust registry created`);
     }
+  }
+
+  async setupEtsiTrustRegistry(): Promise<void> {
+    console.log('\n=== Setting up ETSI Trust Registry ===\n');
+    
+    // Step 1: Create trust registry service
+    console.log('--- Step 1: Create Trust Registry Service ---');
+    await this.setupCreateTrustRegistry();
+
+    // Step 2: Link Verifier2 to Trust Registry
+    console.log('\n--- Step 2: Link Verifier2 to Trust Registry ---');
+    await this.flowLinkVerifier2ToTrustRegistry();
+
+    // Step 3: Import public trust lists from URLs
+    console.log('\n--- Step 3: Import Public Trust Lists ---');
+    await this.flowImportPublicTrustLists();
+
+    // Step 4: Load our IACA certificate into trust registry
+    console.log('\n--- Step 4: Load Local IACA Certificate ---');
+    await this.flowLoadIacaIntoTrustRegistry();
+
+    // Step 5: List loaded trust sources
+    console.log('\n--- Step 5: List Trust Sources ---');
+    await this.flowListTrustSources();
+
+    console.log('\n[SETUP] ETSI Trust Registry setup complete');
   }
 
   async setupImportTrustList(filePath: string): Promise<void> {
@@ -1667,36 +2011,25 @@ class WaltCLI {
         this.ctx.walletKeyRef = `${this.ctx.tenantPath}.${RESOURCES.kms}.wallet_key`;
       }
 
-      // Step 1: Create trust registry service
-      console.log('\n--- Step 1: Create Trust Registry Service ---');
-      await this.setupCreateTrustRegistry();
+      // Step 1: Clear existing credentials
+      console.log('\n--- Step 1: Clear Existing Credentials ---');
+      await this.clearWalletCredentials();
 
-      // Step 2: Link Verifier2 to Trust Registry
-      console.log('\n--- Step 2: Link Verifier2 to Trust Registry ---');
-      await this.flowLinkVerifier2ToTrustRegistry();
+      // Step 2: Issue a fresh credential for this flow
+      console.log('\n--- Step 2: Issue Credential ---');
+      await this.runCreateCredentialOffer(false); // No status tracking for ETSI flow
+      await this.runWalletReceiveCredential();
 
-      // Step 3: Import public trust lists from URLs
-      console.log('\n--- Step 3: Import Public Trust Lists ---');
-      await this.flowImportPublicTrustLists();
-
-      // Step 4: Load our IACA certificate into trust registry
-      console.log('\n--- Step 4: Load Local IACA Certificate ---');
-      await this.flowLoadIacaIntoTrustRegistry();
-
-      // Step 5: List loaded trust sources
-      console.log('\n--- Step 5: List Trust Sources ---');
-      await this.flowListTrustSources();
-
-      // Step 6: Create verification session with etsi-trust-list policy
-      console.log('\n--- Step 6: Create Verification Session with ETSI Trust List Policy ---');
+      // Step 3: Create verification session with etsi-trust-list policy
+      console.log('\n--- Step 3: Create Verification Session with ETSI Trust List Policy ---');
       await this.flowCreateEtsiVerificationSession();
 
-      // Step 7: Wallet presents credential
-      console.log('\n--- Step 7: Present Credential ---');
+      // Step 4: Wallet presents credential
+      console.log('\n--- Step 4: Present Credential ---');
       await this.runWalletPresent();
 
-      // Step 8: Assert success
-      console.log('\n--- Step 8: Verify Result ---');
+      // Step 5: Assert success
+      console.log('\n--- Step 5: Verify Result ---');
       await this.runAssertFinalStatus();
 
       console.log('\n========================================');
@@ -1999,12 +2332,71 @@ class WaltCLI {
 
   async flowCredentialRevocation(): Promise<void> {
     console.log('\n=== Flow: Credential Revocation ===\n');
-    console.log('[PLACEHOLDER] This flow will:');
-    console.log('  1. Issue a credential');
-    console.log('  2. Verify it successfully');
-    console.log('  3. Revoke the credential');
-    console.log('  4. Verify it fails with revocation status');
-    console.log('\nNot yet implemented.');
+    console.log('This flow demonstrates the complete credential revocation lifecycle:');
+    console.log('  1. Clear existing credentials from wallet');
+    console.log('  2. Issue a credential with status tracking');
+    console.log('  3. Verify it successfully (status: VALID)');
+    console.log('  4. Revoke the credential (status: INVALID)');
+    console.log('  5. Verify it fails with revocation status');
+    console.log('  6. Unrevoke the credential (status: VALID)');
+    console.log('  7. Verify it succeeds again\n');
+    
+    mkdirSync(this.ctx.workdir, { recursive: true });
+    
+    try {
+      // Ensure we're logged in
+      if (!this.ctx.token) {
+        await this.setupLogin();
+      }
+      
+      // Set wallet key reference if not already set
+      if (!this.ctx.walletKeyRef) {
+        this.ctx.walletKeyRef = `${this.ctx.tenantPath}.${RESOURCES.kms}.wallet_key`;
+      }
+      
+      console.log('\n--- Step 1: Clear existing credentials ---\n');
+      await this.clearWalletCredentials();
+      
+      console.log('\n--- Step 2: Issue credential with status ---\n');
+      await this.runCreateCredentialOffer(true); // Enable status tracking
+      await this.runWalletReceiveCredential();
+      
+      console.log('\n--- Step 3: Verify credential (should succeed) ---\n');
+      await this.runCreateVerificationSession(true, false); // Status policy only, no VICAL
+      await this.runWalletPresent();
+      await this.runAssertFinalStatus();
+      
+      console.log('\n--- Step 4: Revoke credential ---\n');
+      await this.runRevokeCredential();
+      
+      console.log('\n--- Step 5: Verify revoked credential (should fail) ---\n');
+      await this.runCreateVerificationSession(true, false); // Status policy only, no VICAL
+      await this.runWalletPresent();
+      await this.runAssertFinalStatusFailed();
+      
+      console.log('\n--- Step 6: Unrevoke credential ---\n');
+      await this.runUnrevokeCredential();
+      
+      console.log('\n--- Step 7: Verify unrevoked credential (should succeed) ---\n');
+      await this.runCreateVerificationSession(true, false); // Status policy only, no VICAL
+      await this.runWalletPresent();
+      await this.runAssertFinalStatus();
+      
+      console.log('\n========================================');
+      console.log('  Credential Revocation Flow Complete');
+      console.log('========================================\n');
+      console.log('Successfully demonstrated:');
+      console.log('  ✓ Wallet credential cleanup');
+      console.log('  ✓ Credential issuance with status tracking');
+      console.log('  ✓ Verification with valid status');
+      console.log('  ✓ Credential revocation');
+      console.log('  ✓ Verification failure for revoked credential');
+      console.log('  ✓ Credential unrevocation');
+      console.log('  ✓ Verification success after unrevocation');
+    } finally {
+      this.saveHttpLog();
+      console.log(`\nLogs saved to: ${this.ctx.workdir}`);
+    }
   }
 
   // --------------------------------------------------------------------------
@@ -2027,7 +2419,10 @@ class WaltCLI {
     await this.setupCreateVicalService();
     await this.setupPublishVical();
     await this.setupCreateClientAttester();
+    await this.setupCreateCredentialStatusService();
+    await this.setupCreateStatusConfiguration();
     await this.setupCreateIssuer2();
+    await this.setupLinkIssuerToCredentialStatus();
     await this.setupCreateIssuerProfile();
     await this.setupLinkWalletToAttester();
     await this.setupObtainWalletAttestation();
@@ -2171,22 +2566,36 @@ Setup Commands (create resources):
   --setup-create-vical-service  Create VICAL service
   --setup-publish-vical   Publish VICAL
   --setup-create-client-attester  Create client attester service
+  --setup-create-credential-status-service  Create credential status service
+  --setup-create-status-configuration  Create TokenStatusList CWT configuration
   --setup-create-issuer2  Create issuer2 service
+  --setup-link-issuer-to-credential-status  Link credential status service to issuer
   --setup-create-issuer-profile  Create issuer credential profile
   --setup-link-wallet-to-attester  Link wallet to client attester
   --setup-obtain-wallet-attestation  Obtain wallet attestation
 
 Additional Setup Commands:
   --setup-create-trust-registry  Create trust registry service
+  --setup-etsi-trust-registry  Complete ETSI trust registry setup (create, link, import lists)
   --setup-import-trust-list <file>  Import trust list from file
+  --clear-wallet-credentials  Clear all credentials from wallet (useful between flows)
 
 Run Commands (execute use cases):
   --run-all               Run primary use case (issue + verify)
   --run-create-credential-offer  Create credential offer
+  --run-create-credential-offer-with-status  Create credential offer with status tracking
   --run-wallet-receive-credential  Wallet receives credential
-  --run-create-verification-session  Create verification session
+  --run-create-verification-session  Create verification session (signature + vical)
+  --run-create-verification-session-with-status  Create verification session (signature + vical + status)
+  --run-create-verification-session-status-only  Create verification session (signature + status only, no vical)
   --run-wallet-present    Wallet presents credential
   --run-assert-final-status  Assert final verification status
+  --run-assert-final-status-failed  Assert final verification status is FAILED
+
+Credential Revocation Commands:
+  --run-revoke-credential  Revoke credential (set status to INVALID)
+  --run-unrevoke-credential  Unrevoke credential (reset status to VALID)
+  --run-update-credential-status <status>  Update credential status to specified value
 
 Flows (special use cases):
   --flow-etsi-trust-lists  Run ETSI trust lists verification flow:
@@ -2195,7 +2604,14 @@ Flows (special use cases):
                           3. Load local IACA certificate into registry
                           4. Verify credential using etsi-trust-list policy
                           (Requires primary setup to be run first)
-  --flow-credential-revocation  Run credential revocation flow
+  --flow-credential-revocation  Run credential revocation flow:
+                          1. Issue credential with status tracking
+                          2. Verify it successfully (status: VALID)
+                          3. Revoke the credential (status: INVALID)
+                          4. Verify it fails with revocation status
+                          5. Unrevoke the credential (status: VALID)
+                          6. Verify it succeeds again
+                          (Requires primary setup to be run first)
 
 Other Options:
   --help, -h              Show this help message
@@ -2257,13 +2673,19 @@ async function main(): Promise<void> {
     '--setup-create-iaca-certificate', '--setup-create-document-signer-certificate',
     '--setup-store-vical-signer-certificate', '--setup-create-vical-service',
     '--setup-publish-vical', '--setup-create-client-attester',
-    '--setup-create-issuer2', '--setup-create-issuer-profile',
+    '--setup-create-credential-status-service', '--setup-create-status-configuration',
+    '--setup-create-issuer2', '--setup-link-issuer-to-credential-status', '--setup-create-issuer-profile',
     '--setup-link-wallet-to-attester', '--setup-obtain-wallet-attestation',
-    '--setup-create-trust-registry', '--setup-import-trust-list',
+    '--setup-create-trust-registry', '--setup-etsi-trust-registry', '--setup-import-trust-list',
     '--setup-create-superadmin', '--setup-create-organization',
     '--setup-create-admin-role', '--setup-create-admin-account',
-    '--run-all', '--run-create-credential-offer', '--run-wallet-receive-credential',
-    '--run-create-verification-session', '--run-wallet-present', '--run-assert-final-status',
+    '--clear-wallet-credentials',
+    '--run-all', '--run-create-credential-offer', '--run-create-credential-offer-with-status',
+    '--run-wallet-receive-credential',
+    '--run-create-verification-session', '--run-create-verification-session-with-status',
+    '--run-create-verification-session-status-only',
+    '--run-wallet-present', '--run-assert-final-status', '--run-assert-final-status-failed',
+    '--run-revoke-credential', '--run-unrevoke-credential', '--run-update-credential-status',
     '--flow-etsi-trust-lists', '--flow-credential-revocation',
   ];
   
@@ -2346,11 +2768,15 @@ async function main(): Promise<void> {
       '--setup-create-vical-service': () => walt.setupCreateVicalService(),
       '--setup-publish-vical': () => walt.setupPublishVical(),
       '--setup-create-client-attester': () => walt.setupCreateClientAttester(),
+      '--setup-create-credential-status-service': () => walt.setupCreateCredentialStatusService(),
+      '--setup-create-status-configuration': () => walt.setupCreateStatusConfiguration(),
       '--setup-create-issuer2': () => walt.setupCreateIssuer2(),
+      '--setup-link-issuer-to-credential-status': () => walt.setupLinkIssuerToCredentialStatus(),
       '--setup-create-issuer-profile': () => walt.setupCreateIssuerProfile(),
       '--setup-link-wallet-to-attester': () => walt.setupLinkWalletToAttester(),
       '--setup-obtain-wallet-attestation': () => walt.setupObtainWalletAttestation(),
       '--setup-create-trust-registry': () => walt.setupCreateTrustRegistry(),
+      '--clear-wallet-credentials': () => walt.clearWalletCredentials(),
     };
 
     for (const [flag, fn] of Object.entries(setupCommands)) {
@@ -2387,11 +2813,17 @@ async function main(): Promise<void> {
     }
 
     const runCommands: Record<string, () => Promise<void>> = {
-      '--run-create-credential-offer': () => walt.runCreateCredentialOffer(),
+      '--run-create-credential-offer': () => walt.runCreateCredentialOffer(false),
+      '--run-create-credential-offer-with-status': () => walt.runCreateCredentialOffer(true),
       '--run-wallet-receive-credential': () => walt.runWalletReceiveCredential(),
-      '--run-create-verification-session': () => walt.runCreateVerificationSession(),
+      '--run-create-verification-session': () => walt.runCreateVerificationSession(false, true),
+      '--run-create-verification-session-with-status': () => walt.runCreateVerificationSession(true, true),
+      '--run-create-verification-session-status-only': () => walt.runCreateVerificationSession(true, false),
       '--run-wallet-present': () => walt.runWalletPresent(),
       '--run-assert-final-status': () => walt.runAssertFinalStatus(),
+      '--run-assert-final-status-failed': () => walt.runAssertFinalStatusFailed(),
+      '--run-revoke-credential': () => walt.runRevokeCredential(),
+      '--run-unrevoke-credential': () => walt.runUnrevokeCredential(),
     };
 
     for (const [flag, fn] of Object.entries(runCommands)) {
@@ -2402,6 +2834,21 @@ async function main(): Promise<void> {
         walt['saveHttpLog']();
         return;
       }
+    }
+
+    // Update credential status (special case with parameter)
+    const updateStatusIndex = args.findIndex(a => a === '--run-update-credential-status');
+    if (updateStatusIndex !== -1) {
+      const status = args[updateStatusIndex + 1];
+      if (!status) {
+        console.error('Error: --run-update-credential-status requires a status value (e.g., 0x0, 0x1)');
+        process.exit(1);
+      }
+      mkdirSync(walt['ctx'].workdir, { recursive: true });
+      await walt.setupLogin();
+      await walt.runUpdateCredentialStatus(status);
+      walt['saveHttpLog']();
+      return;
     }
 
     // Flows

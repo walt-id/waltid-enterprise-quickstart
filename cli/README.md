@@ -48,7 +48,10 @@ These commands create resources in the enterprise stack. Run them in order, or u
 | `--setup-create-vical-service` | Create VICAL service |
 | `--setup-publish-vical` | Publish VICAL with IACA certificate |
 | `--setup-create-client-attester` | Create client attester service |
+| `--setup-create-credential-status-service` | Create credential status service |
+| `--setup-create-status-configuration` | Create TokenStatusList CWT configuration |
 | `--setup-create-issuer2` | Create issuer2 with client attestation |
+| `--setup-link-issuer-to-credential-status` | Link credential status service to issuer |
 | `--setup-create-issuer-profile` | Create issuer credential profile (mDL) |
 | `--setup-link-wallet-to-attester` | Link wallet to client attester |
 | `--setup-obtain-wallet-attestation` | Obtain wallet client attestation |
@@ -58,7 +61,9 @@ These commands create resources in the enterprise stack. Run them in order, or u
 | Command | Description |
 |---------|-------------|
 | `--setup-create-trust-registry` | Create trust registry service |
+| `--setup-etsi-trust-registry` | Complete ETSI trust registry setup (create, link, import lists) |
 | `--setup-import-trust-list <file>` | Import trust list from file (TSL XML, LoTE JSON) |
+| `--clear-wallet-credentials` | Clear all credentials from wallet (useful between flows) |
 
 ### Run Commands
 
@@ -67,34 +72,54 @@ These commands execute use cases (issue/verify credentials). Assumes setup is co
 | Command | Description |
 |---------|-------------|
 | `--run-all` | Run primary use case |
-| `--run-create-credential-offer` | Create credential offer |
+| `--run-create-credential-offer` | Create credential offer (without status tracking) |
+| `--run-create-credential-offer-with-status` | Create credential offer with status tracking enabled |
 | `--run-wallet-receive-credential` | Wallet receives credential via pre-authorized flow |
-| `--run-create-verification-session` | Create verifier2 verification session |
+| `--run-create-verification-session` | Create verifier2 verification session (signature + vical policies) |
+| `--run-create-verification-session-with-status` | Create verifier2 verification session (signature + vical + status policies) |
+| `--run-create-verification-session-status-only` | Create verifier2 verification session (signature + status only, no vical) |
 | `--run-wallet-present` | Wallet presents credential |
 | `--run-assert-final-status` | Assert final verification status is SUCCESSFUL |
+| `--run-assert-final-status-failed` | Assert final verification status is FAILED |
+
+### Credential Revocation Commands
+
+These commands manage credential status and revocation.
+
+| Command | Description |
+|---------|-------------|
+| `--run-revoke-credential` | Revoke credential (set status to INVALID/0x1) |
+| `--run-unrevoke-credential` | Unrevoke credential (reset status to VALID/0x0) |
+| `--run-update-credential-status <status>` | Update credential status to specified value (e.g., 0x0, 0x1) |
 
 ### Flow Commands
 
 | Command | Description |
 |---------|-------------|
 | `--flow-etsi-trust-lists` | Run ETSI trust lists verification flow (see below) |
-| `--flow-credential-revocation` | Run credential revocation flow (placeholder) |
+| `--flow-credential-revocation` | Run credential revocation flow (see below) |
 
 #### ETSI Trust Lists Flow (`--flow-etsi-trust-lists`)
 
-Demonstrates trust list verification using the Enterprise Trust Registry Service. This flow assumes the primary setup has been run first (tenant, wallet, credentials exist).
+Demonstrates trust list verification using the Enterprise Trust Registry Service. **This flow is self-contained** - it clears existing credentials and issues its own credential.
 
-**Steps:**
-1. Create trust registry service (if not exists)
-2. Link Verifier2 to Trust Registry
-3. Import public trust lists:
-   - **EWC Pilot** (JSON/LoTE format, unauthenticated)
-   - **Austrian TSL** (XML format, XMLDSig signature validated → `VALIDATED`)
-4. Load local IACA certificate into trust registry (LoTE format)
-5. List trust sources with authenticity states
-6. Create verification session with policies: `signature`, `vical`, `etsi-trust-list`
-7. Present credential
-8. Verify result
+**Prerequisites:**
+Run `--setup-etsi-trust-registry` once to set up the trust registry, import trust lists, and configure the verifier.
+
+**Flow Steps:**
+1. Clear existing credentials from wallet
+2. **Issue a fresh credential** for this flow
+3. Create verification session with policies: `signature`, `vical`, `etsi-trust-list`
+4. Present credential
+5. Verify result
+
+**Trust Registry Setup (one-time):**
+The `--setup-etsi-trust-registry` command performs:
+- Create trust registry service
+- Link Verifier2 to Trust Registry
+- Import public trust lists (EWC Pilot, Austrian TSL)
+- Load local IACA certificate into trust registry
+- List trust sources with authenticity states
 
 **Authenticity States:**
 - ✅ `VALIDATED` - XMLDSig signature verified (passes `requireAuthenticated: true`)
@@ -102,11 +127,39 @@ Demonstrates trust list verification using the Enterprise Trust Registry Service
 
 **Usage:**
 ```bash
-# First run full setup
-npx tsx walt.ts
+# One-time setup
+npx tsx walt.ts --setup-all  # Base setup
+npx tsx walt.ts --setup-etsi-trust-registry  # ETSI-specific setup
 
-# Then run the ETSI flow
+# Run flow (can be run multiple times)
 npx tsx walt.ts --flow-etsi-trust-lists
+```
+
+#### Credential Revocation Flow (`--flow-credential-revocation`)
+
+Demonstrates the complete credential revocation lifecycle using TokenStatusList CWT. **This flow is self-contained** and can be run independently - it clears existing credentials and issues its own credential with status tracking.
+
+**Steps:**
+1. Clear existing credentials from wallet
+2. **Issue credential with status tracking** enabled (TokenStatusList CWT)
+3. Verify credential successfully (status: VALID/0x0)
+4. Revoke the credential (set status to INVALID/0x1)
+5. Verify credential fails due to revoked status
+6. Unrevoke the credential (reset status to VALID/0x0)
+7. Verify credential succeeds again
+
+**Status Values:**
+- `0x0` - VALID (credential is active and valid)
+- `0x1` - INVALID (credential is revoked)
+
+**Verification Policies:**
+- Uses **status policy only** (no VICAL) for faster, focused testing
+
+**Usage:**
+```bash
+# Can run independently - does not require prior setup
+npx tsx walt.ts --setup-all  # Initial setup (only needed once)
+npx tsx walt.ts --flow-credential-revocation
 ```
 
 ### Other Commands
@@ -161,7 +214,10 @@ npx tsx walt.ts --setup-store-vical-signer-certificate
 npx tsx walt.ts --setup-create-vical-service
 npx tsx walt.ts --setup-publish-vical
 npx tsx walt.ts --setup-create-client-attester
+npx tsx walt.ts --setup-create-credential-status-service
+npx tsx walt.ts --setup-create-status-configuration
 npx tsx walt.ts --setup-create-issuer2
+npx tsx walt.ts --setup-link-issuer-to-credential-status
 npx tsx walt.ts --setup-create-issuer-profile
 npx tsx walt.ts --setup-link-wallet-to-attester
 npx tsx walt.ts --setup-obtain-wallet-attestation
@@ -170,6 +226,32 @@ npx tsx walt.ts --setup-obtain-wallet-attestation
 npx tsx walt.ts --run-create-credential-offer
 npx tsx walt.ts --run-wallet-receive-credential
 npx tsx walt.ts --run-create-verification-session
+npx tsx walt.ts --run-wallet-present
+npx tsx walt.ts --run-assert-final-status
+```
+
+### Testing Credential Revocation
+```bash
+# After setup, test revocation flow step by step:
+npx tsx walt.ts --run-create-credential-offer-with-status
+npx tsx walt.ts --run-wallet-receive-credential
+npx tsx walt.ts --run-create-verification-session-with-status
+npx tsx walt.ts --run-wallet-present
+npx tsx walt.ts --run-assert-final-status
+
+# Revoke the credential
+npx tsx walt.ts --run-revoke-credential
+
+# Verify it fails
+npx tsx walt.ts --run-create-verification-session-with-status
+npx tsx walt.ts --run-wallet-present
+npx tsx walt.ts --run-assert-final-status-failed
+
+# Unrevoke the credential
+npx tsx walt.ts --run-unrevoke-credential
+
+# Verify it succeeds again
+npx tsx walt.ts --run-create-verification-session-with-status
 npx tsx walt.ts --run-wallet-present
 npx tsx walt.ts --run-assert-final-status
 ```
@@ -215,11 +297,69 @@ The script uses a two-tier authentication system:
 
 The `--setup-recreate` command automatically creates both the superadmin and admin user.
 
+## Flow Isolation
+
+**Important**: Each flow (`--flow-etsi-trust-lists`, `--flow-credential-revocation`) is now **self-contained** and focuses on credential issuance and verification:
+
+### Flow Behavior
+- Flows automatically **clear existing credentials** from the wallet before starting
+- Each flow **issues its own credential** with the appropriate configuration
+- Flows can be run multiple times without interference
+- Flows handle only the credential lifecycle (issue → verify)
+
+### Setup vs Flow Separation
+- **One-time setup commands**: Configure services, trust registries, and dependencies
+  - `--setup-all`: Base infrastructure
+  - `--setup-etsi-trust-registry`: ETSI-specific trust lists and registry
+- **Repeatable flow commands**: Issue credentials and test verification
+  - `--flow-credential-revocation`: Test status lifecycle
+  - `--flow-etsi-trust-lists`: Test trust list verification
+
+This ensures:
+- ✅ Predictable credential selection during presentation
+- ✅ Clean testing environment for each flow
+- ✅ Flows can run in any order
+- ✅ No LIFO/random credential selection issues
+- ✅ Clear separation between setup and testing
+
+**Example workflow:**
+```bash
+# Initial setup (once)
+npx tsx walt.ts --setup-all
+npx tsx walt.ts --setup-etsi-trust-registry  # For ETSI flow
+
+# Run flows independently in any order (multiple times)
+npx tsx walt.ts --flow-credential-revocation
+npx tsx walt.ts --flow-etsi-trust-lists
+npx tsx walt.ts --flow-credential-revocation  # Can run again
+
+# Manually clear credentials if needed
+npx tsx walt.ts --clear-wallet-credentials
+```
+
 ## Output
 
-Logs are saved to `walt-log-<date>-<count>/` directories:
-- Step-numbered request/response JSON files (e.g., `001-login-request.json`)
-- Combined HTTP log: `walt-http-log.json`
+Logs are saved to `walt-log-<date>-<time>-<count>/` directories (e.g., `walt-log-2026-05-07-14-30-15-001/`):
+- **Request files**: Step-numbered JSON files with full HTTP details including method, endpoint, headers, and body (e.g., `001-login-request.json`)
+- **Response files**: Step-numbered JSON files with status code, status text, and response body (e.g., `001-login-response.json`)
+- **Combined HTTP log**: `walt-http-log.json` with all HTTP traffic
+
+Example request file format:
+```json
+{
+  "timestamp": "2026-05-07T14:30:15.123Z",
+  "method": "POST",
+  "endpoint": "/auth/account/emailpass",
+  "headers": {
+    "Content-Type": "application/json",
+    "Authorization": "Bearer [REDACTED]"
+  },
+  "body": {
+    "email": "admin@walt.id",
+    "password": "..."
+  }
+}
+```
 
 ## Idempotency
 
