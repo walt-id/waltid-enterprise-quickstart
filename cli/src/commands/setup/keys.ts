@@ -62,6 +62,7 @@ export async function setupCreateIacaCertificate(ctx: CommandContext): Promise<v
   }
 
   const request = {
+    storedCertificateId: CERT_IDS.vicalIacaCert,
     certificateData: {
       country: 'US',
       commonName: 'Walt CLI Test IACA',
@@ -80,7 +81,7 @@ export async function setupCreateIacaCertificate(ctx: CommandContext): Promise<v
   ctx.saveJson('create-iaca-cert-request.json', request, step);
 
   const response = await ctx.orgClient.post(
-    `/v1/${ctx.tenantPath}.${RESOURCES.x509Service}.${CERT_IDS.vicalIacaCert}/x509-service-api/iso/iacas`,
+    `/v1/${ctx.tenantPath}.${RESOURCES.x509Service}/x509-service-api/iso/iacas`,
     request
   );
   ctx.saveJson('create-iaca-cert-response.json', response.data, step);
@@ -126,6 +127,7 @@ export async function setupCreateDocumentSignerCertificate(ctx: CommandContext):
   }
 
   const request = {
+    storedCertificateId: CERT_IDS.docSignerCert,
     iacaSigner: {
       type: 'iaca-pem-cert-descriptor',
       iacaPemEncodedCertificate: ctx.ctx.iacaPem,
@@ -147,7 +149,7 @@ export async function setupCreateDocumentSignerCertificate(ctx: CommandContext):
   ctx.saveJson('create-doc-signer-cert-request.json', request, step);
 
   const response = await ctx.orgClient.post(
-    `/v1/${ctx.tenantPath}.${RESOURCES.x509Service}.${CERT_IDS.docSignerCert}/x509-service-api/iso/document-signers`,
+    `/v1/${ctx.tenantPath}.${RESOURCES.x509Service}/x509-service-api/iso/document-signers`,
     request
   );
   ctx.saveJson('create-doc-signer-cert-response.json', response.data, step);
