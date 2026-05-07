@@ -169,6 +169,23 @@ export async function runMyAction(ctx: CommandContext): Promise<void> {
 }
 ```
 
+### 5. Register it with the runAllSetup command
+
+Add to `src/commands/index.ts`"
+
+```typescript
+export async function runAllSetup(ctx: CommandContext): Promise<void> {
+  console.log('\n=== Running All Setup Commands ===\n');
+
+  await setupLogin(ctx);
+  await setupCreateTenant(ctx);
+  await setupCreateWallet(ctx);
+  // ... existing commands ...
+  await setupMyFeature(ctx);
+  // ... existing commands ...
+}
+```
+
 ## Adding New Flows
 
 Flows are multi-step use cases. Create in `src/flows/`:
