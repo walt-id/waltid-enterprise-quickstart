@@ -373,7 +373,7 @@ class WaltCLI {
     const count = existingDirs.length + 1;
     
     this.ctx = {
-      workdir: join(logDir, `walt-log-${date}-${time}-${String(count).padStart(3, '0')}`),
+      workdir: join(logDir, `walt-log-${date}-${time}`),
       tenantPath: `${config.organization}.${config.tenant}`,
       orgBaseUrl: orgUrl,
       token: '',
