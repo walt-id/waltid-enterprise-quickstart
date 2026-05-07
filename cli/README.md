@@ -2,6 +2,26 @@
 
 A comprehensive CLI for setting up and running use cases against the walt.id Enterprise stack. The primary use case is issuing and verifying an mDL (mobile Driver's License) credential.
 
+## Project Structure
+
+```
+cli/
+├── walt.ts                 # Entry point (thin wrapper)
+├── AGENTS.md              # Guide for AI agents extending the CLI
+├── src/
+│   ├── index.ts           # CLI argument parsing and dispatch
+│   ├── config.ts          # Configuration, constants, types
+│   ├── context.ts         # CommandContext - shared state and utilities
+│   ├── http/              # HTTP client with auth and logging
+│   ├── commands/          # Individual commands
+│   │   ├── system.ts      # System init (recreate DB, create org)
+│   │   ├── run.ts         # Run commands (issue, verify, revoke)
+│   │   └── setup/         # Setup commands by category
+│   └── flows/             # Multi-step flows (ETSI, revocation)
+├── keys/                   # Cryptographic key files
+└── logs/                   # Runtime logs (gitignored)
+```
+
 ## Quick Start
 
 ```bash
@@ -374,7 +394,10 @@ The script is tolerant to already-provisioned resources:
 - Enterprise stack running at configured URL
 - Superadmin credentials in `config/superadmin-registration.conf`
 
+## Extending the CLI
 
-
-LEGACY SCRIPT:
-npx tsx journey-complete.ts --enterprise-trust-registry
+See [AGENTS.md](./AGENTS.md) for detailed guidance on:
+- Adding new setup commands
+- Adding new run commands
+- Creating new flows
+- API patterns and conventions

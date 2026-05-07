@@ -1,20 +1,29 @@
 {
-  "name": "walt-id-client-attestation-journey",
+  "name": "walt-id-enterprise-cli",
   "version": "1.0.0",
-  "description": "mDoc + Client Attestation + VICAL customer journey test (TypeScript)",
+  "description": "walt.id Enterprise Stack CLI Tool - Setup and run credential issuance/verification flows",
   "type": "module",
-  "main": "journey.ts",
+  "main": "walt.ts",
+  "bin": {
+    "walt": "./walt.ts"
+  },
   "scripts": {
-    "start": "tsx journey.ts",
+    "start": "tsx walt.ts",
+    "walt": "tsx walt.ts",
     "build": "tsc",
-    "test": "tsx journey.ts"
+    "typecheck": "tsc --noEmit"
   },
   "keywords": [
     "walt.id",
+    "enterprise",
     "mdoc",
+    "verifiable-credentials",
     "client-attestation",
     "vical",
-    "typescript"
+    "etsi",
+    "trust-registry",
+    "typescript",
+    "cli"
   ],
   "author": "walt.id",
   "license": "Apache-2.0",
