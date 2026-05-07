@@ -38,6 +38,7 @@ import {
   setupCreateIssuerProfile,
   setupLinkWalletToAttester,
   setupObtainWalletAttestation,
+  setupEtsiTrustRegistry,
 } from './setup/index.js';
 
 import {
@@ -68,6 +69,7 @@ export async function runAllSetup(ctx: CommandContext): Promise<void> {
   await setupStoreVicalSignerCertificate(ctx);
   await setupCreateVicalService(ctx);
   await setupPublishVical(ctx);
+  await setupEtsiTrustRegistry(ctx);
   await setupCreateClientAttester(ctx);
   await setupCreateCredentialStatusService(ctx);
   await setupCreateStatusConfiguration(ctx);
