@@ -2423,6 +2423,7 @@ class WaltCLI {
     await this.setupCreateStatusConfiguration();
     await this.setupCreateIssuer2();
     await this.setupLinkIssuerToCredentialStatus();
+    await this.setupEtsiTrustRegistry();
     await this.setupCreateIssuerProfile();
     await this.setupLinkWalletToAttester();
     await this.setupObtainWalletAttestation();
@@ -2772,6 +2773,7 @@ async function main(): Promise<void> {
       '--setup-create-status-configuration': () => walt.setupCreateStatusConfiguration(),
       '--setup-create-issuer2': () => walt.setupCreateIssuer2(),
       '--setup-link-issuer-to-credential-status': () => walt.setupLinkIssuerToCredentialStatus(),
+      '--setup-etsi-trust-registry': () => walt.setupEtsiTrustRegistry(),
       '--setup-create-issuer-profile': () => walt.setupCreateIssuerProfile(),
       '--setup-link-wallet-to-attester': () => walt.setupLinkWalletToAttester(),
       '--setup-obtain-wallet-attestation': () => walt.setupObtainWalletAttestation(),
