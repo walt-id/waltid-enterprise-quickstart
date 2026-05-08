@@ -1,2 +1,10 @@
 .idea
 /data
+.did_key
+.auth_token
+.user_auth_token
+.user_id
+.did
+.vc_offer
+cli/node_modules/
+cli/walt-log-*/

@@ -1,0 +1,38 @@
+{
+  "name": "walt-id-enterprise-cli",
+  "version": "1.0.0",
+  "description": "walt.id Enterprise Stack CLI Tool - Setup and run credential issuance/verification flows",
+  "type": "module",
+  "main": "walt.ts",
+  "bin": {
+    "walt": "./walt.ts"
+  },
+  "scripts": {
+    "start": "tsx walt.ts",
+    "walt": "tsx walt.ts",
+    "build": "tsc",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": [
+    "walt.id",
+    "enterprise",
+    "mdoc",
+    "verifiable-credentials",
+    "client-attestation",
+    "vical",
+    "etsi",
+    "trust-registry",
+    "typescript",
+    "cli"
+  ],
+  "author": "walt.id",
+  "license": "Apache-2.0",
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "tsx": "^4.7.0",
+    "typescript": "^5.3.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
