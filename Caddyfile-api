@@ -1,0 +1,4 @@
+# API-only Caddyfile (no UI)
+http://*.enterprise.localhost, http://enterprise.localhost {
+	reverse_proxy waltid-enterprise:7500
+}
