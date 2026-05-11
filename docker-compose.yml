@@ -32,7 +32,7 @@ services:
       - mongodb-log:/var/log/mongodb/
     command: |
       bash -c '
-      mongod --replSet rs0 --bind_ip_all --port 27017 & MONGO_PID=$!
+      mongod --replSet rs0 --bind_ip_all --port 27017 & MONGO_PID=$$!
       until mongosh --port 27017 --eval "db.runCommand({ ping: 1 })" >/dev/null 2>&1; do
         sleep 2
       done
@@ -49,8 +49,8 @@ services:
         });
       "
 
-      kill $MONGO_PID
-      wait $MONGO_PID
+      kill $$MONGO_PID
+      wait $$MONGO_PID
 
       exec mongod --replSet rs0 --bind_ip_all --port 27017 --keyFile /etc/mongodb/pki/keyfile
       '
