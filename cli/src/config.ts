@@ -128,7 +128,7 @@ export function buildBaseUrl(baseUrl: string, port: number | undefined): string 
     }
     return new URL(baseUrl).origin;
   }
-  const portStr = port && port > 0 ? `:${port}` : ':3000';
+  const portStr = port && port > 0 ? `:${port}` : ':7500';
   return `http://${baseUrl}${portStr}`;
 }
 
@@ -145,7 +145,7 @@ export function buildOrgUrl(baseUrl: string, organization: string, port: number 
     }
     return url.origin;
   }
-  const portStr = port && port > 0 ? `:${port}` : ':3000';
+  const portStr = port && port > 0 ? `:${port}` : ':7500';
   return `http://${organization}.${baseUrl}${portStr}`;
 }
 
@@ -203,7 +203,7 @@ export function createConfig(projectRoot: string): Config {
     password: process.env.PASSWORD || superadminCreds.password || '',
     port: process.env.PORT !== undefined && process.env.PORT !== '' 
       ? parseInt(process.env.PORT) 
-      : ((process.env.BASE_URL?.startsWith('https://')) ? 0 : 3000),
+      : ((process.env.BASE_URL?.startsWith('https://')) ? 0 : 7500),
     superadminToken: process.env.SUPERADMIN_TOKEN || superadminCreds.token || '',
     adminEmail: process.env.ADMIN_EMAIL || 'admin@walt.id',
     adminPassword: process.env.ADMIN_PASSWORD || 'admin123456',

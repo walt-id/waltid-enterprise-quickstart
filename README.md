@@ -48,9 +48,9 @@ In case you want to only run the API, run:
 docker compose -f docker-compose-api.yml up
 ```
 
-Once the docker-compose is running, you can visit [enterprise.localhost:3000/swagger](http://enterprise.localhost:3000/swagger) to access the Enterprise Stack APIs.
+Once the docker-compose is running, you can visit [enterprise.localhost/swagger](http://enterprise.localhost/swagger) to access the Enterprise Stack APIs.
 
-The UI is running at [http://enterprise.localhost:3001/login](http://enterprise.localhost:3001/login)
+The UI is running at [http://enterprise.localhost/login](http://enterprise.localhost/login)
 
 ## 2. Enterprise CLI
 

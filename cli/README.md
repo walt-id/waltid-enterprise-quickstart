@@ -193,7 +193,7 @@ npx tsx walt.ts --flow-credential-revocation
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `BASE_URL` | `enterprise.localhost` | Enterprise stack base URL |
-| `PORT` | `3000` | Port number (auto-omitted for HTTPS URLs) |
+| `PORT` | `7500` | Port number (auto-omitted for HTTPS URLs) |
 | `ORGANIZATION` | `waltid` | Organization ID |
 | `TENANT` | `<organization>-tenant01` | Tenant ID |
 | `EMAIL` | (from conf) | Superadmin email |

@@ -92,7 +92,7 @@ services:
     # environment:
     #   - LOG_LEVEL=trace
     ports:
-      - "3000:3000"
+      - "7500:7500"
     volumes:
       - ./config:/config
     networks:

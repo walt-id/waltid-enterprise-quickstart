@@ -162,7 +162,7 @@ Other Options:
 
 Environment Variables:
   BASE_URL                Enterprise stack base URL (default: enterprise.localhost)
-  PORT                    Port number (default: 3000, auto-omitted for HTTPS)
+  PORT                    Port number (default: 7500, auto-omitted for HTTPS)
   ORGANIZATION            Organization ID (default: waltid)
   TENANT                  Tenant ID (default: <organization>-tenant01)
   EMAIL                   Superadmin email (from config/superadmin-registration.conf)

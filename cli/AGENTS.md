@@ -316,7 +316,7 @@ await ctx.orgClient.put(
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `BASE_URL` | `enterprise.localhost` | Enterprise stack base URL |
-| `PORT` | `3000` | Port (auto-omitted for HTTPS) |
+| `PORT` | `7500` | Port (auto-omitted for HTTPS) |
 | `ORGANIZATION` | `waltid` | Organization ID |
 | `TENANT` | `<org>-tenant01` | Tenant ID |
 | `EMAIL` | From config file | Superadmin email |
