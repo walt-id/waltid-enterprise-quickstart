@@ -97,7 +97,10 @@ services:
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile
     networks:
-      - mongodb_network
+      mongodb_network:
+        aliases:
+          - enterprise.localhost
+          - waltid.enterprise.localhost
     depends_on:
       - waltid-enterprise
       - waltid-enterprise-ui
