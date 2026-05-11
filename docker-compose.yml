@@ -118,7 +118,7 @@ services:
   waltid-enterprise-ui:
     image: waltid/waltid-enterprise-ui:${ENTERPRISE_API_DOCKER_IMAGE_TAG}
     ports:
-      - "7501:7500"
+      - "7501:3000"
     environment:
       - NUXT_PUBLIC_API_URL=http://enterprise.localhost
     networks:

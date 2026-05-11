@@ -22,6 +22,6 @@ http://*.enterprise.localhost, http://enterprise.localhost {
 		reverse_proxy waltid-enterprise:7500
 	}
 	handle {
-		reverse_proxy waltid-enterprise-ui:7501
+		reverse_proxy waltid-enterprise-ui:3000
 	}
 }
