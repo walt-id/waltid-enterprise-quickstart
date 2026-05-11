@@ -118,6 +118,7 @@ export interface SuperadminCredentials {
 /**
  * Build base URL from configuration.
  * Handles both http:// and https:// protocols.
+ * Port 0 or undefined means no explicit port (use default for protocol).
  */
 export function buildBaseUrl(baseUrl: string, port: number | undefined): string {
   if (baseUrl.startsWith('http://') || baseUrl.startsWith('https://')) {
@@ -128,7 +129,8 @@ export function buildBaseUrl(baseUrl: string, port: number | undefined): string 
     }
     return new URL(baseUrl).origin;
   }
-  const portStr = port && port > 0 ? `:${port}` : ':3000';
+  // For bare hostnames, add protocol and optional port
+  const portStr = port && port > 0 ? `:${port}` : '';
   return `http://${baseUrl}${portStr}`;
 }
 
@@ -145,7 +147,7 @@ export function buildOrgUrl(baseUrl: string, organization: string, port: number 
     }
     return url.origin;
   }
-  const portStr = port && port > 0 ? `:${port}` : ':3000';
+  const portStr = port && port > 0 ? `:${port}` : '';
   return `http://${organization}.${baseUrl}${portStr}`;
 }
 
@@ -203,7 +205,7 @@ export function createConfig(projectRoot: string): Config {
     password: process.env.PASSWORD || superadminCreds.password || '',
     port: process.env.PORT !== undefined && process.env.PORT !== '' 
       ? parseInt(process.env.PORT) 
-      : ((process.env.BASE_URL?.startsWith('https://')) ? 0 : 3000),
+      : 0,  // Default to no port (uses protocol default: 80 for HTTP, 443 for HTTPS)
     superadminToken: process.env.SUPERADMIN_TOKEN || superadminCreds.token || '',
     adminEmail: process.env.ADMIN_EMAIL || 'admin@walt.id',
     adminPassword: process.env.ADMIN_PASSWORD || 'admin123456',

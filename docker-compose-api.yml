@@ -32,7 +32,7 @@ services:
       - mongodb-log:/var/log/mongodb/
     command: |
       bash -c '
-      mongod --replSet rs0 --bind_ip_all --port 27017 & MONGO_PID=$!
+      mongod --replSet rs0 --bind_ip_all --port 27017 & MONGO_PID=$$!
       until mongosh --port 27017 --eval "db.runCommand({ ping: 1 })" >/dev/null 2>&1; do
         sleep 2
       done
@@ -49,8 +49,8 @@ services:
         });
       "
 
-      kill $MONGO_PID
-      wait $MONGO_PID
+      kill $$MONGO_PID
+      wait $$MONGO_PID
 
       exec mongod --replSet rs0 --bind_ip_all --port 27017 --keyFile /etc/mongodb/pki/keyfile
       '
@@ -87,12 +87,29 @@ services:
     depends_on:
       - mongodb
 
+  caddy:
+    image: caddy:2-alpine
+    container_name: caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile-api:/etc/caddy/Caddyfile
+    networks:
+      mongodb_network:
+        aliases:
+          - enterprise.localhost
+          - waltid.enterprise.localhost
+    depends_on:
+      - waltid-enterprise
+
   waltid-enterprise:
     image: waltid/waltid-enterprise-api:${ENTERPRISE_API_DOCKER_IMAGE_TAG}
     # environment:
     #   - LOG_LEVEL=trace
     ports:
-      - "3000:3000"
+      - "7500:7500"
     volumes:
       - ./config:/config
     networks:

@@ -1,25 +1,25 @@
 http://*.enterprise.localhost, http://enterprise.localhost {
 	@didjson path_regexp didjson ^/.+/did\.json$
 	handle @didjson {
-		reverse_proxy waltid-enterprise:3000
+		reverse_proxy waltid-enterprise:7500
 	}
 	handle /swagger* {
-		reverse_proxy waltid-enterprise:3000
+		reverse_proxy waltid-enterprise:7500
 	}
 	handle /api.json {
-		reverse_proxy waltid-enterprise:3000
+		reverse_proxy waltid-enterprise:7500
 	}
 	handle /auth/* {
-		reverse_proxy waltid-enterprise:3000
+		reverse_proxy waltid-enterprise:7500
 	}
 	handle /v1/* {
-		reverse_proxy waltid-enterprise:3000
+		reverse_proxy waltid-enterprise:7500
 	}
 	handle /v2/* {
-		reverse_proxy waltid-enterprise:3000
+		reverse_proxy waltid-enterprise:7500
 	}
 	handle /.well-known/* {
-		reverse_proxy waltid-enterprise:3000
+		reverse_proxy waltid-enterprise:7500
 	}
 	handle {
 		reverse_proxy waltid-enterprise-ui:3000

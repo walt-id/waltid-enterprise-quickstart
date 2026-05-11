@@ -32,7 +32,7 @@ services:
       - mongodb-log:/var/log/mongodb/
     command: |
       bash -c '
-      mongod --replSet rs0 --bind_ip_all --port 27017 & MONGO_PID=$!
+      mongod --replSet rs0 --bind_ip_all --port 27017 & MONGO_PID=$$!
       until mongosh --port 27017 --eval "db.runCommand({ ping: 1 })" >/dev/null 2>&1; do
         sleep 2
       done
@@ -49,8 +49,8 @@ services:
         });
       "
 
-      kill $MONGO_PID
-      wait $MONGO_PID
+      kill $$MONGO_PID
+      wait $$MONGO_PID
 
       exec mongod --replSet rs0 --bind_ip_all --port 27017 --keyFile /etc/mongodb/pki/keyfile
       '
@@ -97,7 +97,10 @@ services:
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile
     networks:
-      - mongodb_network
+      mongodb_network:
+        aliases:
+          - enterprise.localhost
+          - waltid.enterprise.localhost
     depends_on:
       - waltid-enterprise
       - waltid-enterprise-ui
@@ -107,9 +110,7 @@ services:
     # environment:
     #   - LOG_LEVEL=trace
     ports:
-      - "3000:3000"
-    extra_hosts:
-      - "waltid.enterprise.localhost:host-gateway"
+      - "7500:7500"
     volumes:
       - ./config:/config
     networks:
@@ -120,7 +121,9 @@ services:
   waltid-enterprise-ui:
     image: waltid/waltid-enterprise-ui:${ENTERPRISE_API_DOCKER_IMAGE_TAG}
     ports:
-      - "3001:3000"
+      - "7501:3000"
+    environment:
+      - NUXT_PUBLIC_API_URL=http://enterprise.localhost
     networks:
       - mongodb_network
     depends_on:
