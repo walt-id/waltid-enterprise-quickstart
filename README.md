@@ -19,7 +19,7 @@ Bring up the whole stack using docker-compose and explore the enterprise feature
 
 ⚠️ Please note: You need to be an Enterprise Stack customer & have access to the private enterprise stack images, to use this quickstart.
 
-## 2. Docker-Compose: Run The Enterprise Stack
+## 1. Docker-Compose: Run The Enterprise Stack
 
 Use docker-compose to bring up the Enterprise Stack API, UI and a MongoDB database (storage of the Enterprise Stack).
 
@@ -66,10 +66,10 @@ cd cli
 npm install
 
 # Run full setup + primary use case (mDL issuance & verification)
-npx tsx walt.ts
-
-# Or recreate database and start fresh
 npx tsx walt.ts --recreate
+
+# Subsequence calls don't need to recreate the DB:
+npx tsx walt.ts
 ```
 
 ### Common Commands
