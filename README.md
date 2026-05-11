@@ -15,15 +15,46 @@ This repository contains the quickstart CLI and docker-compose files to get you 
 
 # Get Started
 
-Explore enterprise features via our CLI tool and/or bring up the whole stack using docker-compose.
+Bring up the whole stack using docker-compose and explore the enterprise features via our CLI tool.
 
 ⚠️ Please note: You need to be an Enterprise Stack customer & have access to the private enterprise stack images, to use this quickstart.
 
-## 1. Enterprise CLI
+## 2. Docker-Compose: Run The Enterprise Stack
+
+Use docker-compose to bring up the Enterprise Stack API, UI and a MongoDB database (storage of the Enterprise Stack).
+
+You can update the version of the enterprise stack via the `.env` file.
+
+### Use docker-compose
+
+**Clone the repo**
+
+```bash
+git clone https://github.com/walt-id/waltid-enterprise-quickstart.git
+```
+
+**Change Working Directory**
+```bash
+cd waltid-enterprise-quickstart
+```
+
+**Run The Stack**
+```bash
+docker compose pull 
+docker compose up
+```
+In case you want to only run the API, run:
+```bash
+docker compose -f docker-compose-api.yml up
+```
+
+Once the docker-compose is running, you can visit [enterprise.localhost:3000/swagger](http://enterprise.localhost:3000/swagger) to access the Enterprise Stack APIs.
+
+The UI is running at [http://enterprise.localhost:3001/login](http://enterprise.localhost:3001/login)
+
+## 2. Enterprise CLI
 
 A TypeScript CLI tool for setting up and testing the walt.id Enterprise Stack.
-
-### Quick Start
 
 ```bash
 # Clone the repo
@@ -56,36 +87,6 @@ npx tsx walt.ts --recreate
 Superadmin credentials are read from `config/superadmin-registration.conf`.
 
 For detailed documentation, see **[cli/README.md](cli/README.md)**.
-
-## 2. Docker-Compose: Run The Enterprise Stack
-
-Use docker-compose to bring up the Enterprise Stack API, UI and a MongoDB database (storage of the Enterprise Stack).  
-
-You can update the version of the enterprise stack via the `.env` file. 
-
-### Use docker-compose
-
-**Clone the repo**
-
-```bash
-git clone https://github.com/walt-id/waltid-enterprise-quickstart.git
-```
-
-**Change Working Directory**
-```bash
-cd waltid-enterprise-quickstart
-```
-
-**Run The Stack**
-```bash
-docker compose up
-```
-In case you want to only run the API, run:
-```bash
-docker compose -f docker-compose-api.yml up
-```
-
-Once the docker-compose is running, you can visit [enterprise.localhost:3000/swagger](http://enterprise.localhost:3000/swagger) to access the Enterprise Stack APIs.
 
 ## Next Steps
 

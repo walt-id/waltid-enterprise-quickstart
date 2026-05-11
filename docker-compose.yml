@@ -108,8 +108,6 @@ services:
     #   - LOG_LEVEL=trace
     ports:
       - "3000:3000"
-    extra_hosts:
-      - "waltid.enterprise.localhost:host-gateway"
     volumes:
       - ./config:/config
     networks:
@@ -121,6 +119,8 @@ services:
     image: waltid/waltid-enterprise-ui:${ENTERPRISE_API_DOCKER_IMAGE_TAG}
     ports:
       - "3001:3000"
+    environment:
+      - NUXT_PUBLIC_API_URL=http://enterprise.localhost
     networks:
       - mongodb_network
     depends_on:

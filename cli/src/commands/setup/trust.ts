@@ -139,7 +139,15 @@ export async function importPublicTrustLists(ctx: CommandContext): Promise<void>
         console.log(`   [WARN] ${trustList.sourceId} load failed: ${response.data.error}`);
       }
     } catch (error: any) {
-      console.log(`   [WARN] Failed to import ${trustList.sourceId}: ${error.message}`);
+      const errMsg = error.message || error.response?.data?.message || '';
+      if (error.status === 409 || 
+          errMsg.includes('Duplicate target') || 
+          errMsg.includes('already exists') ||
+          errMsg.includes('Overwriting targets')) {
+        console.log(`   [SKIP] ${trustList.sourceId} already exists`);
+      } else {
+        console.log(`   [WARN] Failed to import ${trustList.sourceId}: ${errMsg}`);
+      }
     }
   }
 }
@@ -168,7 +176,8 @@ export async function loadIacaIntoTrustRegistry(ctx: CommandContext): Promise<vo
     throw new Error('IACA certificate PEM is empty');
   }
   
-  const sourceId = `journey-iaca-${Date.now()}`;
+  // Use a fixed sourceId so we can detect duplicates
+  const sourceId = 'journey-iaca-local';
   
   // Create a LoTE-format JSON source with the IACA certificate
   const loteSource = {
@@ -214,21 +223,35 @@ export async function loadIacaIntoTrustRegistry(ctx: CommandContext): Promise<vo
   };
   ctx.saveJson('load-journey-iaca-request.json', request, step);
   
-  const response = await ctx.orgClient.post(
-    `/v1/${ctx.tenantPath}.${RESOURCES.trustRegistry}/trust-registry-api/sources/load`,
-    request
-  );
-  ctx.saveJson('load-journey-iaca-response.json', response.data, step);
-  
-  if (!response.data.success) {
-    throw new Error(`Failed to load IACA trust source: ${response.data.error}`);
+  try {
+    const response = await ctx.orgClient.post(
+      `/v1/${ctx.tenantPath}.${RESOURCES.trustRegistry}/trust-registry-api/sources/load`,
+      request
+    );
+    ctx.saveJson('load-journey-iaca-response.json', response.data, step);
+    
+    if (!response.data.success) {
+      throw new Error(`Failed to load IACA trust source: ${response.data.error}`);
+    }
+    
+    ctx.ctx.trustRegistrySourceId = sourceId;
+    console.log(`   [OK] Journey IACA trust source loaded: ${sourceId}`);
+    console.log(`        Entities: ${response.data.entitiesLoaded || 0}`);
+    console.log(`        Services: ${response.data.servicesLoaded || 0}`);
+    console.log(`        Identities: ${response.data.identitiesLoaded || 0}`);
+  } catch (error: any) {
+    // Check for duplicate/already exists errors
+    const errMsg = error.message || error.response?.data?.message || '';
+    if (error.status === 409 || 
+        errMsg.includes('Duplicate target') || 
+        errMsg.includes('already exists') ||
+        errMsg.includes('Overwriting targets')) {
+      ctx.ctx.trustRegistrySourceId = sourceId;
+      console.log(`   [SKIP] Journey IACA trust source already exists: ${sourceId}`);
+    } else {
+      throw new Error(`Failed to load IACA trust source: ${errMsg}`);
+    }
   }
-  
-  ctx.ctx.trustRegistrySourceId = sourceId;
-  console.log(`   [OK] Journey IACA trust source loaded: ${sourceId}`);
-  console.log(`        Entities: ${response.data.entitiesLoaded || 0}`);
-  console.log(`        Services: ${response.data.servicesLoaded || 0}`);
-  console.log(`        Identities: ${response.data.identitiesLoaded || 0}`);
 }
 
 /** List all trust sources */
