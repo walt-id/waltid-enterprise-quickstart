@@ -40,8 +40,7 @@ spec:
             drop:
               - ALL
         resources:
-          requests:
-            cpu: "100m"
+          {{- toYaml .Values.api.resources | nindent 10 }}
         startupProbe:
           httpGet:
             path: /livez
