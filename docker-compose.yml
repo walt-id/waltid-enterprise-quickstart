@@ -101,6 +101,7 @@ services:
         aliases:
           - enterprise.localhost
           - waltid.enterprise.localhost
+          # add your own organisation domains here
     depends_on:
       - waltid-enterprise
       - waltid-enterprise-ui
