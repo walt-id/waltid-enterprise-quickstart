@@ -10,7 +10,27 @@
  */
 
 import { CommandContext } from '../context.js';
-import { buildBaseUrl, buildOrgUrl } from '../config.js';
+import { buildBaseUrl, buildOrgUrl, defaultHostAliasTarget } from '../config.js';
+
+/** Obtain superadmin bearer token for system API calls */
+async function getSuperadminToken(ctx: CommandContext): Promise<string> {
+  const adminUrl = buildBaseUrl(ctx.config.baseUrl, ctx.config.port);
+
+  const loginResponse = await fetch(`${adminUrl}/auth/account/emailpass`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: ctx.config.email, password: ctx.config.password }),
+  });
+
+  const loginData = (await loginResponse.json()) as { token?: string };
+  const token = loginData.token;
+
+  if (!token) {
+    throw new Error('Could not get superadmin token');
+  }
+
+  return token;
+}
 
 // ============================================================================
 // System Commands
@@ -120,6 +140,57 @@ export async function initDb(ctx: CommandContext): Promise<void> {
     console.log(`   [WARN] Database init returned ${initResponse.status}: ${text}`);
   } else {
     console.log(`   [OK] Database initialized`);
+  }
+}
+
+/**
+ * Create a host alias when HOST_ALIAS_DOMAIN is configured.
+ * Maps a custom domain to the organization (default target: {org}.host-alias).
+ */
+export async function createHostAlias(ctx: CommandContext): Promise<void> {
+  const domain = ctx.config.hostAliasDomain?.trim();
+  if (!domain) {
+    return;
+  }
+
+  ctx.log(`Create host alias: ${domain}`, 'SYSTEM');
+
+  const orgUrl = buildOrgUrl(ctx.config.baseUrl, ctx.config.organization, ctx.config.port);
+  const target = ctx.config.hostAliasTarget?.trim() || defaultHostAliasTarget(ctx.config.organization);
+  const token = await getSuperadminToken(ctx);
+
+  const request = { domain };
+  ctx.saveJson('create-host-alias-request.json', { target, ...request });
+
+  try {
+    const response = await fetch(
+      `${orgUrl}/v1/${target}/host-alias-api/host-aliases/create`,
+      {
+        method: 'POST',
+        headers: {
+          accept: '*/*',
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(request),
+      }
+    );
+
+    const text = await response.text();
+    ctx.saveJson('create-host-alias-response.json', { status: response.status, body: text });
+
+    if (text.includes('already') || text.includes('exists') || text.includes('Duplicate')) {
+      console.log(`   [SKIP] Host alias '${domain}' already exists (target: ${target})`);
+    } else if (!response.ok) {
+      console.log(`   [WARN] Host alias creation returned ${response.status}: ${text}`);
+    } else {
+      console.log(`   [OK] Host alias created: ${domain} (target: ${target})`);
+    }
+  } catch (error: any) {
+    console.log(`   [WARN] Host alias creation failed: ${error.message}`);
+    if (error.cause) {
+      console.log(`   [CAUSE] ${error.cause.message || error.cause}`);
+    }
   }
 }
 
@@ -296,5 +367,6 @@ export async function runSystemInit(ctx: CommandContext): Promise<void> {
   await createOrganization(ctx);
   await setupCreateAdminRole(ctx);
   await setupCreateAdminAccount(ctx);
+  await createHostAlias(ctx);
   console.log('\n[SYSTEM] System initialization complete');
 }

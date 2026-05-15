@@ -24,6 +24,11 @@ export const RESOURCES = {
   x509Service: 'x509-service',
   x509Store: 'x509-store',
   kms: 'kms',
+  /** Dedicated KMS for wallet keys (separate from issuer/x509 KMS) */
+  walletKms: 'wallet-kms',
+  walletDidService: 'wallet-did-service',
+  walletDidStore: 'wallet-didstore',
+  walletCredentialStore: 'wallet-credentialstore',
   vical: 'vical',
   clientAttester: 'client-attester',
   issuerProfile: 'mdl-profile',
@@ -73,6 +78,10 @@ export interface Config {
   superadminToken: string;
   adminEmail: string;
   adminPassword: string;
+  /** Custom domain for host alias (optional) */
+  hostAliasDomain?: string;
+  /** Host alias service target (optional, default: {organization}.host-alias) */
+  hostAliasTarget?: string;
 }
 
 /** Runtime context maintained during CLI execution */
@@ -89,6 +98,7 @@ export interface WaltContext {
   
   // Service state
   walletKeyRef: string;
+  walletDid: string;
   iacaPem: string;
   docSignerPem: string;
   clientAttestationJwt: string;
@@ -209,7 +219,14 @@ export function createConfig(projectRoot: string): Config {
     superadminToken: process.env.SUPERADMIN_TOKEN || superadminCreds.token || '',
     adminEmail: process.env.ADMIN_EMAIL || 'admin@walt.id',
     adminPassword: process.env.ADMIN_PASSWORD || 'admin123456',
+    hostAliasDomain: process.env.HOST_ALIAS_DOMAIN || undefined,
+    hostAliasTarget: process.env.HOST_ALIAS_TARGET || undefined,
   };
+}
+
+/** Default host-alias API target for an organization */
+export function defaultHostAliasTarget(organization: string): string {
+  return `${organization}.host-alias`;
 }
 
 /**
@@ -229,6 +246,7 @@ export function createInitialContext(
     adminUserId: '',
     adminToken: '',
     walletKeyRef: '',
+    walletDid: '',
     iacaPem: '',
     docSignerPem: '',
     clientAttestationJwt: '',

@@ -20,6 +20,7 @@ import { fileURLToPath } from 'url';
 
 import { createConfig } from './config.js';
 import { CommandContext } from './context.js';
+import { loadWaltEnv } from './env.js';
 import { loadBankTenantEnv, createBankTenantConfig } from './bank-tenant-config.js';
 import {
   // System commands
@@ -174,6 +175,10 @@ Environment Variables:
   ADMIN_PASSWORD          Admin user password (default: admin123456)
   SUPERADMIN_TOKEN        Superadmin registration token (from config/superadmin-registration.conf)
 
+General CLI settings (cli/walt.env — copy from walt.env.example):
+  HOST_ALIAS_DOMAIN       Custom domain for host alias (used by --recreate / --init-system)
+  HOST_ALIAS_TARGET       Host alias service target (default: {ORGANIZATION}.host-alias)
+
 Bank tenant (cli/bank-tenant.env — copy from bank-tenant.env.example):
   BANK_TENANT             Tenant ID (default: bank-tenant)
   BANK_TENANT_BASE_URL    Public base URL for issuer and verifier
@@ -259,7 +264,8 @@ async function main(): Promise<void> {
     }
   }
 
-  // Bank-tenant setup loads its own env file before config
+  // Load cli/walt.env (general settings); bank-tenant.env overrides when used
+  loadWaltEnv(cliDir);
   if (args.includes('--setup-bank-tenant')) {
     loadBankTenantEnv(cliDir);
   }

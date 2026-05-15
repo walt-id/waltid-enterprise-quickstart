@@ -1,5 +1,6 @@
 node_modules/
 bank-tenant.env
+walt.env
 journey-test-*/
 *.log
 .auth_token

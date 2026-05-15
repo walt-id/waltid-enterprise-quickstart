@@ -3,6 +3,7 @@
  */
 
 import { existsSync, readFileSync } from 'fs';
+import { join } from 'path';
 
 /**
  * Load KEY=VALUE pairs from an env file into process.env.
@@ -43,4 +44,9 @@ export function loadEnvFile(filePath: string, options?: { override?: boolean }):
   }
 
   return true;
+}
+
+/** Load general CLI settings from cli/walt.env (see walt.env.example). */
+export function loadWaltEnv(cliDir: string): boolean {
+  return loadEnvFile(join(cliDir, 'walt.env'));
 }

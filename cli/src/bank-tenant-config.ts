@@ -365,7 +365,7 @@ export function buildBankIssuerServiceConfig(
           ],
         },
       },
-    [PAYMENT_SCA_ID]: {
+      [PAYMENT_SCA_ID]: {
         format: 'dc+sd-jwt',
         scope: PAYMENT_SCA_ID,
         vct: buildVctUrl(bank, PAYMENT_SCA_ID),
