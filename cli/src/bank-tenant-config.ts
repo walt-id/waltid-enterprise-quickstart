@@ -75,7 +75,7 @@ function claimDisplay(name: string, locale = 'en') {
 }
 
 function buildVctUrl(bank: BankTenantConfig, credentialId: string): string {
-  return `${bank.vctBaseUrl}/${credentialId}`;
+  return `{vctBaseURL}/${credentialId}`;
 }
 
 /** Credential type definition for bank-tenant issuer profiles */
