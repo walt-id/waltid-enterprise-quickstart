@@ -20,6 +20,7 @@ import { fileURLToPath } from 'url';
 
 import { createConfig } from './config.js';
 import { CommandContext } from './context.js';
+import { loadBankTenantEnv, createBankTenantConfig } from './bank-tenant-config.js';
 import {
   // System commands
   runSystemInit,
@@ -70,6 +71,7 @@ import {
   runAllSetup,
   runAllRun,
   runFull,
+  runBankTenantSetup,
 } from './commands/index.js';
 
 import { flowEtsiTrustLists, flowCredentialRevocation } from './flows/index.js';
@@ -129,6 +131,7 @@ Setup Commands (create resources):
   --setup-create-issuer-profile  Create issuer credential profile
   --setup-link-wallet-to-attester  Link wallet to client attester
   --setup-obtain-wallet-attestation  Obtain wallet attestation
+  --setup-bank-tenant     Set up bank-tenant (issuer, wallet, verifier, KMS, X509)
 
 Additional Setup Commands:
   --setup-create-trust-registry  Create trust registry service
@@ -171,6 +174,12 @@ Environment Variables:
   ADMIN_PASSWORD          Admin user password (default: admin123456)
   SUPERADMIN_TOKEN        Superadmin registration token (from config/superadmin-registration.conf)
 
+Bank tenant (cli/bank-tenant.env — copy from bank-tenant.env.example):
+  BANK_TENANT             Tenant ID (default: bank-tenant)
+  BANK_TENANT_BASE_URL    Public base URL for issuer and verifier
+  VCT_BASE_URL            Base URL for SD-JWT VCT values
+  KEYCLOAK_*              Keycloak OIDC settings for issuer auth
+
 Examples:
   # Full setup and run (default)
   npx tsx walt.ts
@@ -196,6 +205,9 @@ Examples:
 
   # Run with different organization/tenant
   ORGANIZATION=myorg TENANT=myorg-prod npx tsx walt.ts
+
+  # Set up bank-tenant only (requires cli/bank-tenant.env)
+  npx tsx walt.ts --setup-bank-tenant
 `);
 }
 
@@ -224,6 +236,7 @@ async function main(): Promise<void> {
     '--setup-create-credential-status-service', '--setup-create-status-configuration',
     '--setup-create-issuer2', '--setup-link-issuer-to-credential-status', '--setup-create-issuer-profile',
     '--setup-link-wallet-to-attester', '--setup-obtain-wallet-attestation',
+    '--setup-bank-tenant',
     '--setup-create-trust-registry', '--setup-etsi-trust-registry', '--setup-import-trust-list',
     '--setup-create-superadmin', '--setup-create-organization',
     '--setup-create-admin-role', '--setup-create-admin-account',
@@ -246,12 +259,24 @@ async function main(): Promise<void> {
     }
   }
 
+  // Bank-tenant setup loads its own env file before config
+  if (args.includes('--setup-bank-tenant')) {
+    loadBankTenantEnv(cliDir);
+  }
+
   // Create config and context
   const projectRoot = join(cliDir, '..');
   const config = createConfig(projectRoot);
   const ctx = new CommandContext(config, cliDir);
 
   try {
+    if (args.includes('--setup-bank-tenant')) {
+      ctx.ensureWorkdir();
+      const bankConfig = createBankTenantConfig();
+      await runBankTenantSetup(ctx, bankConfig);
+      ctx.saveHttpLog();
+      return;
+    }
     // System commands
     if (args.includes('--recreate')) {
       await runSystemInit(ctx);

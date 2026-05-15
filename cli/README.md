@@ -46,6 +46,7 @@ npx tsx walt.ts
 | `--setup-create-organization` | Create organization |
 | `--setup-create-admin-role` | Check/report admin role (auto-created with org) |
 | `--setup-create-admin-account` | Create admin user account and assign role |
+| `--setup-bank-tenant` | Set up bank-tenant for bank demo|
 
 ### Setup Commands
 

@@ -1,4 +1,5 @@
 node_modules/
+bank-tenant.env
 journey-test-*/
 *.log
 .auth_token
