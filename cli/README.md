@@ -31,7 +31,7 @@ We currently have the following flows:
 
 ### ETSI Trust Lists Flow
 
-This flow demonstrates trust list verification using the Enterprise Trust Registry Service. It will create a trust registry, import trust lists, and configure the verifier to verify trust lists.
+This flow demonstrates trust list verification using the Enterprise Trust Registry Service. It will use the previously created trust registry and trust lists from the initial setup and show how to issue, accept, share and verify credentials all following key trust principles.
 
 ```bash
 npx tsx walt.ts --flow-etsi-trust-lists
@@ -39,20 +39,20 @@ npx tsx walt.ts --flow-etsi-trust-lists
 
 ### Credential Revocation Flow
 
-This flow demonstrates the complete credential revocation lifecycle using TokenStatusList CWT. It will create a credential with status tracking enabled, verify the credential, revoke the credential, and unrevoke the credential.
+This flow demonstrates the complete credential revocation lifecycle using TokenStatusList CWT. It will issue a credential with status tracking enabled, verify the credential, revoke the credential, and unrevoke the credential.
 
 ```bash
 npx tsx walt.ts --flow-credential-revocation
 ```
 
-### Bank Tenant Flow
+### Bank Tenant Setup
 
-This flow demonstrates the setup of a bank tenant, which is used for the bank demo found (here)[https://github.com/walt-id/waltid-enterprise-examples/tree/main/waltid-bank-demo].
+This setup will create a separate tenant within the enterprise stack (bank-tenant), which is used for the bank demo found (here)[https://github.com/walt-id/waltid-enterprise-examples/tree/main/waltid-bank-demo].
 
 For this flow, you will need to configure the bank-tenant.env file with the correct values. You can find an example of the bank-tenant.env file (here)[bank-tenant.env.example]. These will need to align with the environment variables used in the bank demo. The examples in both repositories currently match, but beware if you make any updates!
 
 ```bash
-npx tsx walt.ts --flow-bank-tenant
+npx tsx walt.ts --setup-bank-tenant
 ```
 
 ## Advanced Usage
