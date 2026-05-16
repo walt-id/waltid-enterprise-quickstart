@@ -267,6 +267,10 @@ class HttpClient {
     return this.request<T>('PATCH', path, body);
   }
 
+  async put<T = any>(path: string, body?: any): Promise<HttpResponse<T>> {
+    return this.request<T>('PUT', path, body);
+  }
+
   async delete<T = any>(path: string): Promise<HttpResponse<T>> {
     return this.request<T>('DELETE', path);
   }
@@ -1202,7 +1206,7 @@ class WaltCLI {
       'Client attester service',
       async () => {
         const request = {
-          type: 'client-attester-service',
+          type: 'client-attester',
           _id: `${this.ctx.tenantPath}.${RESOURCES.clientAttester}`,
           signingKeyId: `${this.ctx.tenantPath}.${RESOURCES.kms}.${KEY_IDS.attesterSigningKey}`,
         };
@@ -1461,7 +1465,7 @@ class WaltCLI {
     this.saveJson('wallet-receive-request.json', request, step);
 
     const response = await this.orgClient.post(
-      `/v2/${this.ctx.tenantPath}.${RESOURCES.wallet}/wallet-service-api2/credentials/receive/pre-authorized`,
+      `/v2/${this.ctx.tenantPath}.${RESOURCES.wallet}/wallet-service-api/credentials/receive/pre-authorized`,
       request
     );
     this.saveJson('wallet-receive-response.json', response.data, step);
@@ -1577,11 +1581,7 @@ class WaltCLI {
       'Trust registry service',
       async () => {
         const request = {
-          serviceType: 'trust-registry',
-          config: {
-            name: 'Trust Registry',
-            description: 'ETSI Trust List Registry',
-          },
+          type: 'trust-registry'
         };
         this.saveJson('create-trust-registry-request.json', request, step);
 
@@ -1635,15 +1635,366 @@ class WaltCLI {
   // Flows (special use case flows)
   // --------------------------------------------------------------------------
 
+  /**
+   * Flow: ETSI Trust Lists
+   *
+   * Demonstrates trust list verification using the Enterprise Trust Registry Service.
+   * This flow assumes the primary setup has been run (tenant, wallet, credentials exist).
+   *
+   * Steps:
+   * 1. Create trust registry service (if not exists)
+   * 2. Import public trust lists from URLs (TSL XML, LoTE JSON, PILOT formats)
+   * 3. Create a local trust source with our IACA certificate
+   * 4. Create verification session with etsi-trust-list policy
+   * 5. Present credential and verify against trust registry
+   */
   async flowEtsiTrustLists(): Promise<void> {
-    console.log('\n=== Flow: ETSI Trust Lists ===\n');
-    console.log('[PLACEHOLDER] This flow will:');
-    console.log('  1. Create trust registry service');
-    console.log('  2. Load IACA certificate into trust registry');
-    console.log('  3. Link verifier2 to trust registry');
-    console.log('  4. Create verification session with etsi-trust-list policy');
-    console.log('  5. Present and verify credential');
-    console.log('\nNot yet implemented.');
+    console.log('\n========================================');
+    console.log('  Flow: ETSI Trust Lists');
+    console.log('========================================\n');
+    console.log(`Organization: ${this.config.organization}`);
+    console.log(`Tenant: ${this.config.tenant}`);
+    console.log(`Working directory: ${this.ctx.workdir}`);
+
+    mkdirSync(this.ctx.workdir, { recursive: true });
+
+    try {
+      // Login first
+      await this.setupLogin();
+
+      // Set wallet key reference if not already set
+      if (!this.ctx.walletKeyRef) {
+        this.ctx.walletKeyRef = `${this.ctx.tenantPath}.${RESOURCES.kms}.wallet_key`;
+      }
+
+      // Step 1: Create trust registry service
+      console.log('\n--- Step 1: Create Trust Registry Service ---');
+      await this.setupCreateTrustRegistry();
+
+      // Step 2: Link Verifier2 to Trust Registry
+      console.log('\n--- Step 2: Link Verifier2 to Trust Registry ---');
+      await this.flowLinkVerifier2ToTrustRegistry();
+
+      // Step 3: Import public trust lists from URLs
+      console.log('\n--- Step 3: Import Public Trust Lists ---');
+      await this.flowImportPublicTrustLists();
+
+      // Step 4: Load our IACA certificate into trust registry
+      console.log('\n--- Step 4: Load Local IACA Certificate ---');
+      await this.flowLoadIacaIntoTrustRegistry();
+
+      // Step 5: List loaded trust sources
+      console.log('\n--- Step 5: List Trust Sources ---');
+      await this.flowListTrustSources();
+
+      // Step 6: Create verification session with etsi-trust-list policy
+      console.log('\n--- Step 6: Create Verification Session with ETSI Trust List Policy ---');
+      await this.flowCreateEtsiVerificationSession();
+
+      // Step 7: Wallet presents credential
+      console.log('\n--- Step 7: Present Credential ---');
+      await this.runWalletPresent();
+
+      // Step 8: Assert success
+      console.log('\n--- Step 8: Verify Result ---');
+      await this.runAssertFinalStatus();
+
+      console.log('\n========================================');
+      console.log('  SUCCESS - ETSI Trust Lists Flow Complete');
+      console.log('========================================\n');
+    } finally {
+      this.saveHttpLog();
+      console.log(`Logs saved to: ${this.ctx.workdir}`);
+    }
+  }
+
+  /**
+   * Link the Verifier2 service to the Trust Registry service.
+   * This allows the etsi-trust-list policy to resolve certificates against the enterprise registry.
+   * Uses the standard service-dependency mechanism (not configuration).
+   */
+  async flowLinkVerifier2ToTrustRegistry(): Promise<void> {
+    const step = this.nextStep();
+    this.log('Link Verifier2 to Trust Registry (via service dependency)', 'FLOW');
+
+    const trustRegistryTarget = `${this.ctx.tenantPath}.${RESOURCES.trustRegistry}`;
+    const verifier2Target = `${this.ctx.tenantPath}.${RESOURCES.verifier2}`;
+
+    // Use the standard service-dependency mechanism
+    try {
+      await this.orgClient.postRaw(
+        `/v1/${verifier2Target}/verifier2-service-api/dependencies/add`,
+        trustRegistryTarget
+      );
+      console.log(`   [OK] Trust registry linked to verifier2: ${trustRegistryTarget}`);
+    } catch (error: any) {
+      if (error.status === 409 || error.message?.includes('already')) {
+        console.log(`   [SKIP] Trust registry already linked to verifier2`);
+      } else {
+        throw error;
+      }
+    }
+  }
+
+  /**
+   * Import public trust lists from well-known URLs.
+   * Demonstrates loading different trust list formats:
+   * - TSL XML (ETSI TS 119 612) - Austrian TSL (with signature validation for authenticated demo)
+   * - LoTE JSON (ETSI TS 119 602) - EWC Pilot format  
+   * - EU LoTL (List of Trusted Lists) - Contains pointers
+   */
+  async flowImportPublicTrustLists(): Promise<void> {
+    const publicTrustLists = [
+      {
+        sourceId: 'ewc-pilot',
+        url: 'https://ewc-consortium.github.io/ewc-trust-list/EWC-TL',
+        description: 'EWC Pilot Trust List (JSON/LoTE format, unauthenticated)',
+        validateSignature: false, // EWC pilot list is not signed
+      },
+      {
+        sourceId: 'at-tsl-authenticated', 
+        url: 'https://www.signatur.rtr.at/currenttl.xml',
+        description: 'Austrian TSL (XML format, XMLDSig VALIDATED)',
+        validateSignature: true, // Enable signature validation → AuthenticityState.VALIDATED
+      },
+      // Note: EU LoTL contains pointers to member state TSLs, not actual entities
+      // Uncomment to test pointer-only loading:
+      // {
+      //   sourceId: 'eu-lotl',
+      //   url: 'https://ec.europa.eu/tools/lotl/eu-lotl.xml',
+      //   description: 'EU List of Trusted Lists (XML/TSL format)',
+      //   validateSignature: false,
+      // },
+    ];
+    
+    for (const trustList of publicTrustLists) {
+      const step = this.nextStep();
+      this.log(`Import: ${trustList.description}`, 'FLOW');
+      
+      const request = {
+        sourceId: trustList.sourceId,
+        url: trustList.url,
+        validateSignature: trustList.validateSignature,
+      };
+      this.saveJson(`import-${trustList.sourceId}-request.json`, request, step);
+      
+      try {
+        const response = await this.orgClient.post(
+          `/v1/${this.ctx.tenantPath}.${RESOURCES.trustRegistry}/trust-registry-api/sources/load`,
+          request
+        );
+        this.saveJson(`import-${trustList.sourceId}-response.json`, response.data, step);
+        
+        if (response.data.success) {
+          console.log(`   [OK] ${trustList.sourceId} loaded`);
+          console.log(`        Entities: ${response.data.entitiesLoaded || 0}`);
+          console.log(`        Services: ${response.data.servicesLoaded || 0}`);
+          console.log(`        Identities: ${response.data.identitiesLoaded || 0}`);
+        } else {
+          console.log(`   [WARN] ${trustList.sourceId} load failed: ${response.data.error}`);
+        }
+      } catch (error: any) {
+        console.log(`   [WARN] Failed to import ${trustList.sourceId}: ${error.message}`);
+        // Continue with other sources
+      }
+    }
+  }
+
+  /**
+   * Create a LoTE-format trust source containing our local IACA certificate.
+   * This allows verifying credentials issued in the journey against the trust registry.
+   */
+  async flowLoadIacaIntoTrustRegistry(): Promise<void> {
+    const step = this.nextStep();
+    this.log('Load local IACA certificate into trust registry', 'FLOW');
+    
+    // First, retrieve the IACA certificate PEM
+    let iacaPem = this.ctx.iacaPem;
+    if (!iacaPem) {
+      this.log('Retrieving IACA certificate...', 'FLOW');
+      try {
+        const certResp = await this.orgClient.get(
+          `/v1/${this.ctx.tenantPath}.${RESOURCES.x509Store}.${CERT_IDS.vicalIacaCert}/x509-store-api/certificates`
+        );
+        iacaPem = certResp.data.data?.pem || certResp.data.certificatePem || certResp.data.pem;
+        this.ctx.iacaPem = iacaPem;
+      } catch (error: any) {
+        throw new Error(`IACA certificate not found. Run full setup first: ${error.message}`);
+      }
+    }
+    
+    if (!iacaPem) {
+      throw new Error('IACA certificate PEM is empty');
+    }
+    
+    const sourceId = `journey-iaca-${Date.now()}`;
+    
+    // Create a LoTE-format JSON source with the IACA certificate
+    const loteSource = {
+      listMetadata: {
+        listId: sourceId,
+        listType: 'mdl-issuers',
+        territory: 'US',
+        issueDate: new Date().toISOString(),
+        nextUpdate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(), // 1 year
+        sequenceNumber: '1',
+      },
+      trustedEntities: [
+        {
+          entityId: 'journey-test-iaca',
+          entityType: 'PID_PROVIDER',
+          legalName: 'Walt CLI Journey Test IACA',
+          country: 'US',
+          services: [
+            {
+              serviceId: 'mdl-issuing',
+              serviceType: 'MDL_ISSUER',
+              status: 'GRANTED',
+              statusStart: new Date().toISOString(),
+              identities: [
+                {
+                  matchType: 'CERTIFICATE_PEM',
+                  value: iacaPem,
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+    
+    this.saveJson('journey-iaca-lote-source.json', loteSource, step);
+    
+    const request = {
+      sourceId: sourceId,
+      content: JSON.stringify(loteSource),
+      sourceUrl: 'local://journey-test',
+      validateSignature: false, // Local test source, no signature
+    };
+    this.saveJson('load-journey-iaca-request.json', request, step);
+    
+    const response = await this.orgClient.post(
+      `/v1/${this.ctx.tenantPath}.${RESOURCES.trustRegistry}/trust-registry-api/sources/load`,
+      request
+    );
+    this.saveJson('load-journey-iaca-response.json', response.data, step);
+    
+    if (!response.data.success) {
+      throw new Error(`Failed to load IACA trust source: ${response.data.error}`);
+    }
+    
+    this.ctx.trustRegistrySourceId = sourceId;
+    console.log(`   [OK] Journey IACA trust source loaded: ${sourceId}`);
+    console.log(`        Entities: ${response.data.entitiesLoaded || 0}`);
+    console.log(`        Services: ${response.data.servicesLoaded || 0}`);
+    console.log(`        Identities: ${response.data.identitiesLoaded || 0}`);
+  }
+
+  /**
+   * List all loaded trust sources in the trust registry.
+   * Shows authenticity state to demonstrate authenticated vs unauthenticated sources.
+   */
+  async flowListTrustSources(): Promise<void> {
+    const step = this.nextStep();
+    this.log('List trust sources', 'FLOW');
+    
+    const response = await this.orgClient.get(
+      `/v1/${this.ctx.tenantPath}.${RESOURCES.trustRegistry}/trust-registry-api/sources`
+    );
+    this.saveJson('list-trust-sources-response.json', response.data, step);
+    
+    const sources = response.data as Array<{
+      sourceId: string;
+      displayName?: string;
+      sourceFamily?: string;
+      territory?: string;
+      entitiesCount?: number;
+      authenticityState?: string;
+    }>;
+    
+    console.log(`   [OK] Trust registry has ${sources.length} source(s):`);
+    for (const src of sources) {
+      const authIcon = src.authenticityState === 'VALIDATED' ? '[y]' : '[n]';
+      console.log(`        ${authIcon} ${src.sourceId}`);
+      console.log(`           Family: ${src.sourceFamily || 'unknown'}, Territory: ${src.territory || '?'}`);
+      console.log(`           Authenticity: ${src.authenticityState || 'UNKNOWN'}`);
+    }
+    
+    // Explain the authenticity states
+    console.log('');
+    console.log('   [y] VALIDATED = XMLDSig signature verified (requireAuthenticated: true will pass)');
+    console.log('   [n]️  SKIPPED_DEMO = No signature validation (requireAuthenticated: true will fail)');
+  }
+
+  /**
+   * Create verification session with ETSI Trust List policy.
+   * The policy will resolve the credential's issuer certificate against the trust registry.
+   */
+  async flowCreateEtsiVerificationSession(): Promise<void> {
+    const step = this.nextStep();
+    this.log('Create verification session with ETSI Trust List policy', 'FLOW');
+    
+    const vicalUrl = `${this.ctx.orgBaseUrl}/v1/${this.ctx.tenantPath}.${RESOURCES.vical}/vical-service-api/latest`;
+    
+    const vcPolicies = [
+      { policy: 'signature' },
+      {
+        policy: 'vical',
+        vicalUrl: vicalUrl,
+        enableDocumentTypeValidation: true,
+        enableTrustedChainRoot: true,
+      },
+      {
+        // ETSI Trust List policy - uses enterprise trust registry service
+        // No trustRegistryUrl needed when verifier2 is linked to trust-registry service
+        policy: 'etsi-trust-list',
+        expectedEntityType: 'PID_PROVIDER',
+        allowStaleSource: true,
+        requireAuthenticated: false, // not required for demo
+      },
+    ];
+    
+    const request = {
+      flow_type: 'cross_device',
+      core_flow: {
+        dcql_query: {
+          credentials: [
+            {
+              id: 'my_mdl',
+              format: 'mso_mdoc',
+              meta: {
+                doctype_value: MDL_DOC_TYPE,
+              },
+              claims: [
+                { path: ['org.iso.18013.5.1', 'family_name'] },
+                { path: ['org.iso.18013.5.1', 'given_name'] },
+                { path: ['org.iso.18013.5.1', 'birth_date'] },
+              ],
+            },
+          ],
+        },
+        policies: {
+          vc_policies: vcPolicies,
+        },
+      },
+    };
+    this.saveJson('create-etsi-verification-session-request.json', request, step);
+    
+    const response = await this.orgClient.post(
+      `/v1/${this.ctx.tenantPath}.${RESOURCES.verifier2}/verifier2-service-api/verification-session/create`,
+      request
+    );
+    this.saveJson('create-etsi-verification-session-response.json', response.data, step);
+    
+    this.ctx.sessionId = response.data.sessionId;
+    this.ctx.requestUrl = response.data.bootstrapAuthorizationRequestUrl;
+    
+    if (!this.ctx.sessionId || !this.ctx.requestUrl) {
+      throw new Error('Could not extract sessionId or bootstrapAuthorizationRequestUrl');
+    }
+    
+    console.log(`   [OK] Verification session created (ID: ${this.ctx.sessionId})`);
+    console.log(`        Policies: signature, vical, etsi-trust-list`);
   }
 
   async flowCredentialRevocation(): Promise<void> {
@@ -1838,7 +2189,12 @@ Run Commands (execute use cases):
   --run-assert-final-status  Assert final verification status
 
 Flows (special use cases):
-  --flow-etsi-trust-lists  Run ETSI trust lists verification flow
+  --flow-etsi-trust-lists  Run ETSI trust lists verification flow:
+                          1. Create trust-registry service
+                          2. Import public trust lists (Austrian TSL, EWC Pilot)
+                          3. Load local IACA certificate into registry
+                          4. Verify credential using etsi-trust-list policy
+                          (Requires primary setup to be run first)
   --flow-credential-revocation  Run credential revocation flow
 
 Other Options:
@@ -1873,6 +2229,10 @@ Examples:
 
   # Import a trust list
   npx tsx walt.ts --setup-import-trust-list /path/to/trust_list.xml
+
+  # Run ETSI Trust Lists flow (requires primary setup first)
+  npx tsx walt.ts                    # First: run full setup
+  npx tsx walt.ts --flow-etsi-trust-lists  # Then: run ETSI flow
 
   # Run with different organization/tenant
   ORGANIZATION=myorg TENANT=myorg-prod npx tsx walt.ts

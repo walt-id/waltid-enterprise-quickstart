@@ -1,18 +1,17 @@
 # walt.ts - Enterprise Stack CLI Tool
 
-A comprehensive CLI for setting up and running use cases against the walt.id Enterprise stack.
+A comprehensive CLI for setting up and running use cases against the walt.id Enterprise stack. The primary use case is issuing and verifying an mDL (mobile Driver's License) credential.
 
 ## Quick Start
 
 ```bash
-cd cli
 npm install
 
-# Full setup + run (default)
-npx tsx walt.ts
-
-# Recreate database and start fresh
+# First time: recreate DB, create superadmin/org/admin, run full setup + primary use case
 npx tsx walt.ts --recreate
+
+# Subsequent runs: re-run setup + primary use case without recreating the DB
+npx tsx walt.ts
 ```
 
 ## Commands Reference
@@ -21,9 +20,8 @@ npx tsx walt.ts --recreate
 
 | Command | Description |
 |---------|-------------|
-| `--recreate` | Recreate database and run full setup + primary use case |
-| `--init-system` | Run system initialization only (no setup/run) |
-| `--setup-recreate` | Recreate database only (alias for --init-system) |
+| `--recreate` | Recreate DB, create superadmin/org/admin, run full setup + primary use case |
+| `--setup-recreate` | Run system initialization only (recreate DB, create superadmin/org/admin) |
 | `--setup-create-superadmin` | Create superadmin account |
 | `--setup-create-organization` | Create organization |
 | `--setup-create-admin-role` | Check/report admin role (auto-created with org) |
@@ -68,19 +66,48 @@ These commands execute use cases (issue/verify credentials). Assumes setup is co
 
 | Command | Description |
 |---------|-------------|
-| `--run-all` | Run primary use case (issue + verify mDL) |
+| `--run-all` | Run primary use case |
 | `--run-create-credential-offer` | Create credential offer |
 | `--run-wallet-receive-credential` | Wallet receives credential via pre-authorized flow |
 | `--run-create-verification-session` | Create verifier2 verification session |
 | `--run-wallet-present` | Wallet presents credential |
 | `--run-assert-final-status` | Assert final verification status is SUCCESSFUL |
 
-### Flow Commands (Placeholders)
+### Flow Commands
 
 | Command | Description |
 |---------|-------------|
-| `--flow-etsi-trust-lists` | Run ETSI trust lists verification flow |
-| `--flow-credential-revocation` | Run credential revocation flow |
+| `--flow-etsi-trust-lists` | Run ETSI trust lists verification flow (see below) |
+| `--flow-credential-revocation` | Run credential revocation flow (placeholder) |
+
+#### ETSI Trust Lists Flow (`--flow-etsi-trust-lists`)
+
+Demonstrates trust list verification using the Enterprise Trust Registry Service. This flow assumes the primary setup has been run first (tenant, wallet, credentials exist).
+
+**Steps:**
+1. Create trust registry service (if not exists)
+2. Link Verifier2 to Trust Registry
+3. Import public trust lists:
+   - **EWC Pilot** (JSON/LoTE format, unauthenticated)
+   - **Austrian TSL** (XML format, XMLDSig signature validated → `VALIDATED`)
+4. Load local IACA certificate into trust registry (LoTE format)
+5. List trust sources with authenticity states
+6. Create verification session with policies: `signature`, `vical`, `etsi-trust-list`
+7. Present credential
+8. Verify result
+
+**Authenticity States:**
+- ✅ `VALIDATED` - XMLDSig signature verified (passes `requireAuthenticated: true`)
+- ⚠️ `SKIPPED_DEMO` - No signature validation (fails `requireAuthenticated: true`)
+
+**Usage:**
+```bash
+# First run full setup
+npx tsx walt.ts
+
+# Then run the ETSI flow
+npx tsx walt.ts --flow-etsi-trust-lists
+```
 
 ### Other Commands
 
@@ -163,7 +190,6 @@ export BASE_URL=https://enterprise.test.waltid.cloud
 export ORGANIZATION=waltid-cli
 # Note: PORT is auto-omitted for HTTPS URLs
 
-npx tsx walt.ts --setup-login
 npx tsx walt.ts --setup-all
 ```
 
@@ -207,3 +233,8 @@ The script is tolerant to already-provisioned resources:
 - Node.js 18+
 - Enterprise stack running at configured URL
 - Superadmin credentials in `config/superadmin-registration.conf`
+
+
+
+LEGACY SCRIPT:
+npx tsx journey-complete.ts --enterprise-trust-registry
