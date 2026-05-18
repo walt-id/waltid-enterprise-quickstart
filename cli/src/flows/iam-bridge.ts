@@ -75,32 +75,20 @@ async function setupIamBridge(ctx: CommandContext): Promise<void> {
       { oidcClaim: 'family_name', credentialPath: '$.credentialSubject.family_name', transform: 'NONE' },
     ],
     defaultVerificationSetup: {
-      core: {
-        presentationDefinition: {
-          id: 'vc-login',
-          input_descriptors: [
+      flow_type: 'cross_device',
+      core_flow: {
+        dcql_query: {
+          credentials: [
             {
               id: 'identity-credential',
-              name: 'Identity Credential',
-              purpose: 'We need to verify your identity to log you in',
-              format: {
-                mso_mdoc: {
-                  alg: ['ES256', 'ES384', 'ES512', 'EdDSA'],
-                },
+              format: 'mso_mdoc',
+              meta: {
+                doctype_value: 'org.iso.18013.5.1.mDL',
               },
-              constraints: {
-                limit_disclosure: 'required',
-                fields: [
-                  {
-                    path: ["$['org.iso.18013.5.1']['family_name']"],
-                    intent_to_retain: false,
-                  },
-                  {
-                    path: ["$['org.iso.18013.5.1']['given_name']"],
-                    intent_to_retain: false,
-                  },
-                ],
-              },
+              claims: [
+                { path: ['org.iso.18013.5.1', 'family_name'] },
+                { path: ['org.iso.18013.5.1', 'given_name'] },
+              ],
             },
           ],
         },
