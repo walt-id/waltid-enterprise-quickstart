@@ -69,7 +69,7 @@ export async function createSuperadminAccount(ctx: CommandContext): Promise<bool
     const text = await response.text();
     
     if (text.includes('exception') || !response.ok) {
-      if (text.includes('already') || text.includes('exists')) {
+      if (text.includes('already') || text.includes('exists') || text.includes('already used')) {
         console.log(`   [SKIP] Superadmin account already exists`);
         return true;
       }
