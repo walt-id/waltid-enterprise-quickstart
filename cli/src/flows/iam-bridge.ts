@@ -57,30 +57,28 @@ async function setupIamBridge(ctx: CommandContext): Promise<void> {
   
   const request = {
     type: 'iam-bridge',
-    name: IAM_BRIDGE_SERVICE,
-    config: {
-      issuerUrl: ctx.orgBaseUrl,
-      enabled: true,
-      clients: {
-        [KEYCLOAK_CLIENT_ID]: {
-          clientId: KEYCLOAK_CLIENT_ID,
-          clientSecret: KEYCLOAK_CLIENT_SECRET,
-          redirectUris: [keycloakRedirectUri],
-          allowedScopes: ['openid', 'profile', 'email'],
-        },
+    _id: iamBridgePath,
+    issuerUrl: ctx.orgBaseUrl,
+    enabled: true,
+    clients: {
+      [KEYCLOAK_CLIENT_ID]: {
+        clientId: KEYCLOAK_CLIENT_ID,
+        clientSecret: KEYCLOAK_CLIENT_SECRET,
+        redirectUris: [keycloakRedirectUri],
+        allowedScopes: ['openid', 'profile', 'email'],
       },
-      defaultClaimMappings: [
-        { oidcClaim: 'sub', credentialPath: '$.credentialSubject.id', transform: 'NONE' },
-        { oidcClaim: 'email', credentialPath: '$.credentialSubject.email', transform: 'LOWERCASE' },
-        { oidcClaim: 'given_name', credentialPath: '$.credentialSubject.given_name', transform: 'NONE' },
-        { oidcClaim: 'family_name', credentialPath: '$.credentialSubject.family_name', transform: 'NONE' },
-      ],
-      tokenLifetime: {
-        idTokenExpirySeconds: 3600,
-        accessTokenExpirySeconds: 3600,
-      },
-      presentationTimeoutSeconds: 300,
     },
+    defaultClaimMappings: [
+      { oidcClaim: 'sub', credentialPath: '$.credentialSubject.id', transform: 'NONE' },
+      { oidcClaim: 'email', credentialPath: '$.credentialSubject.email', transform: 'LOWERCASE' },
+      { oidcClaim: 'given_name', credentialPath: '$.credentialSubject.given_name', transform: 'NONE' },
+      { oidcClaim: 'family_name', credentialPath: '$.credentialSubject.family_name', transform: 'NONE' },
+    ],
+    tokenLifetime: {
+      idTokenExpirySeconds: 3600,
+      accessTokenExpirySeconds: 3600,
+    },
+    presentationTimeoutSeconds: 300,
     dependencies: [
       `${ctx.tenantPath}.${RESOURCES.kms}`,
       `${ctx.tenantPath}.${RESOURCES.verifier2}`,
@@ -89,7 +87,7 @@ async function setupIamBridge(ctx: CommandContext): Promise<void> {
   ctx.saveJson('create-iam-bridge-request.json', request, step);
   
   const response = await ctx.orgClient.post(
-    `/v1/${ctx.tenantPath}/resource-api/create`,
+    `/v1/${ctx.tenantPath}/resource-api/services/create`,
     request
   );
   ctx.saveJson('create-iam-bridge-response.json', response.data, step);
