@@ -10,7 +10,7 @@
  */
 
 import { CommandContext } from '../context.js';
-import { buildBaseUrl, buildOrgUrl } from '../config.js';
+import { buildBaseUrl } from '../config.js';
 
 // ============================================================================
 // System Commands
@@ -56,8 +56,8 @@ export async function createSuperadminAccount(ctx: CommandContext): Promise<bool
   console.log('   [INFO] Using credentials from: config/superadmin-registration.conf');
   
   try {
-    const orgUrl = buildOrgUrl(ctx.config.baseUrl, ctx.config.organization, ctx.config.port);
-    const response = await fetch(`${orgUrl}/v1/superadmin/create-by-token`, {
+    const adminUrl = buildBaseUrl(ctx.config.baseUrl, ctx.config.port);
+    const response = await fetch(`${adminUrl}/v1/superadmin/create-by-token`, {
       method: 'POST',
       headers: {
         'accept': '*/*',
