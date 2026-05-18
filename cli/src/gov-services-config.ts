@@ -117,6 +117,11 @@ export function departmentNeedsDid(dept: DepartmentConfig): boolean {
   return dept.credentials.some(cred => cred.format === 'jwt_vc_json');
 }
 
+/** Check if a department has any mso_mdoc credentials (needs DSC) */
+export function departmentNeedsDsc(dept: DepartmentConfig): boolean {
+  return dept.credentials.some(cred => cred.format === 'mso_mdoc');
+}
+
 export interface CredentialConfig {
   id: string;
   format: CredentialFormat;
@@ -124,6 +129,52 @@ export interface CredentialConfig {
   sampleData: Record<string, unknown>;
   doctype?: string;
   vct?: string;
+  /** W3C VC version (for jwt_vc_json) */
+  /** Dynamic field mapping (for jwt_vc_json) */
+  mapping?: Record<string, unknown>;
+}
+
+/** W3C VC DM 2.0 context URLs */
+const W3C_VC_CONTEXT = ['https://www.w3.org/2018/credentials/v1', 'https://purl.imsglobal.org/spec/ob/v3p0/context.json'];
+
+/** Standard W3C VC mapping for dynamic fields */
+const W3C_VC_MAPPING = {
+  id: '<uuid>',
+  issuer: {
+    id: '<issuerDid>',
+  },
+  credentialSubject: {
+    id: '<subjectDid>',
+  },
+  issuanceDate: '<timestamp>',
+  expirationDate: '<timestamp-in:365d>',
+};
+
+/** Build W3C VC DM 2.0 credential data structure */
+function buildW3cVcCredentialData(
+  credentialType: string,
+  issuerName: string,
+  issuerUrl: string,
+  subjectData: Record<string, unknown>
+): Record<string, unknown> {
+  return {
+    '@context': W3C_VC_CONTEXT,
+    id: 'urn:uuid:placeholder',
+    type: ['VerifiableCredential', credentialType],
+    name: credentialType.replace(/Credential$/, '').replace(/([A-Z])/g, ' $1').trim(),
+    issuanceDate: '2024-01-01T00:00:00Z',
+    issuer: {
+      type: ['Profile'],
+      name: issuerName,
+      url: issuerUrl,
+      id: 'did:placeholder:issuer',
+    },
+    credentialSubject: {
+      id: 'did:placeholder:subject',
+      type: ['Person'],
+      ...subjectData,
+    },
+  };
 }
 
 /** Build department configurations from env settings */
@@ -145,13 +196,19 @@ export function buildDepartmentConfigs(
           id: GOV_CREDENTIAL_IDS.employeeStatus,
           format: 'jwt_vc_json',
           profileSuffix: 'employee',
-          sampleData: {
-            employeeId: 'EMP-2024-001',
-            department: 'Central Government',
-            position: 'Senior Analyst',
-            clearanceLevel: 'Confidential',
-            startDate: '2020-03-15',
-          },
+          mapping: { ...W3C_VC_MAPPING },
+          sampleData: buildW3cVcCredentialData(
+            GOV_CREDENTIAL_IDS.employeeStatus,
+            'Human Resources Department',
+            gov.serviceBaseUrl,
+            {
+              employeeId: 'EMP-2024-001',
+              department: 'Central Government',
+              position: 'Senior Analyst',
+              clearanceLevel: 'Confidential',
+              startDate: '2020-03-15',
+            }
+          ),
         },
       ],
     },
@@ -172,13 +229,18 @@ export function buildDepartmentConfigs(
           id: GOV_CREDENTIAL_IDS.addressProof,
           format: 'jwt_vc_json',
           profileSuffix: 'address',
-          sampleData: {
-            street: 'Musterstraße 123',
-            city: 'Berlin',
-            postalCode: '10115',
-            country: 'DE',
-            validFrom: '2024-01-01',
-          },
+          mapping: { ...W3C_VC_MAPPING },
+          sampleData: buildW3cVcCredentialData(
+            GOV_CREDENTIAL_IDS.addressProof,
+            'Identity Services Department',
+            gov.serviceBaseUrl,
+            {
+              street: 'Musterstraße 123',
+              city: 'Berlin',
+              postalCode: '10115',
+              country: 'DE',
+            }
+          ),
         },
       ],
     },
@@ -191,7 +253,7 @@ export function buildDepartmentConfigs(
         {
           id: GOV_CREDENTIAL_IDS.taxRegistration,
           format: 'dc+sd-jwt',
-          vct: `${gov.vctBaseUrl}/${GOV_CREDENTIAL_IDS.taxRegistration}`,
+          vct: `{vctBaseURL}/${GOV_CREDENTIAL_IDS.taxRegistration}`,
           profileSuffix: 'tax',
           sampleData: { ...taxRegistrationDefaultValues },
         },
@@ -207,13 +269,19 @@ export function buildDepartmentConfigs(
           id: GOV_CREDENTIAL_IDS.bankAccount,
           format: 'jwt_vc_json',
           profileSuffix: 'bank-account',
-          sampleData: {
-            accountNumber: 'DE89370400440532013000',
-            accountType: 'Current',
-            bankName: 'Demo Bank',
-            accountHolder: 'Max Mustermann',
-            verifiedDate: '2024-01-15',
-          },
+          mapping: { ...W3C_VC_MAPPING },
+          sampleData: buildW3cVcCredentialData(
+            GOV_CREDENTIAL_IDS.bankAccount,
+            'Financial Services Authority',
+            gov.serviceBaseUrl,
+            {
+              accountNumber: 'DE89370400440532013000',
+              accountType: 'Current',
+              bankName: 'Demo Bank',
+              accountHolder: 'Max Mustermann',
+              verifiedDate: '2024-01-15',
+            }
+          ),
         },
       ],
     },

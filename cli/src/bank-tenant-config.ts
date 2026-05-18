@@ -221,10 +221,12 @@ export function createBankTenantConfig(): BankTenantConfig {
  */
 export function buildBankIssuerServiceConfig(
   tenantPath: string,
-  bank: BankTenantConfig
+  bank: BankTenantConfig,
+  attesterPublicJwk: any,
 ): Record<string, unknown> {
   const kmsRef = `${tenantPath}.${RESOURCES.kms}`;
   const tokenKeyId = `${kmsRef}.${KEY_IDS.issuerSigningKey}`;
+
 
   return {
     type: 'issuer2',
@@ -437,5 +439,27 @@ export function buildBankIssuerServiceConfig(
         description: 'SCA Attestation for a payment account.',
       },
     },
+    clientAttestationConfig: {
+      required: true,
+      verificationMethod: {
+        type: 'static-jwk',
+        jwk: attesterPublicJwk,
+      },
+      clockSkewSeconds: 300,
+      replayWindowSeconds: 300,
+    }
+    // clientAuthenticationConfig: {
+    //   supportedMethods: [
+    //     {
+    //       type: "client-attestation",
+    //       config: {
+    //         verificationMethod: {
+    //           type: 'static-jwk',
+    //           jwk: attesterPublicJwk,
+    //         },
+    //       }
+    //     }
+    //   ]
+    // }
   };
 }

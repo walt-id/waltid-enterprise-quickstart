@@ -46,19 +46,19 @@ async function buildMdocX5Chain(
     }
   }
 
-  if (!ctx.ctx.iacaPem) {
-    try {
-      const certResponse = await ctx.orgClient.get(
-        `/v1/${ctx.tenantPath}.${RESOURCES.x509Store}.${CERT_IDS.vicalIacaCert}/x509-store-api/certificates`
-      );
-      ctx.ctx.iacaPem =
-        certResponse.data.data?.pem ||
-        certResponse.data.certificatePem ||
-        certResponse.data.pem;
-    } catch {
-      // IACA is optional in the chain
-    }
-  }
+  // if (!ctx.ctx.iacaPem) {
+  //   try {
+  //     const certResponse = await ctx.orgClient.get(
+  //       `/v1/${ctx.tenantPath}.${RESOURCES.x509Store}.${CERT_IDS.vicalIacaCert}/x509-store-api/certificates`
+  //     );
+  //     ctx.ctx.iacaPem =
+  //       certResponse.data.data?.pem ||
+  //       certResponse.data.certificatePem ||
+  //       certResponse.data.pem;
+  //   } catch {
+  //     // IACA is optional in the chain
+  //   }
+  // }
 
   const x5Chain: Array<{ type: string; pemEncodedCertificate: string }> = [
     {
@@ -67,12 +67,12 @@ async function buildMdocX5Chain(
     },
   ];
 
-  if (ctx.ctx.iacaPem) {
-    x5Chain.push({
-      type: 'pem-encoded-x509-certificate-descriptor',
-      pemEncodedCertificate: ctx.ctx.iacaPem,
-    });
-  }
+  // if (ctx.ctx.iacaPem) {
+  //   x5Chain.push({
+  //     type: 'pem-encoded-x509-certificate-descriptor',
+  //     pemEncodedCertificate: ctx.ctx.iacaPem,
+  //   });
+  // }
 
   return x5Chain;
 }
@@ -208,7 +208,14 @@ export async function setupBankCreateIssuer(
   const { created } = await ctx.tolerantCreate(
     'Issuer2 service',
     async () => {
-      const request = buildBankIssuerServiceConfig(ctx.tenantPath, bank);
+      const eudiAttesterKey = ctx.loadKeyFile('eudi-attester-pubkey.json');
+      const eudiAttesterPublicJwk = {
+        kty: eudiAttesterKey.kty,
+        crv: eudiAttesterKey.crv,
+        x: eudiAttesterKey.x,
+        y: eudiAttesterKey.y,
+      };
+      const request = buildBankIssuerServiceConfig(ctx.tenantPath, bank, eudiAttesterPublicJwk);
       ctx.saveJson('create-bank-issuer2-request.json', request, step);
 
       const response = await ctx.orgClient.post(

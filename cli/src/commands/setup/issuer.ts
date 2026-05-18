@@ -127,6 +127,14 @@ export async function setupCreateIssuer2(ctx: CommandContext): Promise<void> {
         y: attesterKey.y,
       };
 
+      const eudiAttesterKey = ctx.loadKeyFile('eudi-attester-pubkey.json');
+      const eudiAttesterPublicJwk = {
+        kty: eudiAttesterKey.kty,
+        crv: eudiAttesterKey.crv,
+        x: eudiAttesterKey.x,
+        y: eudiAttesterKey.y,
+      };
+
       const request = {
         type: 'issuer2',
         _id: `${ctx.tenantPath}.${RESOURCES.issuer}`,
@@ -155,6 +163,19 @@ export async function setupCreateIssuer2(ctx: CommandContext): Promise<void> {
           clockSkewSeconds: 300,
           replayWindowSeconds: 300,
         },
+        // clientAuthenticationConfig: {
+        //   supportedMethods: [
+        //     {
+        //       type: "client-attestation",
+        //       config: {
+        //         verificationMethod: {
+        //           type: 'static-jwk',
+        //           jwk: attesterPublicJwk,
+        //         },
+        //       }   
+        //     },
+        //   ]
+        // },
       };
       ctx.saveJson('create-issuer2-request.json', request, step);
 

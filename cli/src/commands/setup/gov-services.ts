@@ -10,13 +10,15 @@
  */
 
 import { CommandContext } from '../../context.js';
-import { RESOURCES, CERT_IDS } from '../../config.js';
+import { RESOURCES, CERT_IDS, KEY_IDS } from '../../config.js';
 import {
   GovServicesConfig,
   DepartmentConfig,
+  CredentialConfig,
   buildDepartmentConfigs,
   buildDepartmentIssuerConfig,
   departmentNeedsDid,
+  departmentNeedsDsc,
 } from '../../gov-services-config.js';
 import { setupLogin } from './auth.js';
 import {
@@ -27,30 +29,25 @@ import {
 import {
   setupImportKeys,
   setupCreateIacaCertificate,
-  setupCreateDocumentSignerCertificate,
 } from './keys.js';
 
 /** Map of department key to their DID (for jwt_vc_json issuers) */
 const departmentDids: Map<string, string> = new Map();
 
-/** Build x5c chain for mso_mdoc profiles (document signer + optional IACA) */
-async function buildMdocX5Chain(
-  ctx: CommandContext
+/** Map of department key to their DSC PEM (for mso_mdoc issuers) */
+const departmentDscPems: Map<string, string> = new Map();
+
+/** Build x5c chain for mso_mdoc profiles using department's DSC */
+async function buildDepartmentMdocX5Chain(
+  ctx: CommandContext,
+  deptKey: string
 ): Promise<Array<{ type: string; pemEncodedCertificate: string }> | undefined> {
-  if (!ctx.ctx.docSignerPem) {
-    try {
-      const certResponse = await ctx.orgClient.get(
-        `/v1/${ctx.tenantPath}.${RESOURCES.x509Store}.${CERT_IDS.docSignerCert}/x509-store-api/certificates`
-      );
-      ctx.ctx.docSignerPem =
-        certResponse.data.data?.pem ||
-        certResponse.data.certificatePem ||
-        certResponse.data.pem;
-    } catch {
-      return undefined;
-    }
+  const dscPem = departmentDscPems.get(deptKey);
+  if (!dscPem) {
+    return undefined;
   }
 
+  // Get IACA PEM if not already loaded
   if (!ctx.ctx.iacaPem) {
     try {
       const certResponse = await ctx.orgClient.get(
@@ -68,7 +65,7 @@ async function buildMdocX5Chain(
   const x5Chain: Array<{ type: string; pemEncodedCertificate: string }> = [
     {
       type: 'pem-encoded-x509-certificate-descriptor',
-      pemEncodedCertificate: ctx.ctx.docSignerPem,
+      pemEncodedCertificate: dscPem,
     },
   ];
 
@@ -80,6 +77,83 @@ async function buildMdocX5Chain(
   }
 
   return x5Chain;
+}
+
+/** Create a Document Signer Certificate for a department using their signing key */
+async function createDepartmentDsc(
+  ctx: CommandContext,
+  deptKey: string,
+  dept: DepartmentConfig
+): Promise<string> {
+  const dscCertId = `${deptKey}-dsc`;
+  ctx.log(`Create DSC for ${dept.name}`, 'GOV-SETUP');
+
+  // Check if certificate already exists
+  try {
+    const existing = await ctx.orgClient.get(
+      `/v1/${ctx.tenantPath}.${RESOURCES.x509Store}.${dscCertId}/x509-store-api/certificates`
+    );
+    if (existing.data) {
+      const existingPem = existing.data.data?.pem || existing.data.certificatePem || existing.data.pem;
+      departmentDscPems.set(deptKey, existingPem);
+      console.log(`   [SKIP] DSC for ${dept.name} already exists`);
+      return existingPem;
+    }
+  } catch {
+    // Certificate doesn't exist, create it
+  }
+
+  // Ensure we have IACA PEM
+  if (!ctx.ctx.iacaPem) {
+    try {
+      const certResponse = await ctx.orgClient.get(
+        `/v1/${ctx.tenantPath}.${RESOURCES.x509Store}.${CERT_IDS.vicalIacaCert}/x509-store-api/certificates`
+      );
+      ctx.ctx.iacaPem = certResponse.data.data?.pem || certResponse.data.certificatePem || certResponse.data.pem;
+    } catch {
+      throw new Error('IACA certificate not found. Ensure IACA is created before department DSCs.');
+    }
+  }
+
+  const request = {
+    storedCertificateId: dscCertId,
+    iacaSigner: {
+      type: 'iaca-pem-cert-descriptor',
+      iacaPemEncodedCertificate: ctx.ctx.iacaPem,
+      iacaKeyDesc: {
+        type: 'kms-hosted-key-descriptor',
+        keyIdPath: `${ctx.tenantPath}.${RESOURCES.kms}.${KEY_IDS.vicalIacaKey}`,
+      },
+    },
+    certificateData: {
+      country: 'US',
+      commonName: `${dept.name} Document Signer`,
+      crlDistributionPointUri: 'https://gov.example/crl',
+    },
+    dsKeyDescriptor: {
+      type: 'kms-hosted-key-descriptor',
+      keyIdPath: dept.signingKeyId,
+    },
+  };
+
+  ctx.saveJson(`create-dsc-${deptKey}-request.json`, request);
+
+  const response = await ctx.orgClient.post(
+    `/v1/${ctx.tenantPath}.${RESOURCES.x509Service}/x509-service-api/iso/document-signers`,
+    request
+  );
+  ctx.saveJson(`create-dsc-${deptKey}-response.json`, response.data);
+
+  // Retrieve PEM
+  const certResp = await ctx.orgClient.get(
+    `/v1/${ctx.tenantPath}.${RESOURCES.x509Store}.${dscCertId}/x509-store-api/certificates`
+  );
+  const dscPem = certResp.data.data?.pem || certResp.data.certificatePem || certResp.data.pem;
+  
+  departmentDscPems.set(deptKey, dscPem);
+  console.log(`   [OK] DSC created for ${dept.name}`);
+  
+  return dscPem;
 }
 
 /** Create DID service and DID store for issuer DIDs */
@@ -288,6 +362,7 @@ async function createDepartmentProfiles(
     const { created } = await ctx.tolerantCreate(
       `Profile ${cred.profileSuffix}`,
       async () => {
+        // Always use the department's signing key
         const request: Record<string, unknown> = {
           name: cred.profileSuffix,
           credentialConfigurationId: cred.id,
@@ -295,18 +370,23 @@ async function createDepartmentProfiles(
           credentialData: cred.sampleData,
         };
 
-        // Add issuerDid for jwt_vc_json credentials (W3C format)
-        if (cred.format === 'jwt_vc_json' && issuerDid) {
-          request.issuerDid = issuerDid;
+        // Add W3C VC specific fields for jwt_vc_json credentials
+        if (cred.format === 'jwt_vc_json') {
+          if (issuerDid) {
+            request.issuerDid = issuerDid;
+          }
+          if (cred.mapping) {
+            request.mapping = cred.mapping;
+          }
         }
 
-        // Add x5cChain for mso_mdoc credentials
+        // Add x5cChain for mso_mdoc credentials (using department's DSC)
         if (cred.format === 'mso_mdoc') {
-          const x5Chain = await buildMdocX5Chain(ctx);
+          const x5Chain = await buildDepartmentMdocX5Chain(ctx, deptKey);
           if (!x5Chain) {
             throw new Error(
               `Document signer certificate required for ${cred.id} profile. ` +
-                'Ensure X.509 certificates are created before profiles.'
+                'Ensure department DSC is created before profiles.'
             );
           }
           request.x5Chain = x5Chain;
@@ -398,13 +478,14 @@ async function createGovWallet(ctx: CommandContext): Promise<void> {
  * Creates:
  * 1. Central government tenant with KMS and wallet
  * 2. DID service and DID store (for W3C credential issuers)
- * 3. X.509 services and certificates (for mdoc credentials)
+ * 3. X.509 services and IACA certificate (for mdoc credentials)
  * 4. Department tenants (HR, Identity, Revenue, Finance)
  * 5. Signing keys for each department (in central KMS)
  * 6. DIDs for departments with jwt_vc_json credentials (using their signing key)
- * 7. Issuers for each department
- * 8. Credential profiles for each credential type
- * 9. Central verifier service
+ * 7. DSCs for departments with mso_mdoc credentials (using their signing key)
+ * 8. Issuers for each department
+ * 9. Credential profiles for each credential type
+ * 10. Central verifier service
  */
 export async function runGovServicesSetup(
   ctx: CommandContext,
@@ -420,8 +501,9 @@ export async function runGovServicesSetup(
   const organization = ctx.config.organization;
   const departments = buildDepartmentConfigs(organization, gov);
 
-  // Clear any previous DID mappings
+  // Clear any previous mappings
   departmentDids.clear();
+  departmentDscPems.clear();
 
   await setupLogin(ctx);
 
@@ -436,10 +518,9 @@ export async function runGovServicesSetup(
   await createDidServices(ctx);
   await linkDidServiceDependencies(ctx);
 
-  // 3. Import keys and create X.509 certificates (needed for mdoc credentials)
+  // 3. Import keys and create IACA certificate (needed for mdoc DSCs)
   await setupImportKeys(ctx);
   await setupCreateIacaCertificate(ctx);
-  await setupCreateDocumentSignerCertificate(ctx);
 
   // 4. Create department tenants
   for (const dept of Object.values(departments)) {
@@ -458,7 +539,14 @@ export async function runGovServicesSetup(
     }
   }
 
-  // 7. Create issuers for each department
+  // 7. Create DSCs for departments that have mso_mdoc credentials
+  for (const [deptKey, dept] of Object.entries(departments)) {
+    if (departmentNeedsDsc(dept)) {
+      await createDepartmentDsc(ctx, deptKey, dept);
+    }
+  }
+
+  // 8. Create issuers for each department
   for (const dept of Object.values(departments)) {
     await createDepartmentIssuer(ctx, organization, dept, gov);
   }
@@ -473,9 +561,13 @@ export async function runGovServicesSetup(
   for (const [deptKey, dept] of Object.entries(departments)) {
     const issuerPath = `${organization}.${dept.tenantId}.${dept.issuerName}`;
     const did = departmentDids.get(deptKey);
+    const hasDsc = departmentDscPems.has(deptKey);
     console.log(`  - ${dept.name}: ${issuerPath}`);
     if (did) {
       console.log(`      DID: ${did}`);
+    }
+    if (hasDsc) {
+      console.log(`      DSC: ${deptKey}-dsc`);
     }
     for (const cred of dept.credentials) {
       console.log(`      Profile: ${issuerPath}.${cred.profileSuffix} (${cred.id}, ${cred.format})`);

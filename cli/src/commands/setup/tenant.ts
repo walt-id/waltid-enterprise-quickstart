@@ -48,6 +48,7 @@ export async function setupCreateWallet(ctx: CommandContext): Promise<void> {
         createKeyInKms: {
           keyType: 'secp256r1',
         },
+        createDidWithDidService: 'jwk'
       };
       ctx.saveJson('init-wallet-request.json', request, step);
 
