@@ -146,14 +146,21 @@ export async function setupCreateIssuer2(ctx: CommandContext): Promise<void> {
             },
           },
         },
-        clientAttestationConfig: {
-          required: true,
-          verificationMethod: {
-            type: 'static-jwk',
-            jwk: attesterPublicJwk,
-          },
-          clockSkewSeconds: 300,
-          replayWindowSeconds: 300,
+        clientAuthenticationConfig: {
+          supportedMethods: [
+            {
+              type: 'client-attestation',
+              config: {
+                required: true,
+                verificationMethod: {
+                  type: 'static-jwk',
+                  jwk: attesterPublicJwk,
+                },
+                clockSkewSeconds: 300,
+                replayWindowSeconds: 300,
+              },
+            },
+          ],
         },
       };
       ctx.saveJson('create-issuer2-request.json', request, step);
