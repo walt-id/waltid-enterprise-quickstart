@@ -151,7 +151,6 @@ export async function setupCreateIssuer2(ctx: CommandContext): Promise<void> {
             {
               type: 'client-attestation',
               config: {
-                required: true,
                 verificationMethod: {
                   type: 'static-jwk',
                   jwk: attesterPublicJwk,
