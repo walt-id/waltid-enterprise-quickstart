@@ -145,6 +145,12 @@ api:
     tag: latest
     imagePullPolicy: Always
     pullSecrets: waltid-regcred
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "2Gi"
+    limits:
+      memory: "6Gi"
 
 web:
   ports:

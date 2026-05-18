@@ -52,6 +52,32 @@ Once the docker-compose is running, you can visit [enterprise.localhost/swagger]
 
 The UI is running at [http://enterprise.localhost/login](http://enterprise.localhost/login)
 
+### Using custom organisation names
+
+The caddy setup is configured only for the "waltid" organisation. If you want to use a custom organisation name, you can update the Caddyfile to add your own organisation domains.
+
+```yaml
+  caddy:
+    image: caddy:2-alpine
+    container_name: caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+    networks:
+      mongodb_network:
+        aliases:
+          - enterprise.localhost
+          - waltid.enterprise.localhost
+          # add your own organisation domains here
+    depends_on:
+      - waltid-enterprise
+      - waltid-enterprise-ui
+```
+
+
 ## 2. Enterprise CLI
 
 A TypeScript CLI tool for setting up and testing the walt.id Enterprise Stack.
