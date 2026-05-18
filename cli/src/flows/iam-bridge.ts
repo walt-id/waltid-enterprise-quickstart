@@ -74,6 +74,38 @@ async function setupIamBridge(ctx: CommandContext): Promise<void> {
       { oidcClaim: 'given_name', credentialPath: '$.credentialSubject.given_name', transform: 'NONE' },
       { oidcClaim: 'family_name', credentialPath: '$.credentialSubject.family_name', transform: 'NONE' },
     ],
+    defaultVerificationSetup: {
+      core: {
+        presentationDefinition: {
+          id: 'vc-login',
+          input_descriptors: [
+            {
+              id: 'identity-credential',
+              name: 'Identity Credential',
+              purpose: 'We need to verify your identity to log you in',
+              format: {
+                mso_mdoc: {
+                  alg: ['ES256', 'ES384', 'ES512', 'EdDSA'],
+                },
+              },
+              constraints: {
+                limit_disclosure: 'required',
+                fields: [
+                  {
+                    path: ["$['org.iso.18013.5.1']['family_name']"],
+                    intent_to_retain: false,
+                  },
+                  {
+                    path: ["$['org.iso.18013.5.1']['given_name']"],
+                    intent_to_retain: false,
+                  },
+                ],
+              },
+            },
+          ],
+        },
+      },
+    },
     tokenLifetime: {
       idTokenExpirySeconds: 3600,
       accessTokenExpirySeconds: 3600,
@@ -87,7 +119,7 @@ async function setupIamBridge(ctx: CommandContext): Promise<void> {
   ctx.saveJson('create-iam-bridge-request.json', request, step);
   
   const response = await ctx.orgClient.post(
-    `/v1/${ctx.tenantPath}/resource-api/services/create`,
+    `/v1/${iamBridgePath}/resource-api/services/create`,
     request
   );
   ctx.saveJson('create-iam-bridge-response.json', response.data, step);
@@ -222,6 +254,7 @@ function generateKeycloakRealm(ctx: CommandContext, discovery: any): string {
           issuer: discovery.issuer,
           useJwksUrl: 'true',
           pkceEnabled: 'true',
+          pkceMethod: 'S256',
           defaultScope: 'openid profile email',
           syncMode: 'IMPORT',
         },
@@ -305,7 +338,7 @@ async function startKeycloak(ctx: CommandContext, realmJson: string): Promise<vo
   let ready = false;
   for (let i = 0; i < 60; i++) {
     try {
-      execSync('curl -sf http://localhost:8080/health/ready', { encoding: 'utf-8' });
+      execSync('curl -sf http://keycloak.localhost:8080/realms/master', { encoding: 'utf-8' });
       ready = true;
       break;
     } catch (_) {
@@ -516,7 +549,7 @@ export async function flowIamBridge(ctx: CommandContext): Promise<void> {
     // Step 1: Setup IAM Bridge service
     console.log('\n--- Step 1: Setup IAM Bridge Service ---');
     await setupIamBridge(ctx);
-    await setupIamBridgeVerification(ctx);
+    // Note: Verification setup is included in the service creation with defaultClaimMappings
     
     // Step 2: Get discovery and generate Keycloak config
     console.log('\n--- Step 2: Configure Keycloak ---');
