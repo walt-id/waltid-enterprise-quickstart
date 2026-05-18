@@ -53,3 +53,6 @@ export {
 
 // Bank tenant
 export { runBankTenantSetup } from './bank-tenant.js';
+
+// Government services tenant
+export { runGovServicesSetup } from './gov-services.js';

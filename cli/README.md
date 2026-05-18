@@ -55,6 +55,16 @@ For this flow, you will need to configure the bank-tenant.env file with the corr
 npx tsx walt.ts --setup-bank-tenant
 ```
 
+### Government Services Setup
+
+This setup will create a separate tenant within the enterprise stack (gov-central), which is used for the government services demo found (here)[https://github.com/walt-id/waltid-enterprise-examples/tree/main/waltid-gov-serice].
+
+For this flow, you will need to configure the gov-services.env file with the correct values. You can find an example of the gov-services.env file (here)[gov-services.env.example]. These will need to align with the environment variables used in the government services demo. The examples in both repositories currently match, but beware if you make any updates!
+
+```bash
+npx tsx walt.ts --setup-gov-services
+```
+
 ## Advanced Usage
 
 You can also run specific setup commands by running

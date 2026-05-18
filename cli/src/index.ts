@@ -22,6 +22,7 @@ import { createConfig } from './config.js';
 import { CommandContext } from './context.js';
 import { loadWaltEnv } from './env.js';
 import { loadBankTenantEnv, createBankTenantConfig } from './bank-tenant-config.js';
+import { loadGovServicesEnv, createGovServicesConfig } from './gov-services-config.js';
 import {
   // System commands
   runSystemInit,
@@ -73,6 +74,7 @@ import {
   runAllRun,
   runFull,
   runBankTenantSetup,
+  runGovServicesSetup,
 } from './commands/index.js';
 
 import { flowEtsiTrustLists, flowCredentialRevocation } from './flows/index.js';
@@ -133,6 +135,7 @@ Setup Commands (create resources):
   --setup-link-wallet-to-attester  Link wallet to client attester
   --setup-obtain-wallet-attestation  Obtain wallet attestation
   --setup-bank-tenant     Set up bank-tenant (issuer, wallet, verifier, KMS, X509)
+  --setup-gov-services    Set up government services (multi-department issuers, verifier)
 
 Additional Setup Commands:
   --setup-create-trust-registry  Create trust registry service
@@ -185,6 +188,11 @@ Bank tenant (cli/bank-tenant.env — copy from bank-tenant.env.example):
   VCT_BASE_URL            Base URL for SD-JWT VCT values
   KEYCLOAK_*              Keycloak OIDC settings for issuer auth
 
+Government services (cli/gov-services.env — copy from gov-services.env.example):
+  GOV_TENANT              Central tenant ID (default: gov-central)
+  GOV_SERVICES_BASE_URL   Public base URL for issuers and verifier
+  GOV_DEPT_*              Department tenant IDs (HR, Identity, Revenue, Finance)
+
 Examples:
   # Full setup and run (default)
   npx tsx walt.ts
@@ -213,6 +221,9 @@ Examples:
 
   # Set up bank-tenant only (requires cli/bank-tenant.env)
   npx tsx walt.ts --setup-bank-tenant
+
+  # Set up government services (requires cli/gov-services.env)
+  npx tsx walt.ts --setup-gov-services
 `);
 }
 
@@ -242,6 +253,7 @@ async function main(): Promise<void> {
     '--setup-create-issuer2', '--setup-link-issuer-to-credential-status', '--setup-create-issuer-profile',
     '--setup-link-wallet-to-attester', '--setup-obtain-wallet-attestation',
     '--setup-bank-tenant',
+    '--setup-gov-services',
     '--setup-create-trust-registry', '--setup-etsi-trust-registry', '--setup-import-trust-list',
     '--setup-create-superadmin', '--setup-create-organization',
     '--setup-create-admin-role', '--setup-create-admin-account',
@@ -264,10 +276,13 @@ async function main(): Promise<void> {
     }
   }
 
-  // Load cli/walt.env (general settings); bank-tenant.env overrides when used
+  // Load cli/walt.env (general settings); bank-tenant.env or gov-services.env overrides when used
   loadWaltEnv(cliDir);
   if (args.includes('--setup-bank-tenant')) {
     loadBankTenantEnv(cliDir);
+  }
+  if (args.includes('--setup-gov-services')) {
+    loadGovServicesEnv(cliDir);
   }
 
   // Create config and context
@@ -283,6 +298,15 @@ async function main(): Promise<void> {
       ctx.saveHttpLog();
       return;
     }
+
+    if (args.includes('--setup-gov-services')) {
+      ctx.ensureWorkdir();
+      const govConfig = createGovServicesConfig();
+      await runGovServicesSetup(ctx, govConfig);
+      ctx.saveHttpLog();
+      return;
+    }
+
     // System commands
     if (args.includes('--recreate')) {
       await runSystemInit(ctx);

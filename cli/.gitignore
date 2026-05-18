@@ -1,5 +1,6 @@
 node_modules/
 bank-tenant.env
+gov-services.env
 walt.env
 journey-test-*/
 *.log
