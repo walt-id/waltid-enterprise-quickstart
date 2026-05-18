@@ -72,7 +72,7 @@ import {
   runFull,
 } from './commands/index.js';
 
-import { flowEtsiTrustLists, flowCredentialRevocation } from './flows/index.js';
+import { flowEtsiTrustLists, flowCredentialRevocation, flowIamBridge, stopKeycloak } from './flows/index.js';
 
 // ============================================================================
 // CLI Setup
@@ -156,6 +156,8 @@ Credential Revocation Commands:
 Flows (special use cases):
   --flow-etsi-trust-lists  Run ETSI trust lists verification flow
   --flow-credential-revocation  Run credential revocation flow
+  --flow-iam-bridge        Run IAM Bridge flow (VC-based OIDC login with Keycloak)
+  --stop-keycloak          Stop the Keycloak container started by --flow-iam-bridge
 
 Other Options:
   --help, -h              Show this help message
@@ -234,7 +236,7 @@ async function main(): Promise<void> {
     '--run-create-verification-session-status-only',
     '--run-wallet-present', '--run-assert-final-status', '--run-assert-final-status-failed',
     '--run-revoke-credential', '--run-unrevoke-credential', '--run-update-credential-status',
-    '--flow-etsi-trust-lists', '--flow-credential-revocation',
+    '--flow-etsi-trust-lists', '--flow-credential-revocation', '--flow-iam-bridge', '--stop-keycloak',
   ];
   
   for (const arg of args) {
@@ -405,6 +407,16 @@ async function main(): Promise<void> {
 
     if (args.includes('--flow-credential-revocation')) {
       await flowCredentialRevocation(ctx);
+      return;
+    }
+
+    if (args.includes('--flow-iam-bridge')) {
+      await flowIamBridge(ctx);
+      return;
+    }
+
+    if (args.includes('--stop-keycloak')) {
+      await stopKeycloak();
       return;
     }
 
