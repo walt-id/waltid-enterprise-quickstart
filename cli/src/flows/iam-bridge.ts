@@ -378,13 +378,14 @@ async function simulateOidcAuthorize(ctx: CommandContext): Promise<{ bridgeSessi
   
   // Parse the HTML response to extract session info
   // Look for various patterns the HTML might use
-  const sessionIdMatch = html.match(/sessionId['":\s]*['"]([^'"]+)['"]/) || 
+  const sessionIdMatch = html.match(/sessionId['": \s]*['"]([^'"]+)['"]/) || 
                          html.match(/data-session-id=['"]([^'"]+)['"]/) ||
-                         html.match(/bridgeSessionId['":\s]*['"]([^'"]+)['"]/);
-  const verificationUrlMatch = html.match(/verificationUrl['":\s]*['"]([^'"]+)['"]/) ||
+                         html.match(/bridgeSessionId['": \s]*['"]([^'"]+)['"]/) ||
+                         html.match(/\/sessions\/([a-f0-9-]+)\/status/);
+  const verificationUrlMatch = html.match(/verificationUrl['": \s]*['"]([^'"]+)['"]/) ||
                                html.match(/(openid4vp:\/\/[^'"<>\s]+)/) ||
-                               html.match(/data-verification-url=['"]([^'"]+)['"]/);
-  
+                               html.match(/data-verification-url=['"]([^'"]+)['"]/) ||
+                               html.match(/text:\s*['"]?(openid4vp:\/\/[^'"]+)['"]?/);  
   if (!sessionIdMatch || !verificationUrlMatch) {
     ctx.saveJson('iam-bridge-authorize-raw.html', html, step);
     console.log('   [DEBUG] Raw HTML saved to logs - could not parse session info');
