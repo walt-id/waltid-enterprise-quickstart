@@ -380,6 +380,10 @@ async function createDepartmentProfiles(
           }
         }
 
+        if (cred.idTokenClaimsMapping) {
+          request.idTokenClaimsMapping = cred.idTokenClaimsMapping;
+        }
+
         // Add x5cChain for mso_mdoc credentials (using department's DSC)
         if (cred.format === 'mso_mdoc') {
           const x5Chain = await buildDepartmentMdocX5Chain(ctx, deptKey);

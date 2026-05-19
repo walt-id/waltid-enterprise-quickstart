@@ -208,14 +208,18 @@ export async function setupBankCreateIssuer(
   const { created } = await ctx.tolerantCreate(
     'Issuer2 service',
     async () => {
-      const eudiAttesterKey = ctx.loadKeyFile('eudi-attester-pubkey.json');
-      const eudiAttesterPublicJwk = {
-        kty: eudiAttesterKey.kty,
-        crv: eudiAttesterKey.crv,
-        x: eudiAttesterKey.x,
-        y: eudiAttesterKey.y,
-      };
-      const request = buildBankIssuerServiceConfig(ctx.tenantPath, bank, eudiAttesterPublicJwk);
+      let walletAttesterPublicJwk: any = undefined;
+      if (process.env.WALLET_ATTESTER_KEY_FILE !== undefined) {
+        const walletAttesterKey = ctx.loadKeyFile(process.env.WALLET_ATTESTER_KEY_FILE || '');
+         walletAttesterPublicJwk = {
+          kty: walletAttesterKey.kty,
+          crv: walletAttesterKey.crv,
+          x: walletAttesterKey.x,
+          y: walletAttesterKey.y,
+        };
+      }
+
+      const request = buildBankIssuerServiceConfig(ctx.tenantPath, bank, walletAttesterPublicJwk);
       ctx.saveJson('create-bank-issuer2-request.json', request, step);
 
       const response = await ctx.orgClient.post(

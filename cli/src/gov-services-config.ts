@@ -77,8 +77,7 @@ export const taxRegistrationDefaultValues = {
   tax_assessment_year: '2024',
   annual_income: '65000',
   tax_class: 'I',
-  status: 'Compliant',
-  valid_until: '2025-12-31',
+  tax_status: 'Compliant',
   given_name: 'Max',
   family_name: 'Mustermann',
   birthdate: '1985-03-15',
@@ -110,6 +109,7 @@ export interface DepartmentConfig {
   issuerName: string;
   signingKeyId: string;
   credentials: CredentialConfig[];
+  authProviderConfiguration?: any;
 }
 
 /** Check if a department has any jwt_vc_json credentials (needs DID) */
@@ -132,6 +132,7 @@ export interface CredentialConfig {
   /** W3C VC version (for jwt_vc_json) */
   /** Dynamic field mapping (for jwt_vc_json) */
   mapping?: Record<string, unknown>;
+  idTokenClaimsMapping?: Record<string, unknown>;
 }
 
 /** W3C VC DM 2.0 context URLs */
@@ -209,8 +210,24 @@ export function buildDepartmentConfigs(
               startDate: '2020-03-15',
             }
           ),
+          idTokenClaimsMapping: {
+            '$.employeeId': '$.credentialSubject.employeeId',
+            '$.department': '$.credentialSubject.department',
+            '$.position': '$.credentialSubject.position',
+            '$.clearanceLevel': '$.credentialSubject.clearanceLevel',
+            '$.startDate': '$.credentialSubject.startDate',
+          },
         },
       ],
+      authProviderConfiguration: {
+        name: 'Keycloak',
+        authorizeUrl: process.env.KEYCLOAK_AUTHORIZE_URL || '',
+        accessTokenUrl: process.env.KEYCLOAK_ACCESS_TOKEN_URL || '',
+        clientId: process.env.KEYCLOAK_CLIENT_ID || '',
+        clientSecret: process.env.KEYCLOAK_CLIENT_SECRET || '',
+        defaultScopes: process.env.KEYCLOAK_DEFAULT_SCOPES?.split(','),
+        forwardIssuerStateToAuthorizationServer: false,
+      },
     },
     identity: {
       tenantId: gov.departments.identity,
@@ -365,8 +382,7 @@ function buildCredentialConfiguration(
           { path: ['tax_assessment_year'], mandatory: true, display: claimDisplay('Assessment Year') },
           { path: ['annual_income'], mandatory: false, display: claimDisplay('Annual Income') },
           { path: ['tax_class'], mandatory: true, display: claimDisplay('Tax Class') },
-          { path: ['status'], mandatory: true, display: claimDisplay('Status') },
-          { path: ['valid_until'], mandatory: true, display: claimDisplay('Valid Until') },
+          { path: ['tax_status'], mandatory: true, display: claimDisplay('Tax Status') },
           { path: ['given_name'], mandatory: true, display: claimDisplay('Given Name') },
           { path: ['family_name'], mandatory: true, display: claimDisplay('Family Name') },
           { path: ['birthdate'], mandatory: false, display: claimDisplay('Birth Date') },
@@ -417,6 +433,7 @@ export function buildDepartmentIssuerConfig(
     tokenKeyId: dept.signingKeyId,
     kms: kmsRef,
     credentialConfigurations,
+    authProviderConfiguration: dept.authProviderConfiguration,
   };
 
   if (Object.keys(sdJwtVcTypeMetadata).length > 0) {

@@ -118,24 +118,8 @@ export async function setupCreateIssuer2(ctx: CommandContext): Promise<void> {
   const { created } = await ctx.tolerantCreate(
     'Issuer2 service',
     async () => {
-      // Read attester public key
-      const attesterKey = ctx.loadKeyFile('attester-key.json');
-      const attesterPublicJwk = {
-        kty: attesterKey.kty,
-        crv: attesterKey.crv,
-        x: attesterKey.x,
-        y: attesterKey.y,
-      };
 
-      const eudiAttesterKey = ctx.loadKeyFile('eudi-attester-pubkey.json');
-      const eudiAttesterPublicJwk = {
-        kty: eudiAttesterKey.kty,
-        crv: eudiAttesterKey.crv,
-        x: eudiAttesterKey.x,
-        y: eudiAttesterKey.y,
-      };
-
-      const request = {
+      let request: any = {
         type: 'issuer2',
         _id: `${ctx.tenantPath}.${RESOURCES.issuer}`,
         tokenKeyId: `${ctx.tenantPath}.${RESOURCES.kms}.${KEY_IDS.issuerSigningKey}`,
@@ -154,16 +138,24 @@ export async function setupCreateIssuer2(ctx: CommandContext): Promise<void> {
             },
           },
         },
-        clientAttestationConfig: {
+      };
+
+      if (process.env.ATTESTER_KEY_FILE !== undefined) {
+        const attesterKey = ctx.loadKeyFile(process.env.ATTESTER_KEY_FILE || '');
+        const attesterPublicJwk = {
+          kty: attesterKey.kty,
+          crv: attesterKey.crv,
+          x: attesterKey.x,
+          y: attesterKey.y,
+        };
+        request.clientAttestationConfig = {
           required: true,
           verificationMethod: {
             type: 'static-jwk',
             jwk: attesterPublicJwk,
           },
-          clockSkewSeconds: 300,
-          replayWindowSeconds: 300,
-        },
-        // clientAuthenticationConfig: {
+        };
+        // request.clientAuthenticationConfig = {
         //   supportedMethods: [
         //     {
         //       type: "client-attestation",
@@ -172,11 +164,12 @@ export async function setupCreateIssuer2(ctx: CommandContext): Promise<void> {
         //           type: 'static-jwk',
         //           jwk: attesterPublicJwk,
         //         },
-        //       }   
-        //     },
+        //       }
+        //     }
         //   ]
-        // },
-      };
+        // };
+      }
+
       ctx.saveJson('create-issuer2-request.json', request, step);
 
       const response = await ctx.orgClient.post(
