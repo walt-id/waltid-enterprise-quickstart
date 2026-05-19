@@ -442,30 +442,30 @@ export function buildBankIssuerServiceConfig(
   };
 
   if (attesterPublicJwk !== undefined) {
-    config.clientAttestationConfig = {
-      required: true,
-      verificationMethod: {
-        type: 'static-jwk',
-        jwk: attesterPublicJwk,
-      },
-      clockSkewSeconds: 300,
-      replayWindowSeconds: 300,
-    }
-  }
+    // config.clientAttestationConfig = {
+    //   required: true,
+    //   verificationMethod: {
+    //     type: 'static-jwk',
+    //     jwk: attesterPublicJwk,
+    //   },
+    //   clockSkewSeconds: 300,
+    //   replayWindowSeconds: 300,
+    // }
+    config.clientAuthenticationConfig = {
+      supportedMethods: [
+        {
+          type: "client-attestation",
+          config: {
+            verificationMethod: {
+              type: 'static-jwk',
+              jwk: attesterPublicJwk,
+            },
+          }
+        }
+      ]
+    };
 
-  // config.clientAuthenticationConfig = {
-  //   supportedMethods: [
-  //     {
-  //       type: "client-attestation",
-  //       config: {
-  //         verificationMethod: {
-  //           type: 'static-jwk',
-  //           jwk: attesterPublicJwk,
-  //         },
-  //       }
-  //     }
-  //   ]
-  // }
+  }
 
   return config
 }
