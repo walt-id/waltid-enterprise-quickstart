@@ -55,10 +55,18 @@ async function setupIamBridge(ctx: CommandContext): Promise<void> {
   
   const keycloakRedirectUri = `http://keycloak.localhost:8080/realms/waltid-vc/broker/waltid-vc/endpoint`;
   
+  // For Docker to reach the Enterprise API, we need to use localhost:PORT
+  // instead of the subdomain-based URL (waltid.enterprise.localhost:3000)
+  // because Docker's --network host mode resolves localhost to host, but
+  // custom subdomains may not resolve correctly inside the container.
+  const port = ctx.config.port || 3000;
+  const dockerAccessibleUrl = `http://localhost:${port}`;
+  
   const request = {
     type: 'iam-bridge',
     _id: iamBridgePath,
-    issuerUrl: ctx.orgBaseUrl,
+    // Use Docker-accessible URL for token/userinfo endpoints that Keycloak calls
+    issuerUrl: dockerAccessibleUrl,
     enabled: true,
     clients: {
       [KEYCLOAK_CLIENT_ID]: {
@@ -189,6 +197,18 @@ async function getIamBridgeDiscovery(ctx: CommandContext): Promise<any> {
 
 /** Generate Keycloak realm configuration */
 function generateKeycloakRealm(ctx: CommandContext, discovery: any): string {
+  // Replace subdomain-based URLs with localhost URLs for Docker accessibility
+  // The browser uses waltid.enterprise.localhost:PORT but Docker needs localhost:PORT
+  const port = ctx.config.port || 3000;
+  const subdomainPattern = new RegExp(`https?://[^/]+\\.localhost:${port}`, 'g');
+  const dockerBaseUrl = `http://localhost:${port}`;
+  
+  // Convert discovery URLs to Docker-accessible URLs
+  const tokenUrl = discovery.token_endpoint.replace(subdomainPattern, dockerBaseUrl);
+  const authorizationUrl = discovery.authorization_endpoint; // Keep as-is for browser redirect
+  const jwksUrl = discovery.jwks_uri.replace(subdomainPattern, dockerBaseUrl);
+  const issuer = discovery.issuer.replace(subdomainPattern, dockerBaseUrl);
+  
   const realm = {
     realm: 'waltid-vc',
     enabled: true,
@@ -234,12 +254,15 @@ function generateKeycloakRealm(ctx: CommandContext, discovery: any): string {
           hideOnLoginPage: 'false',
           validateSignature: 'true',
           clientId: KEYCLOAK_CLIENT_ID,
-          tokenUrl: discovery.token_endpoint,
-          authorizationUrl: discovery.authorization_endpoint,
+          // Use Docker-accessible URLs for backend calls
+          tokenUrl: tokenUrl,
+          // Authorization URL can use subdomain since it's a browser redirect
+          authorizationUrl: authorizationUrl,
           clientAuthMethod: 'client_secret_post',
-          jwksUrl: discovery.jwks_uri,
+          jwksUrl: jwksUrl,
           clientSecret: KEYCLOAK_CLIENT_SECRET,
-          issuer: discovery.issuer,
+          // Use Docker-accessible issuer URL
+          issuer: issuer,
           useJwksUrl: 'true',
           pkceEnabled: 'true',
           pkceMethod: 'S256',
