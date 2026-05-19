@@ -39,6 +39,7 @@ import {
   setupLinkWalletToAttester,
   setupObtainWalletAttestation,
   setupEtsiTrustRegistry,
+  runBankTenantSetup,
 } from './setup/index.js';
 
 import {

@@ -50,3 +50,6 @@ export {
   listTrustSources,
   setupEtsiTrustRegistry,
 } from './trust.js';
+
+// Bank tenant
+export { runBankTenantSetup } from './bank-tenant.js';

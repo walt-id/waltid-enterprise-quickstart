@@ -24,6 +24,11 @@ export const RESOURCES = {
   x509Service: 'x509-service',
   x509Store: 'x509-store',
   kms: 'kms',
+  /** Dedicated KMS for wallet keys (separate from issuer/x509 KMS) */
+  walletKms: 'wallet-kms',
+  walletDidService: 'wallet-did-service',
+  walletDidStore: 'wallet-didstore',
+  walletCredentialStore: 'wallet-credentialstore',
   vical: 'vical',
   clientAttester: 'client-attester',
   issuerProfile: 'mdl-profile',
@@ -73,6 +78,10 @@ export interface Config {
   superadminToken: string;
   adminEmail: string;
   adminPassword: string;
+  /** Custom domain for host alias (optional) */
+  hostAliasDomain?: string;
+  /** Host alias service target (optional, default: {organization}.host-alias) */
+  hostAliasTarget?: string;
 }
 
 /** Runtime context maintained during CLI execution */
@@ -89,6 +98,7 @@ export interface WaltContext {
   
   // Service state
   walletKeyRef: string;
+  walletDid: string;
   iacaPem: string;
   docSignerPem: string;
   clientAttestationJwt: string;
@@ -118,10 +128,17 @@ export interface SuperadminCredentials {
 /**
  * Build base URL from configuration.
  * Handles both http:// and https:// protocols.
- * Port 0 or undefined means no explicit port (use default for protocol).
+ * Port is omitted for HTTPS (uses default 443).
+ * Port is included for HTTP if specified.
  */
 export function buildBaseUrl(baseUrl: string, port: number | undefined): string {
-  if (baseUrl.startsWith('http://') || baseUrl.startsWith('https://')) {
+  if (baseUrl.startsWith('https://')) {
+    // HTTPS: never add explicit port, use default 443
+    return new URL(baseUrl).origin;
+  }
+  
+  if (baseUrl.startsWith('http://')) {
+    // HTTP: add port if specified
     if (port && port > 0) {
       const url = new URL(baseUrl);
       url.port = String(port);
@@ -129,7 +146,8 @@ export function buildBaseUrl(baseUrl: string, port: number | undefined): string 
     }
     return new URL(baseUrl).origin;
   }
-  // For bare hostnames, add protocol and optional port
+  
+  // For bare hostnames, add protocol and optional port (defaults to http)
   const portStr = port && port > 0 ? `:${port}` : '';
   return `http://${baseUrl}${portStr}`;
 }
@@ -137,9 +155,19 @@ export function buildBaseUrl(baseUrl: string, port: number | undefined): string 
 /**
  * Build organization-scoped URL.
  * Inserts organization as subdomain.
+ * Port is omitted for HTTPS (uses default 443).
+ * Port is included for HTTP if specified.
  */
 export function buildOrgUrl(baseUrl: string, organization: string, port: number | undefined): string {
-  if (baseUrl.startsWith('http://') || baseUrl.startsWith('https://')) {
+  if (baseUrl.startsWith('https://')) {
+    // HTTPS: never add explicit port, use default 443
+    const url = new URL(baseUrl);
+    url.hostname = `${organization}.${url.hostname}`;
+    return url.origin;
+  }
+  
+  if (baseUrl.startsWith('http://')) {
+    // HTTP: add port if specified
     const url = new URL(baseUrl);
     url.hostname = `${organization}.${url.hostname}`;
     if (port && port > 0) {
@@ -147,6 +175,8 @@ export function buildOrgUrl(baseUrl: string, organization: string, port: number 
     }
     return url.origin;
   }
+  
+  // For bare hostnames, add protocol and optional port (defaults to http)
   const portStr = port && port > 0 ? `:${port}` : '';
   return `http://${organization}.${baseUrl}${portStr}`;
 }
@@ -209,7 +239,14 @@ export function createConfig(projectRoot: string): Config {
     superadminToken: process.env.SUPERADMIN_TOKEN || superadminCreds.token || '',
     adminEmail: process.env.ADMIN_EMAIL || 'admin@walt.id',
     adminPassword: process.env.ADMIN_PASSWORD || 'admin123456',
+    hostAliasDomain: process.env.HOST_ALIAS_DOMAIN || undefined,
+    hostAliasTarget: process.env.HOST_ALIAS_TARGET || undefined,
   };
+}
+
+/** Default host-alias API target for an organization */
+export function defaultHostAliasTarget(organization: string): string {
+  return `${organization}.host-alias`;
 }
 
 /**
@@ -229,6 +266,7 @@ export function createInitialContext(
     adminUserId: '',
     adminToken: '',
     walletKeyRef: '',
+    walletDid: '',
     iacaPem: '',
     docSignerPem: '',
     clientAttestationJwt: '',
