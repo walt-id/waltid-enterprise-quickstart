@@ -62,6 +62,52 @@ async function setupIamBridge(ctx: CommandContext): Promise<void> {
   const port = ctx.config.port || 3000;
   const dockerAccessibleUrl = `http://localhost:${port}`;
   
+  // DC API verification setup with proper signing key and x509 chain
+  // This is required for the Digital Credentials API to work with Chrome's credential selector
+  const dcApiVerificationSetup = {
+    flow_type: 'dc_api',
+    core: {
+      dcql_query: {
+        credentials: [
+          {
+            id: 'my_pid',
+            format: 'mso_mdoc',
+            meta: {
+              doctype_value: 'eu.europa.ec.eudi.pid.1',
+            },
+            claims: [
+              { path: ['eu.europa.ec.eudi.pid.1', 'family_name'] },
+              { path: ['eu.europa.ec.eudi.pid.1', 'given_name'] },
+              { path: ['eu.europa.ec.eudi.pid.1', 'birth_date'] },
+              { path: ['eu.europa.ec.eudi.pid.1', 'age_over_18'] },
+            ],
+          },
+        ],
+      },
+      signed_request: true,
+      encrypted_response: true,
+      clientId: 'x509_hash:kZ5SI3MAFaLDPRxza8xguw-o6b8LYfmP2ZvrqVSRWng',
+      key: {
+        type: 'jwk',
+        jwk: {
+          kty: 'EC',
+          crv: 'P-521',
+          x: 'APWg4T3FQIeJD_xQN0kap5Mzp7lJ17Ctg_T8Gy24lwOp_EIhDzBK9MoCufSIITRolWlcjFTj3Ty91C9rctTuSf0F',
+          y: 'AEnFDKiecuqnZ8XMKgt7dFZWRfmzPFrgQmauwlbXDC0kHCZhV76VOgCoWdzfSLegLKGn-nINAIRqPR9n2KPpQwKn',
+          d: 'AZT9f0qOOSMQl25qXwvFs23rq0PIUOV1R8YcG1iqRNKEYYs5k8gXNNuud4W6amuItCGWCrKSXRoHmgj6C5NUDzhA',
+        },
+      },
+      x5c: [
+        'MIIB7TCCAZOgAwIBAgIUXrHFKoaAx6+CFOOHp6fZ7Rs2EzgwCgYIKoZIzj0EAwIwHTEbMBkGA1UEAwwSQ3VzdG9tSW50ZXJtZWRpYXRlMB4XDTI2MDEyMjE1NTY0OFoXDTI3MDEyMjE1NTY0OFowEzERMA8GA1UEAwwIVmVyaWZpZXIwgZswEAYHKoZIzj0CAQYFK4EEACMDgYYABAD1oOE9xUCHiQ/8UDdJGqeTM6e5SdewrYP0/BstuJcDqfxCIQ8wSvTKArn0iCE0aJVpXIxU4908vdQva3LU7kn9BQBJxQyonnLqp2fFzCoLe3RWVkX5szxa4EJmrsJW1wwtJBwmYVe+lToAqFnc30i3oCyhp/pyDQCEaj0fZ9ij6UMCp6N4MHYwDAYDVR0TAQH/BAIwADAOBgNVHQ8BAf8EBAMCB4AwFgYDVR0RBA8wDYILZXhhbXBsZS5jb20wHQYDVR0OBBYEFFAdasyU1haLdvQdEizJEaAO+cmWMB8GA1UdIwQYMBaAFGVh3m3K6y5gABHGIuD7ibTR+AG6MAoGCCqGSM49BAMCA0gAMEUCIQDT9GYMvTTyEOmKDvilHmgejcbLWQ6ACUzlmbZDk67ztAIge2kWDxRetz6xIDtnfg4vlCW6pLbdBWasMrfm1eppDww=',
+        'MIIBlzCCAT2gAwIBAgIUZFEF4iwIsLuJO7pJ9bU7vo9Dg3kwCgYIKoZIzj0EAwIwFTETMBEGA1UEAwwKQ3VzdG9tUm9vdDAeFw0yNjAxMjIxNTU1NDJaFw0zNjAxMjAxNTU1NDJaMB0xGzAZBgNVBAMMEkN1c3RvbUludGVybWVkaWF0ZTBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABAvlBFSSRWetJJSj5rvGoXtPnfw97YRHbJj4/kspQbSwxVN3RtofsSu0DevrISGx2MCPqqxHXdfSeu9SKgen6IOjYzBhMA8GA1UdEwEB/wQFMAMBAf8wDgYDVR0PAQH/BAQDAgEGMB0GA1UdDgQWBBRlYd5tyusuYAARxiLg+4m00fgBujAfBgNVHSMEGDAWgBQ+D1YkeDpF+qaxAhlnb3XSkGZWCTAKBggqhkjOPQQDAgNIADBFAiEA789kIQsGTa/GJEgYaOID9VVoO0PyeeYEwub7P0a1+ZICIHI9bYi72XTca9e8rqGJuYmKz8qEQodLvaXdgwCfQ4KZ',
+      ],
+    },
+    expectedOrigins: [
+      'http://waltid.enterprise.localhost',
+      `http://waltid.enterprise.localhost:${port}`,
+    ],
+  };
+  
   const request = {
     type: 'iam-bridge',
     _id: iamBridgePath,
@@ -82,26 +128,8 @@ async function setupIamBridge(ctx: CommandContext): Promise<void> {
       { oidcClaim: 'given_name', credentialPath: '$.credentialSubject.given_name', transform: 'NONE' },
       { oidcClaim: 'family_name', credentialPath: '$.credentialSubject.family_name', transform: 'NONE' },
     ],
-    defaultVerificationSetup: {
-      flow_type: 'cross_device',
-      core_flow: {
-        dcql_query: {
-          credentials: [
-            {
-              id: 'identity-credential',
-              format: 'mso_mdoc',
-              meta: {
-                doctype_value: 'org.iso.18013.5.1.mDL',
-              },
-              claims: [
-                { path: ['org.iso.18013.5.1', 'family_name'] },
-                { path: ['org.iso.18013.5.1', 'given_name'] },
-              ],
-            },
-          ],
-        },
-      },
-    },
+    // Use DC API verification setup with proper signing for Chrome credential selector
+    defaultVerificationSetup: dcApiVerificationSetup,
     tokenLifetime: {
       idTokenExpirySeconds: 3600,
       accessTokenExpirySeconds: 3600,
