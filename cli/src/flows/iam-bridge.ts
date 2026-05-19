@@ -66,7 +66,7 @@ async function setupIamBridge(ctx: CommandContext): Promise<void> {
   // (DC API setup is handled separately in the browser when dc_api=true)
   const verificationSetup = {
     flow_type: 'cross_device',
-    core: {
+    core_flow: {
       dcql_query: {
         credentials: [
           {
