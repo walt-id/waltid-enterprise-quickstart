@@ -24,6 +24,10 @@ export const RESOURCES = {
   x509Service: 'x509-service',
   x509Store: 'x509-store',
   kms: 'kms',
+  /** DID service for issuer DIDs */
+  didService: 'did-service',
+  /** DID store for issuer DIDs */
+  didStore: 'did-store',
   /** Dedicated KMS for wallet keys (separate from issuer/x509 KMS) */
   walletKms: 'wallet-kms',
   walletDidService: 'wallet-did-service',

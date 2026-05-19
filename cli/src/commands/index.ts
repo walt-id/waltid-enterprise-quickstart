@@ -40,6 +40,7 @@ import {
   setupObtainWalletAttestation,
   setupEtsiTrustRegistry,
   runBankTenantSetup,
+  runGovServicesSetup,
 } from './setup/index.js';
 
 import {
