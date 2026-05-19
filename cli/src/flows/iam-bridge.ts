@@ -63,22 +63,21 @@ async function setupIamBridge(ctx: CommandContext): Promise<void> {
   const dockerAccessibleUrl = `http://localhost:${port}`;
   
   // Standard cross-device verification setup for CLI testing
-  // (DC API setup is handled separately in the browser when dc_api=true)
+  // Uses mDOC PID format (same as DC API config but without the DC API specific fields)
   const verificationSetup = {
     flow_type: 'cross_device',
     core_flow: {
       dcql_query: {
         credentials: [
           {
-            id: 'identity-credential',
-            format: 'vc+sd-jwt',
+            id: 'my_pid',
+            format: 'mso_mdoc',
             meta: {
-              vct_values: ['VerifiableId', 'IdentityCredential'],
+              doctype_value: 'eu.europa.ec.eudi.pid.1',
             },
             claims: [
-              { path: ['given_name'] },
-              { path: ['family_name'] },
-              { path: ['email'] },
+              { path: ['eu.europa.ec.eudi.pid.1', 'family_name'] },
+              { path: ['eu.europa.ec.eudi.pid.1', 'given_name'] },
             ],
           },
         ],
