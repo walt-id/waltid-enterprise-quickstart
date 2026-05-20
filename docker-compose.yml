@@ -115,7 +115,10 @@ services:
     volumes:
       - ./config:/config
     networks:
-      - mongodb_network
+      mongodb_network:
+        aliases:
+          - enterprise.localhost
+          - waltid.enterprise.localhost
     depends_on:
       - mongodb
 

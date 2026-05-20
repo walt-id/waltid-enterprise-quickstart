@@ -13,7 +13,7 @@
 
 import { mkdirSync } from 'fs';
 import { CommandContext } from '../context.js';
-import { RESOURCES, MDL_DOC_TYPE } from '../config.js';
+import { RESOURCES, MDL_DOC_TYPE, defaultWalletKeyReference } from '../config.js';
 import { setupLogin } from '../commands/setup/index.js';
 import {
   runCreateCredentialOffer,
@@ -112,7 +112,7 @@ export async function flowEtsiTrustLists(ctx: CommandContext): Promise<void> {
 
     // Set wallet key reference if not already set
     if (!ctx.ctx.walletKeyRef) {
-      ctx.ctx.walletKeyRef = `${ctx.tenantPath}.${RESOURCES.kms}.wallet_key`;
+      ctx.ctx.walletKeyRef = defaultWalletKeyReference(ctx.tenantPath);
     }
 
     // Step 1: Clear existing credentials

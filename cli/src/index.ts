@@ -77,7 +77,7 @@ import {
   runGovServicesSetup,
 } from './commands/index.js';
 
-import { flowEtsiTrustLists, flowCredentialRevocation } from './flows/index.js';
+import { flowEtsiTrustLists, flowCredentialRevocation, flowGovTrust } from './flows/index.js';
 
 // ============================================================================
 // CLI Setup
@@ -163,6 +163,7 @@ Credential Revocation Commands:
 Flows (special use cases):
   --flow-etsi-trust-lists  Run ETSI trust lists verification flow
   --flow-credential-revocation  Run credential revocation flow
+  --flow-gov-trust         Run government trust list validation flow (requires --setup-gov-services)
 
 Other Options:
   --help, -h              Show this help message
@@ -264,7 +265,7 @@ async function main(): Promise<void> {
     '--run-create-verification-session-status-only',
     '--run-wallet-present', '--run-assert-final-status', '--run-assert-final-status-failed',
     '--run-revoke-credential', '--run-unrevoke-credential', '--run-update-credential-status',
-    '--flow-etsi-trust-lists', '--flow-credential-revocation',
+    '--flow-etsi-trust-lists', '--flow-credential-revocation', '--flow-gov-trust',
   ];
   
   for (const arg of args) {
@@ -281,7 +282,7 @@ async function main(): Promise<void> {
   if (args.includes('--setup-bank-tenant')) {
     loadBankTenantEnv(cliDir);
   }
-  if (args.includes('--setup-gov-services')) {
+  if (args.includes('--setup-gov-services') || args.includes('--flow-gov-trust')) {
     loadGovServicesEnv(cliDir);
   }
 
@@ -460,6 +461,11 @@ async function main(): Promise<void> {
 
     if (args.includes('--flow-credential-revocation')) {
       await flowCredentialRevocation(ctx);
+      return;
+    }
+
+    if (args.includes('--flow-gov-trust')) {
+      await flowGovTrust(ctx);
       return;
     }
 

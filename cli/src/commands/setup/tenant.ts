@@ -9,7 +9,7 @@
  */
 
 import { CommandContext } from '../../context.js';
-import { RESOURCES } from '../../config.js';
+import { RESOURCES, defaultWalletKeyReference, defaultWalletDidReference } from '../../config.js';
 
 /** Create tenant */
 export async function setupCreateTenant(ctx: CommandContext): Promise<void> {
@@ -48,7 +48,11 @@ export async function setupCreateWallet(ctx: CommandContext): Promise<void> {
         createKeyInKms: {
           keyType: 'secp256r1',
         },
-        createDidWithDidService: 'jwk'
+        createDidWithDidService: 'jwk',
+        kmsName: RESOURCES.walletKms,
+        didStoreName: RESOURCES.walletDidStore,
+        didServiceName: RESOURCES.walletDidService,
+        credentialStoreName: RESOURCES.walletCredentialStore,
       };
       ctx.saveJson('init-wallet-request.json', request, step);
 
@@ -62,7 +66,8 @@ export async function setupCreateWallet(ctx: CommandContext): Promise<void> {
   );
 
   // Set wallet key reference
-  ctx.ctx.walletKeyRef = `${ctx.tenantPath}.${RESOURCES.kms}.wallet_key`;
+  ctx.ctx.walletKeyRef = defaultWalletKeyReference(ctx.tenantPath);
+  ctx.ctx.walletDid = defaultWalletDidReference(ctx.tenantPath);
 
   if (created) {
     console.log(`   [OK] Wallet initialized`);

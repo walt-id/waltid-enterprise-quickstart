@@ -10,15 +10,20 @@
  */
 
 import { CommandContext } from '../../context.js';
-import { RESOURCES, CERT_IDS, KEY_IDS } from '../../config.js';
+import { RESOURCES, CERT_IDS, KEY_IDS, defaultWalletKeyReference, defaultWalletDidReference } from '../../config.js';
 import {
   GovServicesConfig,
   DepartmentConfig,
   CredentialConfig,
+  UntrustedDepartmentConfig,
+  PHOTO_ID_DOCTYPE,
+  photoIdDefaultValues,
   buildDepartmentConfigs,
   buildDepartmentIssuerConfig,
+  buildUntrustedDepartmentConfig,
   departmentNeedsDid,
   departmentNeedsDsc,
+  departmentNeedsTrustEntity,
 } from '../../gov-services-config.js';
 import { setupLogin } from './auth.js';
 import {
@@ -83,7 +88,8 @@ async function buildDepartmentMdocX5Chain(
 async function createDepartmentDsc(
   ctx: CommandContext,
   deptKey: string,
-  dept: DepartmentConfig
+  dept: DepartmentConfig,
+  iaca?: { pem: string; keyIdPath: string }
 ): Promise<string> {
   const dscCertId = `${deptKey}-dsc`;
   ctx.log(`Create DSC for ${dept.name}`, 'GOV-SETUP');
@@ -103,13 +109,17 @@ async function createDepartmentDsc(
     // Certificate doesn't exist, create it
   }
 
+  let iacaPem = iaca?.pem || ctx.ctx.iacaPem;
+  const iacaKeyIdPath = iaca?.keyIdPath || `${ctx.tenantPath}.${RESOURCES.kms}.${KEY_IDS.vicalIacaKey}`;
+
   // Ensure we have IACA PEM
-  if (!ctx.ctx.iacaPem) {
+  if (!iacaPem) {
     try {
       const certResponse = await ctx.orgClient.get(
         `/v1/${ctx.tenantPath}.${RESOURCES.x509Store}.${CERT_IDS.vicalIacaCert}/x509-store-api/certificates`
       );
-      ctx.ctx.iacaPem = certResponse.data.data?.pem || certResponse.data.certificatePem || certResponse.data.pem;
+      iacaPem = certResponse.data.data?.pem || certResponse.data.certificatePem || certResponse.data.pem;
+      ctx.ctx.iacaPem = iacaPem;
     } catch {
       throw new Error('IACA certificate not found. Ensure IACA is created before department DSCs.');
     }
@@ -119,10 +129,10 @@ async function createDepartmentDsc(
     storedCertificateId: dscCertId,
     iacaSigner: {
       type: 'iaca-pem-cert-descriptor',
-      iacaPemEncodedCertificate: ctx.ctx.iacaPem,
+      iacaPemEncodedCertificate: iacaPem,
       iacaKeyDesc: {
         type: 'kms-hosted-key-descriptor',
-        keyIdPath: `${ctx.tenantPath}.${RESOURCES.kms}.${KEY_IDS.vicalIacaKey}`,
+        keyIdPath: iacaKeyIdPath,
       },
     },
     certificateData: {
@@ -154,6 +164,60 @@ async function createDepartmentDsc(
   console.log(`   [OK] DSC created for ${dept.name}`);
   
   return dscPem;
+}
+
+/** Create an IACA certificate from a specific KMS key. */
+async function createIacaCertificateForKey(
+  ctx: CommandContext,
+  certId: string,
+  keyIdPath: string,
+  commonName: string
+): Promise<string> {
+  ctx.log(`Create IACA certificate: ${commonName}`, 'GOV-SETUP');
+
+  try {
+    const existing = await ctx.orgClient.get(
+      `/v1/${ctx.tenantPath}.${RESOURCES.x509Store}.${certId}/x509-store-api/certificates`
+    );
+    if (existing.data) {
+      const pem = existing.data.data?.pem || existing.data.certificatePem || existing.data.pem;
+      console.log(`   [SKIP] IACA certificate already exists: ${certId}`);
+      return pem;
+    }
+  } catch {
+    // Certificate doesn't exist, create it
+  }
+
+  const request = {
+    storedCertificateId: certId,
+    certificateData: {
+      country: 'US',
+      commonName,
+      issuerAlternativeNameConf: {
+        uri: `https://gov.example/${certId}`,
+      },
+    },
+    iacaKeyDesc: {
+      type: 'kms-hosted-key-descriptor',
+      keyIdPath,
+    },
+    vicalEntryComplementaryMetadata: {
+      docType: [PHOTO_ID_DOCTYPE],
+    },
+  };
+  ctx.saveJson(`create-iaca-${certId}-request.json`, request);
+
+  await ctx.orgClient.post(
+    `/v1/${ctx.tenantPath}.${RESOURCES.x509Service}/x509-service-api/iso/iacas`,
+    request
+  );
+
+  const certResp = await ctx.orgClient.get(
+    `/v1/${ctx.tenantPath}.${RESOURCES.x509Store}.${certId}/x509-store-api/certificates`
+  );
+  const pem = certResp.data.data?.pem || certResp.data.certificatePem || certResp.data.pem;
+  console.log(`   [OK] IACA certificate created: ${certId}`);
+  return pem;
 }
 
 /** Create DID service and DID store for issuer DIDs */
@@ -413,7 +477,357 @@ async function createDepartmentProfiles(
   }
 }
 
-/** Create central verifier service */
+/** Create trust registry service for gov tenant */
+async function createGovTrustRegistry(ctx: CommandContext): Promise<void> {
+  const step = ctx.nextStep();
+  ctx.log('Create trust registry service', 'GOV-SETUP');
+
+  const { created } = await ctx.tolerantCreate(
+    'Trust registry service',
+    async () => {
+      const request = { type: 'trust-registry' };
+      ctx.saveJson('create-gov-trust-registry-request.json', request, step);
+
+      const response = await ctx.orgClient.post(
+        `/v1/${ctx.tenantPath}.${RESOURCES.trustRegistry}/resource-api/services/create`,
+        request
+      );
+      ctx.saveJson('create-gov-trust-registry-response.json', response.data, step);
+      return response;
+    }
+  );
+
+  if (created) {
+    console.log(`   [OK] Trust registry created: ${ctx.tenantPath}.${RESOURCES.trustRegistry}`);
+  }
+}
+
+/** Link central verifier to trust registry */
+async function linkGovVerifierToTrustRegistry(ctx: CommandContext): Promise<void> {
+  ctx.log('Link central verifier to trust registry', 'GOV-SETUP');
+
+  const trustRegistryTarget = `${ctx.tenantPath}.${RESOURCES.trustRegistry}`;
+  const verifierTarget = `${ctx.tenantPath}.${RESOURCES.verifier2}`;
+
+  try {
+    await ctx.orgClient.postRaw(
+      `/v1/${verifierTarget}/verifier2-service-api/dependencies/add`,
+      trustRegistryTarget
+    );
+    console.log(`   [OK] Trust registry linked to verifier`);
+  } catch (error: any) {
+    if (error.status === 409 || error.message?.includes('already')) {
+      console.log(`   [SKIP] Trust registry already linked to verifier`);
+    } else {
+      throw error;
+    }
+  }
+}
+
+/** Load all trusted government issuers into the trust registry */
+async function loadGovIssuersIntoTrustRegistry(
+  ctx: CommandContext,
+  organization: string,
+  departments: Record<string, DepartmentConfig>,
+  gov: GovServicesConfig
+): Promise<void> {
+  const step = ctx.nextStep();
+  ctx.log('Load trusted government issuers into trust registry', 'GOV-SETUP');
+
+  const sourceId = gov.trustedSourceId;
+
+  const trustedEntities: any[] = [];
+
+  for (const [deptKey, dept] of Object.entries(departments)) {
+    const issuerDid = departmentDids.get(deptKey);
+    const dscPem = departmentDscPems.get(deptKey);
+    const entityId = `gov-${deptKey}`;
+
+    const identities: any[] = [];
+
+    if (issuerDid) {
+      identities.push({
+        matchType: 'DID_KEY',
+        value: issuerDid,
+      });
+    }
+
+    if (dscPem) {
+      identities.push({
+        matchType: 'CERTIFICATE_PEM',
+        value: dscPem,
+      });
+    }
+
+    if (identities.length === 0) {
+      console.log(`   [WARN] ${dept.name} has no identity for trust registry, skipping`);
+      continue;
+    }
+
+    const credentialTypes = dept.credentials.map(c => c.id);
+
+    trustedEntities.push({
+      entityId,
+      entityType: 'PID_PROVIDER',
+      legalName: dept.name,
+      country: 'US',
+      services: [
+        {
+          serviceId: `${deptKey}-credential-issuing`,
+          serviceType: 'MDL_ISSUER',
+          status: 'GRANTED',
+          statusStart: new Date().toISOString(),
+          identities,
+        },
+      ],
+    });
+  }
+
+  const loteSource = {
+    listMetadata: {
+      listId: sourceId,
+      listType: 'credential-issuers',
+      territory: 'US',
+      issueDate: new Date().toISOString(),
+      nextUpdate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
+      sequenceNumber: '1',
+    },
+    trustedEntities,
+  };
+
+  ctx.saveJson('gov-trust-lote-source.json', loteSource, step);
+
+  const request = {
+    sourceId,
+    content: JSON.stringify(loteSource),
+    sourceUrl: 'local://gov-services-demo',
+    validateSignature: false,
+  };
+  ctx.saveJson('gov-trust-load-request.json', request, step);
+
+  try {
+    const response = await ctx.orgClient.post(
+      `/v1/${ctx.tenantPath}.${RESOURCES.trustRegistry}/trust-registry-api/sources/load`,
+      request
+    );
+    ctx.saveJson('gov-trust-load-response.json', response.data, step);
+
+    if (!response.data.success) {
+      throw new Error(`Trust registry load failed: ${response.data.error || 'unknown error'}`);
+    }
+
+    ctx.ctx.trustRegistrySourceId = sourceId;
+    console.log(`   [OK] Trust source loaded: ${sourceId}`);
+    console.log(`        Entities: ${response.data.entitiesLoaded || 0}`);
+    console.log(`        Services: ${response.data.servicesLoaded || 0}`);
+    console.log(`        Identities: ${response.data.identitiesLoaded || 0}`);
+  } catch (error: any) {
+    const errMsg = error.message || '';
+    if (error.status === 409 ||
+        errMsg.includes('Duplicate target') ||
+        errMsg.includes('already exists') ||
+        errMsg.includes('Overwriting targets')) {
+      ctx.ctx.trustRegistrySourceId = sourceId;
+      console.log(`   [SKIP] Gov trust source already exists: ${sourceId}`);
+    } else {
+      throw new Error(`Failed to load gov trust source: ${errMsg}`);
+    }
+  }
+}
+
+/** Create untrusted department: tenant + issuer + verifier NOT in trust registry */
+async function createUntrustedDepartment(
+  ctx: CommandContext,
+  organization: string,
+  untrusted: UntrustedDepartmentConfig,
+  gov: GovServicesConfig
+): Promise<void> {
+  ctx.log('Create untrusted department (negative test cases)', 'GOV-SETUP');
+
+  const tenantPath = `${organization}.${untrusted.tenantId}`;
+  const issuerPath = `${tenantPath}.${untrusted.issuerName}`;
+  const profileId = `${issuerPath}.${untrusted.credentialProfileSuffix}`;
+
+  // 1. Create untrusted tenant
+  const { created: tenantCreated } = await ctx.tolerantCreate(
+    `Tenant ${untrusted.tenantId}`,
+    async () => {
+      const request = { name: 'Untrusted Department (Demo)' };
+      const response = await ctx.orgClient.post(
+        `/v1/${tenantPath}/resource-api/tenants/create`,
+        request
+      );
+      return response;
+    }
+  );
+  if (tenantCreated) {
+    console.log(`   [OK] Untrusted tenant created: ${tenantPath}`);
+  }
+
+  // 2. Create signing keys for the untrusted issuer and its private IACA
+  const untrustedIacaKeyId = `${ctx.tenantPath}.${RESOURCES.kms}.untrusted-iaca-key`;
+  const keyName = untrusted.signingKeyId.split('.').pop() || 'signing-key';
+  const { created: keyCreated } = await ctx.tolerantCreate(
+    `Key ${keyName}`,
+    async () => {
+      const response = await ctx.orgClient.post(
+        `/v1/${untrusted.signingKeyId}/kms-service-api/keys/generate`,
+        { backend: 'jwk', keyType: 'secp256r1' }
+      );
+      return response;
+    }
+  );
+  if (keyCreated) {
+    console.log(`   [OK] Untrusted signing key created: ${untrusted.signingKeyId}`);
+  }
+
+  const { created: iacaKeyCreated } = await ctx.tolerantCreate(
+    'Key untrusted-iaca-key',
+    async () => {
+      const response = await ctx.orgClient.post(
+        `/v1/${untrustedIacaKeyId}/kms-service-api/keys/generate`,
+        { backend: 'jwk', keyType: 'secp256r1' }
+      );
+      return response;
+    }
+  );
+  if (iacaKeyCreated) {
+    console.log(`   [OK] Untrusted IACA key created: ${untrustedIacaKeyId}`);
+  }
+
+  // 3. Create a private IACA + DSC for the untrusted issuer. Neither is loaded
+  // into the trust registry, so trust-list validation has a real negative case.
+  const untrustedIacaPem = await createIacaCertificateForKey(
+    ctx,
+    'untrusted-iaca-cert',
+    untrustedIacaKeyId,
+    'Untrusted Department Test IACA'
+  );
+
+  const untrustedDeptForDsc: DepartmentConfig = {
+    tenantId: untrusted.tenantId,
+    name: 'Untrusted Department',
+    issuerName: untrusted.issuerName,
+    signingKeyId: untrusted.signingKeyId,
+    credentials: [
+      {
+        id: PHOTO_ID_DOCTYPE,
+        format: 'mso_mdoc',
+        doctype: PHOTO_ID_DOCTYPE,
+        profileSuffix: untrusted.credentialProfileSuffix,
+        sampleData: { ...photoIdDefaultValues },
+      },
+    ],
+  };
+  const untrustedDscPem = await createDepartmentDsc(ctx, 'untrusted', untrustedDeptForDsc, {
+    pem: untrustedIacaPem,
+    keyIdPath: untrustedIacaKeyId,
+  });
+  if (!untrustedDscPem) {
+    throw new Error('Untrusted issuer DSC required for Photo ID profile');
+  }
+  const untrustedX5Chain = [
+    {
+      type: 'pem-encoded-x509-certificate-descriptor',
+      pemEncodedCertificate: untrustedDscPem,
+    },
+    {
+      type: 'pem-encoded-x509-certificate-descriptor',
+      pemEncodedCertificate: untrustedIacaPem,
+    },
+  ];
+
+  // 4. Create untrusted issuer service
+  const issuerConfig = {
+    type: 'issuer2',
+    _id: issuerPath,
+    baseUrl: gov.serviceBaseUrl,
+    tokenKeyId: untrusted.signingKeyId,
+    kms: `${ctx.tenantPath}.${RESOURCES.kms}`,
+    credentialConfigurations: {
+      [PHOTO_ID_DOCTYPE]: {
+        format: 'mso_mdoc',
+        scope: PHOTO_ID_DOCTYPE,
+        doctype: PHOTO_ID_DOCTYPE,
+        credential_signing_alg_values_supported: [-7, -9],
+        cryptographic_binding_methods_supported: ['cose_key'],
+        proof_types_supported: {
+          jwt: { proof_signing_alg_values_supported: ['ES256'] },
+        },
+      },
+    },
+  };
+
+  const { created: issuerCreated } = await ctx.tolerantCreate(
+    `Issuer ${untrusted.issuerName}`,
+    async () => {
+      ctx.saveJson('create-untrusted-issuer-request.json', issuerConfig);
+      const response = await ctx.orgClient.post(
+        `/v1/${issuerPath}/resource-api/services/create`,
+        issuerConfig
+      );
+      ctx.saveJson('create-untrusted-issuer-response.json', response.data);
+      return response;
+    }
+  );
+  if (issuerCreated) {
+    console.log(`   [OK] Untrusted issuer created: ${issuerPath}`);
+  }
+
+  // 5. Create credential profile for untrusted issuer
+  const step = ctx.nextStep();
+  ctx.log('Create untrusted issuer credential profile', 'GOV-SETUP');
+
+  const profileRequest: Record<string, unknown> = {
+    name: untrusted.credentialProfileSuffix,
+    credentialConfigurationId: PHOTO_ID_DOCTYPE,
+    issuerKeyId: untrusted.signingKeyId,
+    credentialData: { ...photoIdDefaultValues },
+    x5Chain: untrustedX5Chain,
+  };
+
+  ctx.saveJson('create-untrusted-profile-request.json', profileRequest, step);
+
+  const { created: profileCreated } = await ctx.tolerantCreate(
+    `Profile ${untrusted.credentialProfileSuffix}`,
+    async () => {
+      const response = await ctx.orgClient.post(
+        `/v2/${profileId}/issuer-service-api/credentials/profiles`,
+        profileRequest
+      );
+      ctx.saveJson('create-untrusted-profile-response.json', response.data, step);
+      return response;
+    }
+  );
+  if (profileCreated) {
+    console.log(`   [OK] Untrusted profile created: ${profileId}`);
+  }
+
+  // 6. Create untrusted verifier (NOT linked to trust registry)
+  ctx.log('Create untrusted verifier (no trust registry)', 'GOV-SETUP');
+  const verifierPath = `${tenantPath}.${untrusted.verifierName}`;
+
+  const { created: verifierCreated } = await ctx.tolerantCreate(
+    `Verifier ${untrusted.verifierName}`,
+    async () => {
+      const verifierRequest = {
+        type: 'verifier2',
+        baseUrl: gov.serviceBaseUrl,
+        clientId: 'untrusted-verifier',
+      };
+      ctx.saveJson('create-untrusted-verifier-request.json', verifierRequest);
+      const response = await ctx.orgClient.post(
+        `/v1/${verifierPath}/resource-api/services/create`,
+        verifierRequest
+      );
+      ctx.saveJson('create-untrusted-verifier-response.json', response.data);
+      return response;
+    }
+  );
+  if (verifierCreated) {
+    console.log(`   [OK] Untrusted verifier created: ${verifierPath} (no trust registry)`);
+  }
+}
 async function createGovVerifier(
   ctx: CommandContext,
   gov: GovServicesConfig
@@ -448,15 +862,24 @@ async function createGovVerifier(
 /** Initialize wallet for central government tenant */
 async function createGovWallet(ctx: CommandContext): Promise<void> {
   const step = ctx.nextStep();
-  ctx.log('Initialize central government wallet', 'GOV-SETUP');
+  ctx.log('Initialize central government wallet with holder DID', 'GOV-SETUP');
 
   const { created } = await ctx.tolerantCreate(
     'Wallet',
     async () => {
       const request = {
+        createKms: true,
+        kmsName: RESOURCES.walletKms,
         createKeyInKms: {
           keyType: 'secp256r1',
         },
+        createDidStore: true,
+        didStoreName: RESOURCES.walletDidStore,
+        createDidService: true,
+        didServiceName: RESOURCES.walletDidService,
+        createDidWithDidService: 'key',
+        createCredentialStore: true,
+        credentialStoreName: RESOURCES.walletCredentialStore,
       };
       ctx.saveJson('init-gov-wallet-request.json', request, step);
 
@@ -469,10 +892,13 @@ async function createGovWallet(ctx: CommandContext): Promise<void> {
     }
   );
 
-  ctx.ctx.walletKeyRef = `${ctx.tenantPath}.${RESOURCES.kms}.wallet_key`;
+  ctx.ctx.walletKeyRef = defaultWalletKeyReference(ctx.tenantPath);
+  ctx.ctx.walletDid = defaultWalletDidReference(ctx.tenantPath);
 
   if (created) {
     console.log(`   [OK] Wallet initialized`);
+  } else {
+    console.log(`   [SKIP] Wallet already exists (DID reference: ${ctx.ctx.tenantPath})`);
   }
 }
 
@@ -487,9 +913,11 @@ async function createGovWallet(ctx: CommandContext): Promise<void> {
  * 5. Signing keys for each department (in central KMS)
  * 6. DIDs for departments with jwt_vc_json credentials (using their signing key)
  * 7. DSCs for departments with mso_mdoc credentials (using their signing key)
- * 8. Issuers for each department
- * 9. Credential profiles for each credential type
- * 10. Central verifier service
+ * 8. Trust registry service (linked to verifier)
+ * 9. Issuers for each department
+ * 10. Credential profiles for each credential type
+ * 11. All trusted issuers loaded into trust registry (DIDs, DSCs, IACA)
+ * 12. Untrusted department with issuer + verifier (for negative test cases)
  */
 export async function runGovServicesSetup(
   ctx: CommandContext,
@@ -500,10 +928,12 @@ export async function runGovServicesSetup(
   console.log(`Tenant path: ${ctx.tenantPath}`);
   console.log(`Service base URL: ${gov.serviceBaseUrl}`);
   console.log(`VCT base URL: ${gov.vctBaseUrl}`);
+  console.log(`Trust source ID: ${gov.trustedSourceId}`);
   console.log(`Departments: ${Object.values(gov.departments).join(', ')}\n`);
 
   const organization = ctx.config.organization;
   const departments = buildDepartmentConfigs(organization, gov);
+  const untrustedDept = buildUntrustedDepartmentConfig(organization, gov);
 
   // Clear any previous mappings
   departmentDids.clear();
@@ -536,9 +966,9 @@ export async function runGovServicesSetup(
     await createDepartmentSigningKey(ctx, dept);
   }
 
-  // 6. Create DIDs for departments that have jwt_vc_json credentials
+  // 6. Create DIDs for departments that need them (jwt_vc_json or any trust entity)
   for (const [deptKey, dept] of Object.entries(departments)) {
-    if (departmentNeedsDid(dept)) {
+    if (departmentNeedsDid(dept) || departmentNeedsTrustEntity(dept)) {
       await createDepartmentDid(ctx, deptKey, dept);
     }
   }
@@ -550,18 +980,28 @@ export async function runGovServicesSetup(
     }
   }
 
-  // 8. Create issuers for each department
+  // 8. Create trust registry and link services
+  await createGovTrustRegistry(ctx);
+  await linkGovVerifierToTrustRegistry(ctx);
+
+  // 9. Create issuers for each department
   for (const dept of Object.values(departments)) {
     await createDepartmentIssuer(ctx, organization, dept, gov);
   }
 
-  // 9. Create credential profiles
+  // 10. Create credential profiles
   for (const [deptKey, dept] of Object.entries(departments)) {
     await createDepartmentProfiles(ctx, organization, deptKey, dept);
   }
 
+  // 11. Load all trusted issuers into trust registry
+  await loadGovIssuersIntoTrustRegistry(ctx, organization, departments, gov);
+
+  // 12. Create untrusted department (issuer + verifier for negative cases)
+  await createUntrustedDepartment(ctx, organization, untrustedDept, gov);
+
   console.log('\n[GOV-SETUP] Government services tenant setup completed');
-  console.log('\nCreated issuers:');
+  console.log('\nTrusted issuers (in trust registry):');
   for (const [deptKey, dept] of Object.entries(departments)) {
     const issuerPath = `${organization}.${dept.tenantId}.${dept.issuerName}`;
     const did = departmentDids.get(deptKey);
@@ -577,4 +1017,10 @@ export async function runGovServicesSetup(
       console.log(`      Profile: ${issuerPath}.${cred.profileSuffix} (${cred.id}, ${cred.format})`);
     }
   }
+  console.log('\nUntrusted department (NOT in trust registry):');
+  console.log(`  - Tenant: ${organization}.${untrustedDept.tenantId}`);
+  console.log(`  - Issuer: ${organization}.${untrustedDept.tenantId}.${untrustedDept.issuerName}`);
+  console.log(`    Profile: ${organization}.${untrustedDept.tenantId}.${untrustedDept.issuerName}.${untrustedDept.credentialProfileSuffix}`);
+  console.log(`  - Verifier (no trust registry): ${organization}.${untrustedDept.tenantId}.${untrustedDept.verifierName}`);
+  console.log(`\nTrust registry source ID: ${gov.trustedSourceId}`);
 }
