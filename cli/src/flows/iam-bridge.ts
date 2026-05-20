@@ -59,8 +59,10 @@ async function setupIamBridge(ctx: CommandContext): Promise<void> {
   // instead of the subdomain-based URL (waltid.enterprise.localhost:3000)
   // because Docker's --network host mode resolves localhost to host, but
   // custom subdomains may not resolve correctly inside the container.
+  // However, when running Keycloak locally (not in Docker), use the subdomain URL.
   const port = ctx.config.port || 3000;
-  const dockerAccessibleUrl = `http://localhost:${port}`;
+  // Use subdomain URL - works when Keycloak runs locally or with --add-host in Docker
+  const issuerUrl = `http://waltid.enterprise.localhost:${port}`;
   
   // Standard cross-device verification setup for CLI testing
   // Uses ISO mDL format - same as the main verification flow
@@ -90,7 +92,7 @@ async function setupIamBridge(ctx: CommandContext): Promise<void> {
     type: 'iam-bridge',
     _id: iamBridgePath,
     // Use Docker-accessible URL for token/userinfo endpoints that Keycloak calls
-    issuerUrl: dockerAccessibleUrl,
+    issuerUrl: issuerUrl,
     enabled: true,
     clients: {
       [KEYCLOAK_CLIENT_ID]: {
@@ -101,10 +103,11 @@ async function setupIamBridge(ctx: CommandContext): Promise<void> {
       },
     },
     defaultClaimMappings: [
-      { oidcClaim: 'sub', credentialPath: '$.credentialSubject.id', transform: 'NONE' },
-      { oidcClaim: 'email', credentialPath: '$.credentialSubject.email', transform: 'LOWERCASE' },
-      { oidcClaim: 'given_name', credentialPath: '$.credentialSubject.given_name', transform: 'NONE' },
-      { oidcClaim: 'family_name', credentialPath: '$.credentialSubject.family_name', transform: 'NONE' },
+      // mDL claim mappings - claims are in org.iso.18013.5.1 namespace
+      { oidcClaim: 'sub', credentialPath: '$["org.iso.18013.5.1"]["document_number"]', transform: 'NONE' },
+      { oidcClaim: 'given_name', credentialPath: '$["org.iso.18013.5.1"]["given_name"]', transform: 'NONE' },
+      { oidcClaim: 'family_name', credentialPath: '$["org.iso.18013.5.1"]["family_name"]', transform: 'NONE' },
+      { oidcClaim: 'birthdate', credentialPath: '$["org.iso.18013.5.1"]["birth_date"]', transform: 'NONE' },
     ],
     // Standard cross-device verification setup for CLI testing
     // (DC API is handled separately in the browser with dc_api=true)
@@ -321,7 +324,16 @@ async function startKeycloak(ctx: CommandContext, realmJson: string): Promise<vo
   writeFileSync(realmPath, realmJson);
   console.log(`   [OK] Realm config saved to ${realmPath}`);
   
-  // Check if Keycloak is already running
+  // Check if Keycloak is already running (either locally or in Docker)
+  try {
+    execSync('curl -sf http://keycloak.localhost:8080/realms/master', { encoding: 'utf-8' });
+    console.log('   [SKIP] Keycloak already running at http://keycloak.localhost:8080');
+    return;
+  } catch (_) {
+    // Keycloak not running, continue to start
+  }
+  
+  // Check if Keycloak Docker container exists
   try {
     const result = execSync('docker ps --filter name=waltid-keycloak-iam-bridge --format "{{.Names}}"', { encoding: 'utf-8' });
     if (result.includes('waltid-keycloak-iam-bridge')) {
