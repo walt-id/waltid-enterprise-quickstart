@@ -314,6 +314,48 @@ function generateKeycloakRealm(ctx: CommandContext, discovery: any): string {
         config: { claim: 'family_name', 'user.attribute': 'lastName', syncMode: 'INHERIT' },
       },
       {
+        name: 'birthdate-mapper',
+        identityProviderAlias: 'waltid-vc',
+        identityProviderMapper: 'oidc-user-attribute-idp-mapper',
+        config: { claim: 'birthdate', 'user.attribute': 'birthdate', syncMode: 'INHERIT' },
+      },
+      {
+        name: 'document-number-mapper',
+        identityProviderAlias: 'waltid-vc',
+        identityProviderMapper: 'oidc-user-attribute-idp-mapper',
+        config: { claim: 'document_number', 'user.attribute': 'document_number', syncMode: 'INHERIT' },
+      },
+      {
+        name: 'issue-date-mapper',
+        identityProviderAlias: 'waltid-vc',
+        identityProviderMapper: 'oidc-user-attribute-idp-mapper',
+        config: { claim: 'issue_date', 'user.attribute': 'issue_date', syncMode: 'INHERIT' },
+      },
+      {
+        name: 'expiry-date-mapper',
+        identityProviderAlias: 'waltid-vc',
+        identityProviderMapper: 'oidc-user-attribute-idp-mapper',
+        config: { claim: 'expiry_date', 'user.attribute': 'expiry_date', syncMode: 'INHERIT' },
+      },
+      {
+        name: 'issuing-country-mapper',
+        identityProviderAlias: 'waltid-vc',
+        identityProviderMapper: 'oidc-user-attribute-idp-mapper',
+        config: { claim: 'issuing_country', 'user.attribute': 'issuing_country', syncMode: 'INHERIT' },
+      },
+      {
+        name: 'issuing-authority-mapper',
+        identityProviderAlias: 'waltid-vc',
+        identityProviderMapper: 'oidc-user-attribute-idp-mapper',
+        config: { claim: 'issuing_authority', 'user.attribute': 'issuing_authority', syncMode: 'INHERIT' },
+      },
+      {
+        name: 'un-distinguishing-sign-mapper',
+        identityProviderAlias: 'waltid-vc',
+        identityProviderMapper: 'oidc-user-attribute-idp-mapper',
+        config: { claim: 'un_distinguishing_sign', 'user.attribute': 'un_distinguishing_sign', syncMode: 'INHERIT' },
+      },
+      {
         name: 'vc-verified-role-mapper',
         identityProviderAlias: 'waltid-vc',
         identityProviderMapper: 'hardcoded-role-idp-mapper',
