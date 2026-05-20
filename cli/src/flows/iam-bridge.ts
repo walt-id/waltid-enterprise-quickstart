@@ -355,12 +355,6 @@ function generateKeycloakRealm(ctx: CommandContext, discovery: any): string {
         identityProviderMapper: 'oidc-user-attribute-idp-mapper',
         config: { claim: 'un_distinguishing_sign', 'user.attribute': 'un_distinguishing_sign', syncMode: 'INHERIT' },
       },
-      {
-        name: 'vc-verified-role-mapper',
-        identityProviderAlias: 'waltid-vc',
-        identityProviderMapper: 'hardcoded-role-idp-mapper',
-        config: { role: 'vc-verified', syncMode: 'INHERIT' },
-      },
     ],
     users: [],
   };
