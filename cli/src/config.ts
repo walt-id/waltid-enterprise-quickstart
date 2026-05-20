@@ -124,6 +124,9 @@ export interface SuperadminCredentials {
  * Build base URL from configuration.
  * Handles both http:// and https:// protocols.
  * Port 0 or undefined means no explicit port (use default for protocol).
+ * For bare hostnames without protocol:
+ *   - localhost domains default to http://
+ *   - all other domains default to https://
  */
 export function buildBaseUrl(baseUrl: string, port: number | undefined): string {
   if (baseUrl.startsWith('http://') || baseUrl.startsWith('https://')) {
@@ -134,14 +137,17 @@ export function buildBaseUrl(baseUrl: string, port: number | undefined): string 
     }
     return new URL(baseUrl).origin;
   }
-  // For bare hostnames, add protocol and optional port
+  // For bare hostnames, determine protocol based on domain
+  const isLocalhost = baseUrl.includes('localhost') || baseUrl.startsWith('127.');
+  const protocol = isLocalhost ? 'http' : 'https';
   const portStr = port && port > 0 ? `:${port}` : '';
-  return `http://${baseUrl}${portStr}`;
+  return `${protocol}://${baseUrl}${portStr}`;
 }
 
 /**
  * Build organization-scoped URL.
  * Inserts organization as subdomain.
+ * Uses same protocol detection as buildBaseUrl.
  */
 export function buildOrgUrl(baseUrl: string, organization: string, port: number | undefined): string {
   if (baseUrl.startsWith('http://') || baseUrl.startsWith('https://')) {
@@ -152,8 +158,11 @@ export function buildOrgUrl(baseUrl: string, organization: string, port: number 
     }
     return url.origin;
   }
+  // For bare hostnames, determine protocol based on domain
+  const isLocalhost = baseUrl.includes('localhost') || baseUrl.startsWith('127.');
+  const protocol = isLocalhost ? 'http' : 'https';
   const portStr = port && port > 0 ? `:${port}` : '';
-  return `http://${organization}.${baseUrl}${portStr}`;
+  return `${protocol}://${organization}.${baseUrl}${portStr}`;
 }
 
 // ============================================================================
