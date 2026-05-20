@@ -118,6 +118,7 @@ These commands manage credential status and revocation.
 |---------|-------------|
 | `--flow-etsi-trust-lists` | Run ETSI trust lists verification flow (see below) |
 | `--flow-credential-revocation` | Run credential revocation flow (see below) |
+| `--flow-iam-bridge` | Run IAM Bridge OIDC flow with Keycloak (see below) |
 
 #### ETSI Trust Lists Flow (`--flow-etsi-trust-lists`)
 
@@ -182,6 +183,53 @@ npx tsx walt.ts --setup-all  # Initial setup (only needed once)
 npx tsx walt.ts --flow-credential-revocation
 ```
 
+#### IAM Bridge Flow (`--flow-iam-bridge`)
+
+Demonstrates the IAM Bridge service which acts as an OIDC Identity Provider backed by Verifiable Credential presentations. This enables IAM systems like Keycloak, Auth0, Okta, or Entra ID to accept VC-based logins.
+
+**Prerequisites:**
+- Base setup completed (`--setup-all`)
+- Keycloak instance (local Docker or remote)
+
+**Flow Steps:**
+1. Create IAM Bridge service with Keycloak client configuration
+2. Generate Keycloak realm with IAM Bridge as identity provider
+3. Start Keycloak (if local) or provide realm for import (if remote)
+4. Issue mDL credential to wallet
+5. Simulate OIDC authorization request
+6. Present credential via IAM Bridge
+7. Exchange authorization code for tokens
+8. Verify user info contains credential claims
+
+**Local Setup (Docker Keycloak):**
+```bash
+npx tsx walt.ts --setup-all
+npx tsx walt.ts --flow-iam-bridge
+```
+
+**Remote Setup (External Keycloak + Enterprise Stack):**
+```bash
+export BASE_URL=enterprise.test.waltid.cloud
+export ORGANIZATION=waltid
+export KEYCLOAK_URL=https://keycloak.demo.walt.id
+export KEYCLOAK_REALM=waltid-vc
+export IAM_BRIDGE_ISSUER_URL=https://iam-bridge.enterprise.test.waltid.cloud
+export ENTERPRISE_UI_URL=https://waltid.enterprise.test.waltid.cloud
+
+npx tsx walt.ts --setup-all
+npx tsx walt.ts --flow-iam-bridge
+```
+
+For remote Keycloak, the flow will:
+1. Generate the realm JSON file in the logs directory
+2. Print instructions for importing the realm
+3. Skip Docker container startup
+
+**Import Realm to Remote Keycloak:**
+1. Open Keycloak Admin Console at `$KEYCLOAK_URL/admin`
+2. Create a new realm using the generated `keycloak-realm.json`
+3. Or import via CLI: `kcadm.sh create realms -f keycloak-realm.json`
+
 ### Other Commands
 
 | Command | Description |
@@ -193,7 +241,7 @@ npx tsx walt.ts --flow-credential-revocation
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `BASE_URL` | `enterprise.localhost` | Enterprise stack base URL |
-| `PORT` | `7500` | Port number (auto-omitted for HTTPS URLs) |
+| `PORT` | `0` | Port number (0 = use protocol default: 80/443) |
 | `ORGANIZATION` | `waltid` | Organization ID |
 | `TENANT` | `<organization>-tenant01` | Tenant ID |
 | `EMAIL` | (from conf) | Superadmin email |
@@ -201,6 +249,10 @@ npx tsx walt.ts --flow-credential-revocation
 | `ADMIN_EMAIL` | `admin@walt.id` | Admin user email (used for regular operations) |
 | `ADMIN_PASSWORD` | `admin123456` | Admin user password |
 | `SUPERADMIN_TOKEN` | (from conf) | Superadmin registration token |
+| `KEYCLOAK_URL` | `http://keycloak.localhost:8080` | Keycloak base URL |
+| `KEYCLOAK_REALM` | `waltid-vc` | Keycloak realm name |
+| `ENTERPRISE_UI_URL` | `https://waltid.enterprise.localhost` | Enterprise UI URL (for web wallet) |
+| `IAM_BRIDGE_ISSUER_URL` | (from BASE_URL) | IAM Bridge issuer URL for OIDC discovery |
 
 Superadmin credentials are read from `config/superadmin-registration.conf` by default.
 
@@ -287,12 +339,35 @@ ADMIN_EMAIL=my-admin@example.com ADMIN_PASSWORD=secret123 npx tsx walt.ts --recr
 ```
 
 ### Remote Deployment (HTTPS)
+
+**Basic remote setup:**
 ```bash
-export BASE_URL=https://enterprise.test.waltid.cloud
+export BASE_URL=enterprise.test.waltid.cloud
 export ORGANIZATION=waltid-cli
-# Note: PORT is auto-omitted for HTTPS URLs
+# Note: PORT=0 (default) uses HTTPS port 443
 
 npx tsx walt.ts --setup-all
+```
+
+**Remote IAM Bridge with external Keycloak:**
+```bash
+# Enterprise stack URL (no port needed for HTTPS)
+export BASE_URL=enterprise.test.waltid.cloud
+export ORGANIZATION=waltid
+
+# Remote Keycloak
+export KEYCLOAK_URL=https://keycloak.demo.walt.id
+export KEYCLOAK_REALM=waltid-vc
+
+# IAM Bridge URLs
+export IAM_BRIDGE_ISSUER_URL=https://iam-bridge.enterprise.test.waltid.cloud
+export ENTERPRISE_UI_URL=https://waltid.enterprise.test.waltid.cloud
+
+# Run setup and IAM Bridge flow
+npx tsx walt.ts --setup-all
+npx tsx walt.ts --flow-iam-bridge
+
+# The flow will generate keycloak-realm.json - import it to your Keycloak
 ```
 
 ### Import Trust List

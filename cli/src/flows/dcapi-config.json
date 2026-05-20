@@ -117,6 +117,6 @@
     ]
   },
   "expectedOrigins": [
-    "http://waltid.enterprise.localhost"
+    "https://iam-bridge.enterprise.test.waltid.cloud"
   ]
 }

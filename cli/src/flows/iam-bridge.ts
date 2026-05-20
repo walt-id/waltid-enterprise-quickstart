@@ -53,16 +53,20 @@ async function setupIamBridge(ctx: CommandContext): Promise<void> {
     if (e.status !== 404) throw e;
   }
   
-  const keycloakRedirectUri = `http://keycloak.localhost:8080/realms/waltid-vc/broker/waltid-vc/endpoint`;
+  // Build Keycloak redirect URI from config
+  const keycloakRealm = ctx.config.keycloakRealm || 'waltid-vc';
+  const keycloakRedirectUri = `${ctx.config.keycloakUrl}/realms/${keycloakRealm}/broker/waltid-vc/endpoint`;
   
-  // For Docker to reach the Enterprise API, we need to use localhost:PORT
-  // instead of the subdomain-based URL (waltid.enterprise.localhost:3000)
-  // because Docker's --network host mode resolves localhost to host, but
-  // custom subdomains may not resolve correctly inside the container.
-  // However, when running Keycloak locally (not in Docker), use the subdomain URL.
-  const port = ctx.config.port || 3000;
-  // Use subdomain URL - works when Keycloak runs locally or with --add-host in Docker
-  const issuerUrl = `http://waltid.enterprise.localhost:${port}`;
+  // Use configured issuer URL or build from org URL
+  const issuerUrl = ctx.config.iamBridgeIssuerUrl || ctx.orgBaseUrl;
+  
+  // Enterprise UI URL for web wallet button
+  const webWalletBaseUrl = ctx.config.enterpriseUiUrl || 'https://waltid.enterprise.localhost';
+  
+  console.log(`   [INFO] Keycloak URL: ${ctx.config.keycloakUrl}`);
+  console.log(`   [INFO] Keycloak Realm: ${keycloakRealm}`);
+  console.log(`   [INFO] IAM Bridge Issuer URL: ${issuerUrl}`);
+  console.log(`   [INFO] Enterprise UI URL: ${webWalletBaseUrl}`);
   
   // Standard cross-device verification setup for CLI testing
   // Uses ISO mDL format - same as the main verification flow
@@ -129,6 +133,12 @@ async function setupIamBridge(ctx: CommandContext): Promise<void> {
       accessTokenExpirySeconds: 3600,
     },
     presentationTimeoutSeconds: 300,
+    // UI customization including web wallet URL
+    uiConfig: {
+      brandName: 'walt.id Enterprise',
+      primaryColor: '#3B82F6',
+      webWalletBaseUrl: webWalletBaseUrl,
+    },
     dependencies: [
       `${ctx.tenantPath}.${RESOURCES.kms}`,
       `${ctx.tenantPath}.${RESOURCES.verifier2}`,
@@ -219,21 +229,37 @@ async function getIamBridgeDiscovery(ctx: CommandContext): Promise<any> {
 
 /** Generate Keycloak realm configuration */
 function generateKeycloakRealm(ctx: CommandContext, discovery: any): string {
-  // Replace subdomain-based URLs with localhost URLs for Docker accessibility
-  // The browser uses waltid.enterprise.localhost but Docker needs localhost:PORT
-  const port = ctx.config.port || 3000;
-  // Match subdomain URLs with or without port (e.g., waltid.enterprise.localhost:3000 or waltid.enterprise.localhost)
-  const subdomainPattern = new RegExp(`https?://[^/]+\\.localhost(:\\d+)?`, 'g');
-  const dockerBaseUrl = `http://localhost:${port}`;
+  const keycloakRealm = ctx.config.keycloakRealm || 'waltid-vc';
   
-  // Convert discovery URLs to Docker-accessible URLs
-  const tokenUrl = discovery.token_endpoint.replace(subdomainPattern, dockerBaseUrl);
-  const authorizationUrl = discovery.authorization_endpoint; // Keep as-is for browser redirect
-  const jwksUrl = discovery.jwks_uri.replace(subdomainPattern, dockerBaseUrl);
-  const issuer = discovery.issuer.replace(subdomainPattern, dockerBaseUrl);
+  // For remote setups, use discovery URLs as-is
+  // For local setups with Docker, we may need to adjust URLs
+  const isRemote = ctx.config.keycloakUrl.includes('https://') && 
+                   !ctx.config.keycloakUrl.includes('localhost');
+  
+  let tokenUrl = discovery.token_endpoint;
+  let jwksUrl = discovery.jwks_uri;
+  let issuer = discovery.issuer;
+  const authorizationUrl = discovery.authorization_endpoint; // Always keep as-is for browser redirect
+  
+  // For local Docker setups, convert subdomain URLs to localhost URLs
+  if (!isRemote && ctx.config.port) {
+    const port = ctx.config.port;
+    const subdomainPattern = new RegExp(`https?://[^/]+\\.localhost(:\\d+)?`, 'g');
+    const dockerBaseUrl = `http://localhost:${port}`;
+    
+    tokenUrl = tokenUrl.replace(subdomainPattern, dockerBaseUrl);
+    jwksUrl = jwksUrl.replace(subdomainPattern, dockerBaseUrl);
+    issuer = issuer.replace(subdomainPattern, dockerBaseUrl);
+  }
+  
+  console.log(`   [INFO] Generating Keycloak realm: ${keycloakRealm}`);
+  console.log(`   [INFO] Token URL: ${tokenUrl}`);
+  console.log(`   [INFO] JWKS URL: ${jwksUrl}`);
+  console.log(`   [INFO] Issuer: ${issuer}`);
+  console.log(`   [INFO] Authorization URL: ${authorizationUrl}`);
   
   const realm = {
-    realm: 'waltid-vc',
+    realm: keycloakRealm,
     enabled: true,
     displayName: 'walt.id Enterprise (VC Login)',
     displayNameHtml: '<strong>walt.id</strong> Enterprise - VC Login',
@@ -367,6 +393,23 @@ async function startKeycloak(ctx: CommandContext, realmJson: string): Promise<vo
   const step = ctx.nextStep();
   ctx.log('Start Keycloak with IAM Bridge realm', 'SETUP');
   
+  const keycloakUrl = ctx.config.keycloakUrl;
+  const keycloakRealm = ctx.config.keycloakRealm || 'waltid-vc';
+  const isRemote = keycloakUrl.includes('https://') && !keycloakUrl.includes('localhost');
+  
+  // For remote Keycloak, just save the realm and provide instructions
+  if (isRemote) {
+    const realmPath = `${ctx.workdir}/keycloak-realm.json`;
+    writeFileSync(realmPath, realmJson);
+    console.log(`   [INFO] Remote Keycloak detected: ${keycloakUrl}`);
+    console.log(`   [OK] Realm config saved to ${realmPath}`);
+    console.log(`   [INFO] Import this realm into your Keycloak instance:`);
+    console.log(`          1. Open Keycloak Admin Console: ${keycloakUrl}/admin`);
+    console.log(`          2. Create a new realm or import the realm JSON`);
+    console.log(`          3. Realm file: ${realmPath}`);
+    return;
+  }
+  
   // Save realm file
   const realmPath = `${ctx.workdir}/keycloak-realm.json`;
   writeFileSync(realmPath, realmJson);
@@ -374,8 +417,8 @@ async function startKeycloak(ctx: CommandContext, realmJson: string): Promise<vo
   
   // Check if Keycloak is already running (either locally or in Docker)
   try {
-    execSync('curl -sf http://keycloak.localhost:8080/realms/master', { encoding: 'utf-8' });
-    console.log('   [SKIP] Keycloak already running at http://keycloak.localhost:8080');
+    execSync(`curl -sf ${keycloakUrl}/realms/master`, { encoding: 'utf-8' });
+    console.log(`   [SKIP] Keycloak already running at ${keycloakUrl}`);
     return;
   } catch (_) {
     // Keycloak not running, continue to start
@@ -429,9 +472,9 @@ async function startKeycloak(ctx: CommandContext, realmJson: string): Promise<vo
     throw new Error('Keycloak failed to start within 2 minutes');
   }
   
-  console.log('   [OK] Keycloak started at http://keycloak.localhost:8080');
-  console.log('        Admin console: http://keycloak.localhost:8080/admin (admin/admin)');
-  console.log('        Login page: http://keycloak.localhost:8080/realms/waltid-vc/account');
+  console.log(`   [OK] Keycloak started at ${keycloakUrl}`);
+  console.log(`        Admin console: ${keycloakUrl}/admin (admin/admin)`);
+  console.log(`        Login page: ${keycloakUrl}/realms/${keycloakRealm}/account`);
 }
 
 /** Simulate OIDC authorization request */
@@ -440,7 +483,8 @@ async function simulateOidcAuthorize(ctx: CommandContext): Promise<{ bridgeSessi
   ctx.log('Simulate OIDC authorization request', 'FLOW');
   
   const iamBridgePath = `${ctx.tenantPath}.${IAM_BRIDGE_SERVICE}`;
-  const redirectUri = 'http://keycloak.localhost:8080/realms/waltid-vc/broker/waltid-vc/endpoint';
+  const keycloakRealm = ctx.config.keycloakRealm || 'waltid-vc';
+  const redirectUri = `${ctx.config.keycloakUrl}/realms/${keycloakRealm}/broker/waltid-vc/endpoint`;
   const state = `test-state-${Date.now()}`;
   const nonce = `test-nonce-${Date.now()}`;
   
@@ -547,10 +591,11 @@ async function exchangeToken(ctx: CommandContext, redirectUrl: string): Promise<
     throw new Error('No authorization code in redirect URL');
   }
   
+  const keycloakRealm = ctx.config.keycloakRealm || 'waltid-vc';
   const tokenParams = new URLSearchParams({
     grant_type: 'authorization_code',
     code,
-    redirect_uri: 'http://keycloak.localhost:8080/realms/waltid-vc/broker/waltid-vc/endpoint',
+    redirect_uri: `${ctx.config.keycloakUrl}/realms/${keycloakRealm}/broker/waltid-vc/endpoint`,
     client_id: KEYCLOAK_CLIENT_ID,
     client_secret: KEYCLOAK_CLIENT_SECRET,
   });
@@ -671,9 +716,9 @@ export async function flowIamBridge(ctx: CommandContext): Promise<void> {
     console.log('2. Triggered VC presentation request');
     console.log('3. Verified the presented credential');
     console.log('4. Issued OIDC tokens with claims from the credential');
-    console.log('\nKeycloak is running at: http://keycloak.localhost:8080');
-    console.log('Login page: http://keycloak.localhost:8080/realms/waltid-vc/account');
-    console.log('Admin console: http://keycloak.localhost:8080/admin (admin/admin)');
+    console.log(`\nKeycloak URL: ${ctx.config.keycloakUrl}`);
+    console.log(`Login page: ${ctx.config.keycloakUrl}/realms/${ctx.config.keycloakRealm || 'waltid-vc'}/account`);
+    console.log(`Admin console: ${ctx.config.keycloakUrl}/admin`);
   } finally {
     ctx.saveHttpLog();
     console.log(`\nLogs saved to: ${ctx.workdir}`);

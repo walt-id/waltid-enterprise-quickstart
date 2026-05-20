@@ -73,6 +73,11 @@ export interface Config {
   superadminToken: string;
   adminEmail: string;
   adminPassword: string;
+  // IAM Bridge specific config
+  keycloakUrl: string;        // Keycloak base URL (e.g., https://keycloak.demo.walt.id)
+  keycloakRealm: string;      // Keycloak realm name (default: waltid-vc)
+  enterpriseUiUrl: string;    // Enterprise UI URL for web wallet (e.g., https://enterprise.example.com)
+  iamBridgeIssuerUrl: string; // IAM Bridge issuer URL (used in OIDC discovery)
 }
 
 /** Runtime context maintained during CLI execution */
@@ -197,18 +202,31 @@ export function readSuperadminConfig(configDir: string): SuperadminCredentials {
 export function createConfig(projectRoot: string): Config {
   const superadminCreds = readSuperadminConfig(projectRoot);
   
+  const baseUrl = process.env.BASE_URL || 'enterprise.localhost';
+  const port = process.env.PORT !== undefined && process.env.PORT !== '' 
+    ? parseInt(process.env.PORT) 
+    : 0;  // Default to no port (uses protocol default: 80 for HTTP, 443 for HTTPS)
+  
+  // Build default IAM Bridge issuer URL from base URL
+  const defaultIssuerUrl = port && port > 0 
+    ? `http://${baseUrl}:${port}`
+    : `https://${baseUrl}`;
+  
   return {
-    baseUrl: process.env.BASE_URL || 'enterprise.localhost',
+    baseUrl,
     organization: process.env.ORGANIZATION || 'waltid',
     tenant: process.env.TENANT || `${process.env.ORGANIZATION || 'waltid'}-tenant01`,
     email: process.env.EMAIL || superadminCreds.email || '',
     password: process.env.PASSWORD || superadminCreds.password || '',
-    port: process.env.PORT !== undefined && process.env.PORT !== '' 
-      ? parseInt(process.env.PORT) 
-      : 0,  // Default to no port (uses protocol default: 80 for HTTP, 443 for HTTPS)
+    port,
     superadminToken: process.env.SUPERADMIN_TOKEN || superadminCreds.token || '',
     adminEmail: process.env.ADMIN_EMAIL || 'admin@walt.id',
     adminPassword: process.env.ADMIN_PASSWORD || 'admin123456',
+    // IAM Bridge specific config
+    keycloakUrl: process.env.KEYCLOAK_URL || 'http://keycloak.localhost:8080',
+    keycloakRealm: process.env.KEYCLOAK_REALM || 'waltid-vc',
+    enterpriseUiUrl: process.env.ENTERPRISE_UI_URL || 'https://waltid.enterprise.localhost',
+    iamBridgeIssuerUrl: process.env.IAM_BRIDGE_ISSUER_URL || defaultIssuerUrl,
   };
 }
 
