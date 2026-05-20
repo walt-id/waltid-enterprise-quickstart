@@ -49,6 +49,12 @@ export const KEY_IDS = {
   attesterSigningKey: 'attester-signing-key',
 } as const;
 
+/** Default IDs created by wallet-service init-wallet */
+export const WALLET_DEFAULT_IDS = {
+  key: 'wallet_key',
+  did: 'wallet_did',
+} as const;
+
 /** Status configuration IDs */
 export const STATUS_CONFIG_IDS = {
   tokenStatusListCwt: 'token-status-list-cwt',
@@ -251,6 +257,16 @@ export function createConfig(projectRoot: string): Config {
 /** Default host-alias API target for an organization */
 export function defaultHostAliasTarget(organization: string): string {
   return `${organization}.host-alias`;
+}
+
+/** Default wallet key reference created by init-wallet */
+export function defaultWalletKeyReference(tenantPath: string): string {
+  return `${tenantPath}.${RESOURCES.walletKms}.${WALLET_DEFAULT_IDS.key}`;
+}
+
+/** Default wallet DID reference created by init-wallet */
+export function defaultWalletDidReference(tenantPath: string): string {
+  return `${tenantPath}.${RESOURCES.walletDidStore}.${WALLET_DEFAULT_IDS.did}`;
 }
 
 /**

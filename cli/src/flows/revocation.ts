@@ -13,7 +13,7 @@
 
 import { mkdirSync } from 'fs';
 import { CommandContext } from '../context.js';
-import { RESOURCES } from '../config.js';
+import { RESOURCES, defaultWalletKeyReference } from '../config.js';
 import { setupLogin } from '../commands/setup/index.js';
 import {
   runCreateCredentialOffer,
@@ -55,7 +55,7 @@ export async function flowCredentialRevocation(ctx: CommandContext): Promise<voi
     
     // Set wallet key reference if not already set
     if (!ctx.ctx.walletKeyRef) {
-      ctx.ctx.walletKeyRef = `${ctx.tenantPath}.${RESOURCES.kms}.wallet_key`;
+      ctx.ctx.walletKeyRef = defaultWalletKeyReference(ctx.tenantPath);
     }
     
     console.log('\n--- Step 1: Clear existing credentials ---\n');

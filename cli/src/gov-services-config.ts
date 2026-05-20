@@ -19,13 +19,26 @@ export interface GovServicesConfig {
   vctBaseUrl: string;
   /** Main tenant ID (central government) */
   tenant: string;
+  /** Source ID for the trust registry source containing all trusted issuers */
+  trustedSourceId: string;
   /** Department tenant IDs */
   departments: {
     hr: string;
     identity: string;
     revenue: string;
     finance: string;
+    /** Untrusted department (issuer NOT in trust registry + verifier NOT linked to trust registry) */
+    untrusted: string;
   };
+}
+
+/** Untrusted department config (for negative trust list demo cases) */
+export interface UntrustedDepartmentConfig {
+  tenantId: string;
+  issuerName: string;
+  verifierName: string;
+  signingKeyId: string;
+  credentialProfileSuffix: string;
 }
 
 /** ISO 23220 Photo ID doctype */
@@ -120,6 +133,11 @@ export function departmentNeedsDid(dept: DepartmentConfig): boolean {
 /** Check if a department has any mso_mdoc credentials (needs DSC) */
 export function departmentNeedsDsc(dept: DepartmentConfig): boolean {
   return dept.credentials.some(cred => cred.format === 'mso_mdoc');
+}
+
+/** Check if a department has any credentials (needs trust registry identity) */
+export function departmentNeedsTrustEntity(dept: DepartmentConfig): boolean {
+  return dept.credentials.length > 0;
 }
 
 export interface CredentialConfig {
@@ -305,6 +323,23 @@ export function buildDepartmentConfigs(
   };
 }
 
+/** Build untrusted department config for negative trust list demo cases */
+export function buildUntrustedDepartmentConfig(
+  organization: string,
+  gov: GovServicesConfig
+): UntrustedDepartmentConfig {
+  const mainTenantPath = `${organization}.${gov.tenant}`;
+  const kmsRef = `${mainTenantPath}.kms`;
+
+  return {
+    tenantId: gov.departments.untrusted,
+    issuerName: 'untrusted-issuer',
+    verifierName: 'untrusted-verifier',
+    signingKeyId: `${kmsRef}.untrusted-signing-key`,
+    credentialProfileSuffix: 'photo-id',
+  };
+}
+
 /** Load gov-services.env from the CLI directory */
 export function loadGovServicesEnv(cliDir: string): void {
   loadEnvFile(join(cliDir, 'gov-services.env'), { override: true });
@@ -331,11 +366,13 @@ export function createGovServicesConfig(): GovServicesConfig {
     serviceBaseUrl: serviceBaseUrl.replace(/\/$/, ''),
     vctBaseUrl: vctBaseUrl.replace(/\/$/, ''),
     tenant: process.env.GOV_TENANT || process.env.TENANT || 'gov-central',
+    trustedSourceId: 'gov-issuers-local',
     departments: {
       hr: process.env.GOV_DEPT_HR || 'dept-hr',
       identity: process.env.GOV_DEPT_IDENTITY || 'dept-identity',
       revenue: process.env.GOV_DEPT_REVENUE || 'dept-revenue',
       finance: process.env.GOV_DEPT_FINANCE || 'dept-finance',
+      untrusted: process.env.GOV_UNTRUSTED_TENANT || 'untrusted-dept',
     },
   };
 }

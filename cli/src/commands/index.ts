@@ -9,7 +9,7 @@
 
 import { mkdirSync } from 'fs';
 import { CommandContext } from '../context.js';
-import { RESOURCES } from '../config.js';
+import { defaultWalletKeyReference } from '../config.js';
 
 // Re-export all commands
 export * from './system.js';
@@ -95,7 +95,7 @@ export async function runAllRun(ctx: CommandContext): Promise<void> {
   
   // Set wallet key reference if not already set
   if (!ctx.ctx.walletKeyRef) {
-    ctx.ctx.walletKeyRef = `${ctx.tenantPath}.${RESOURCES.kms}.wallet_key`;
+    ctx.ctx.walletKeyRef = defaultWalletKeyReference(ctx.tenantPath);
   }
   
   await runCreateCredentialOffer(ctx);

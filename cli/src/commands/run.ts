@@ -11,7 +11,7 @@
  */
 
 import { CommandContext } from '../context.js';
-import { RESOURCES, STATUS_CONFIG_IDS, MDL_DOC_TYPE } from '../config.js';
+import { RESOURCES, STATUS_CONFIG_IDS, MDL_DOC_TYPE, defaultWalletDidReference } from '../config.js';
 
 // ============================================================================
 // Credential Issuance
@@ -188,6 +188,7 @@ export async function runWalletPresent(ctx: CommandContext): Promise<void> {
   const request = {
     requestUrl: ctx.ctx.requestUrl,
     keyReference: ctx.ctx.walletKeyRef,
+    didReference: ctx.ctx.walletDid || defaultWalletDidReference(ctx.tenantPath),
   };
   ctx.saveJson('wallet-present-request.json', request, step);
 
@@ -201,14 +202,18 @@ export async function runWalletPresent(ctx: CommandContext): Promise<void> {
 }
 
 /** Assert final verification status is SUCCESSFUL */
-export async function runAssertFinalStatus(ctx: CommandContext): Promise<void> {
+export async function runAssertFinalStatus(
+  ctx: CommandContext,
+  verifierPath = `${ctx.tenantPath}.${RESOURCES.verifier2}`,
+  fileName = 'final-session-info.json'
+): Promise<void> {
   const step = ctx.nextStep();
   ctx.log('Check verifier2 final session status', 'RUN');
 
   const response = await ctx.orgClient.get(
-    `/v1/${ctx.tenantPath}.${RESOURCES.verifier2}.${ctx.ctx.sessionId}/verifier2-service-api/verification-session/info`
+    `/v1/${verifierPath}.${ctx.ctx.sessionId}/verifier2-service-api/verification-session/info`
   );
-  ctx.saveJson('final-session-info.json', response.data, step);
+  ctx.saveJson(fileName, response.data, step);
 
   const finalStatus = response.data.session?.status;
 
@@ -220,14 +225,18 @@ export async function runAssertFinalStatus(ctx: CommandContext): Promise<void> {
 }
 
 /** Assert final verification status is FAILED */
-export async function runAssertFinalStatusFailed(ctx: CommandContext): Promise<void> {
+export async function runAssertFinalStatusFailed(
+  ctx: CommandContext,
+  verifierPath = `${ctx.tenantPath}.${RESOURCES.verifier2}`,
+  fileName = 'final-session-info-failed.json'
+): Promise<void> {
   const step = ctx.nextStep();
   ctx.log('Check verifier2 final session status (expecting FAILED)', 'RUN');
 
   const response = await ctx.orgClient.get(
-    `/v1/${ctx.tenantPath}.${RESOURCES.verifier2}.${ctx.ctx.sessionId}/verifier2-service-api/verification-session/info`
+    `/v1/${verifierPath}.${ctx.ctx.sessionId}/verifier2-service-api/verification-session/info`
   );
-  ctx.saveJson('final-session-info-failed.json', response.data, step);
+  ctx.saveJson(fileName, response.data, step);
 
   const finalStatus = response.data.session?.status;
 
@@ -235,7 +244,7 @@ export async function runAssertFinalStatusFailed(ctx: CommandContext): Promise<v
     throw new Error(`Expected FAILED but got: ${finalStatus || '<empty>'}`);
   }
 
-  console.log(`   [OK] Final status: ${finalStatus} (as expected for revoked credential)`);
+  console.log(`   [OK] Final status: ${finalStatus} (as expected)`);
 }
 
 // ============================================================================
@@ -318,20 +327,30 @@ export async function runUpdateCredentialStatus(ctx: CommandContext, status: str
 // Wallet Management
 // ============================================================================
 
-/** Clear all credentials from wallet */
+/** Clear all credentials from wallet (tries wallet-credentialstore then legacy credentialstore) */
 export async function clearWalletCredentials(ctx: CommandContext): Promise<void> {
   const step = ctx.nextStep();
   ctx.log('Clear all credentials from wallet', 'SETUP');
 
-  try {
-    const deleteResponse = await ctx.orgClient.delete(
-      `/v1/${ctx.tenantPath}.${RESOURCES.credentialStore}/credential-store-service-api/credentials/delete-all`
-    );
-    
-    const credentialsDeleted = deleteResponse.data.deleted;
+  const stores = [RESOURCES.walletCredentialStore, RESOURCES.credentialStore];
+  let cleared = false;
 
-    console.log(`   [OK] Wallet credentials cleared (deleted: ${credentialsDeleted})`);
-  } catch (error: any) {
-    console.log(`   [WARN] Could not clear wallet credentials: ${error.message}`);
+  for (const store of stores) {
+    try {
+      const deleteResponse = await ctx.orgClient.delete(
+        `/v1/${ctx.tenantPath}.${store}/credential-store-service-api/credentials/delete-all`
+      );
+      const credentialsDeleted = deleteResponse.data.deleted;
+      console.log(`   [OK] Wallet credentials cleared from ${store} (deleted: ${credentialsDeleted})`);
+      cleared = true;
+    } catch (error: any) {
+      if (error.status !== 404) {
+        console.log(`   [WARN] Could not clear ${store}: ${error.message}`);
+      }
+    }
+  }
+
+  if (!cleared) {
+    console.log(`   [WARN] No wallet credential store found to clear on ${ctx.tenantPath}`);
   }
 }
