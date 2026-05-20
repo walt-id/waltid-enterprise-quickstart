@@ -205,9 +205,10 @@ async function getIamBridgeDiscovery(ctx: CommandContext): Promise<any> {
 /** Generate Keycloak realm configuration */
 function generateKeycloakRealm(ctx: CommandContext, discovery: any): string {
   // Replace subdomain-based URLs with localhost URLs for Docker accessibility
-  // The browser uses waltid.enterprise.localhost:PORT but Docker needs localhost:PORT
+  // The browser uses waltid.enterprise.localhost but Docker needs localhost:PORT
   const port = ctx.config.port || 3000;
-  const subdomainPattern = new RegExp(`https?://[^/]+\\.localhost:${port}`, 'g');
+  // Match subdomain URLs with or without port (e.g., waltid.enterprise.localhost:3000 or waltid.enterprise.localhost)
+  const subdomainPattern = new RegExp(`https?://[^/]+\\.localhost(:\\d+)?`, 'g');
   const dockerBaseUrl = `http://localhost:${port}`;
   
   // Convert discovery URLs to Docker-accessible URLs
