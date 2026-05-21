@@ -28,6 +28,19 @@ import {
   clearWalletCredentials,
 } from '../commands/run.js';
 
+/** Extract stored wallet credential IDs from a receive response. */
+function extractStoredCredentialIds(receiveResponse: unknown): string[] {
+  if (!Array.isArray(receiveResponse)) {
+    return [];
+  }
+
+  return receiveResponse.flatMap((result: any) =>
+    Array.isArray(result?.stored)
+      ? result.stored.map((stored: any) => stored?._id).filter((id: unknown): id is string => typeof id === 'string')
+      : []
+  );
+}
+
 /** Create credential offer from a specific issuer profile */
 async function createOfferFromProfile(
   ctx: CommandContext,
@@ -54,7 +67,7 @@ async function createOfferFromProfile(
 async function walletReceiveWithTrust(
   ctx: CommandContext,
   offerUrl: string
-): Promise<boolean> {
+): Promise<string[]> {
   const step = ctx.nextStep();
 
   const request = {
@@ -74,11 +87,13 @@ async function walletReceiveWithTrust(
     ctx.saveJson('wallet-receive-trust-response.json', response.data, step);
 
     const receivedCount = Array.isArray(response.data) ? response.data.length : 0;
+    const credentialIds = extractStoredCredentialIds(response.data);
     console.log(`   [OK] Credential received (count: ${receivedCount})`);
-    return true;
+    console.log(`        Credential IDs: ${credentialIds.join(', ')}`);
+    return credentialIds;
   } catch (error: any) {
     console.log(`   [EXPECTED] Wallet rejected credential: ${error.message}`);
-    return false;
+    return [];
   }
 }
 
@@ -86,7 +101,7 @@ async function walletReceiveWithTrust(
 async function walletReceiveBypassTrust(
   ctx: CommandContext,
   offerUrl: string
-): Promise<void> {
+): Promise<string[]> {
   const step = ctx.nextStep();
 
   const request = {
@@ -105,7 +120,10 @@ async function walletReceiveBypassTrust(
   ctx.saveJson('wallet-receive-no-trust-response.json', response.data, step);
 
   const receivedCount = Array.isArray(response.data) ? response.data.length : 0;
+  const credentialIds = extractStoredCredentialIds(response.data);
   console.log(`   [OK] Credential received (count: ${receivedCount})`);
+  console.log(`        Credential IDs: ${credentialIds.join(', ')}`);
+  return credentialIds;
 }
 
 /** Create verification session with ETSI trust list policy (trusted verifier) */
@@ -268,8 +286,8 @@ export async function flowGovTrust(ctx: CommandContext): Promise<void> {
     console.log('\n--- Step 2: Issue Photo ID from TRUSTED issuer (Identity) ---');
     const trustedOffer = await createOfferFromProfile(ctx, trustedProfilePath);
     console.log(`   [OK] Trusted credential offer created`);
-    const trustedReceived = await walletReceiveWithTrust(ctx, trustedOffer);
-    if (!trustedReceived) {
+    const trustedCredentialIds = await walletReceiveWithTrust(ctx, trustedOffer);
+    if (trustedCredentialIds.length === 0) {
       throw new Error('Expected trusted credential to be received by wallet');
     }
     console.log('   [PASS] Trusted credential received by wallet');
@@ -277,7 +295,7 @@ export async function flowGovTrust(ctx: CommandContext): Promise<void> {
     // --- Step 3: Verify trusted credential with trusted verifier + etsi-trust-list ---
     console.log('\n--- Step 3: Verify trusted credential with TRUSTED verifier (etsi-trust-list policy) ---');
     await createTrustedVerifierSession(ctx);
-    await runWalletPresent(ctx);
+    await runWalletPresent(ctx, trustedCredentialIds);
     await runAssertFinalStatus(ctx);
     console.log('   [PASS] Trusted credential verified successfully with ETSI trust list');
 
@@ -289,13 +307,16 @@ export async function flowGovTrust(ctx: CommandContext): Promise<void> {
     console.log('\n--- Step 4: Issue Photo ID from UNTRUSTED issuer (stored for verifier negative case) ---');
     const untrustedOffer2 = await createOfferFromProfile(ctx, untrustedProfilePath);
     console.log(`   [OK] Untrusted credential offer created`);
-    await walletReceiveBypassTrust(ctx, untrustedOffer2);
+    const untrustedCredentialIds = await walletReceiveBypassTrust(ctx, untrustedOffer2);
+    if (untrustedCredentialIds.length === 0) {
+      throw new Error('Expected untrusted credential to be stored by wallet');
+    }
     console.log('   [OK] Untrusted credential stored');
 
     // --- Step 5: Verify untrusted credential with trusted verifier (should fail) ---
     console.log('\n--- Step 5: Verify untrusted credential with trusted verifier (should FAIL) ---');
     await createTrustedVerifierSession(ctx);
-    await runWalletPresent(ctx);
+    await runWalletPresent(ctx, untrustedCredentialIds);
     let untrustedVerificationFailed = false;
     try {
       await runAssertFinalStatus(ctx);
@@ -312,7 +333,7 @@ export async function flowGovTrust(ctx: CommandContext): Promise<void> {
     // --- Step 6: Verify untrusted credential with UNTRUSTED verifier (signature only) ---
     console.log('\n--- Step 6: Verify with UNTRUSTED verifier (signature only, no trust registry) ---');
     await createUntrustedVerifierSession(ctx, untrustedTenantId, 'untrusted-verifier', organization);
-    await runWalletPresent(ctx);
+    await runWalletPresent(ctx, untrustedCredentialIds);
     await runAssertFinalStatus(ctx, untrustedVerifierPath, 'untrusted-final-session-info.json');
     console.log('   [PASS] Credential verified with signature-only policy (no trust list check)');
 

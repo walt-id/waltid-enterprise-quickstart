@@ -143,6 +143,7 @@ export async function setupBankCreateVerifier(
         type: 'verifier2',
         baseUrl: bank.serviceBaseUrl,
         clientId: 'verifier2-client',
+        clientMetadata: bank.openId.verifierClientMetadata,
       };
       ctx.saveJson('create-bank-verifier2-request.json', request, step);
 

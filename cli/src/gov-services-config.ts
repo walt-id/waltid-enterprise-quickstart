@@ -32,6 +32,27 @@ export interface GovServicesConfig {
   };
 }
 
+export interface IssuerDisplayConfiguration {
+  name: string;
+  locale: string;
+  logo?: {
+    uri: string;
+    alt_text: string;
+  };
+}
+
+export interface VerifierClientMetadata {
+  client_name: string;
+  logo_uri?: string;
+}
+
+interface IssuerDisplayDefaults {
+  envPrefixes: string[];
+  defaultName: string;
+  defaultLogoAltText: string;
+  defaultLogoPath: string;
+}
+
 /** Untrusted department config (for negative trust list demo cases) */
 export interface UntrustedDepartmentConfig {
   tenantId: string;
@@ -79,6 +100,69 @@ const JWT_VC_PROOF_TYPES = {
   },
 };
 
+function firstEnv(names: string[], fallback: string): string {
+  for (const name of names) {
+    const value = process.env[name];
+    if (value) {
+      return value;
+    }
+  }
+  return fallback;
+}
+
+function optionalFirstEnv(names: string[]): string | undefined {
+  for (const name of names) {
+    const value = process.env[name];
+    if (value) {
+      return value;
+    }
+  }
+  return undefined;
+}
+
+function displayEnvNames(prefixes: string[], suffix: string): string[] {
+  return prefixes.map(prefix => `${prefix}_${suffix}`);
+}
+
+export function buildIssuerDisplayConfiguration(
+  envPrefixes: string[],
+  defaultName: string,
+  defaultLogoAltText: string,
+  defaultLogoUri?: string
+): IssuerDisplayConfiguration[] {
+  const name = firstEnv(displayEnvNames(envPrefixes, 'DISPLAY_NAME'), defaultName);
+  const locale = firstEnv(displayEnvNames(envPrefixes, 'DISPLAY_LOCALE'), 'en-US');
+  const logoUri = optionalFirstEnv(displayEnvNames(envPrefixes, 'DISPLAY_LOGO_URI')) || defaultLogoUri;
+  const logoAltText = firstEnv(displayEnvNames(envPrefixes, 'DISPLAY_LOGO_ALT_TEXT'), defaultLogoAltText);
+
+  const display: IssuerDisplayConfiguration = { name, locale };
+  if (logoUri) {
+    display.logo = {
+      uri: logoUri,
+      alt_text: logoAltText,
+    };
+  }
+
+  return [display];
+}
+
+export function buildVerifierClientMetadata(
+  envPrefixes: string[],
+  defaultClientName: string,
+  defaultLogoUri?: string
+): VerifierClientMetadata {
+  const clientMetadata: VerifierClientMetadata = {
+    client_name: firstEnv(displayEnvNames(envPrefixes, 'CLIENT_NAME'), defaultClientName),
+  };
+
+  const logoUri = optionalFirstEnv(displayEnvNames(envPrefixes, 'LOGO_URI')) || defaultLogoUri;
+  if (logoUri) {
+    clientMetadata.logo_uri = logoUri;
+  }
+
+  return clientMetadata;
+}
+
 function claimDisplay(name: string, locale = 'en') {
   return [{ name, locale }];
 }
@@ -123,6 +207,7 @@ export interface DepartmentConfig {
   signingKeyId: string;
   credentials: CredentialConfig[];
   authProviderConfiguration?: any;
+  issuerDisplayDefaults: IssuerDisplayDefaults;
 }
 
 /** Check if a department has any jwt_vc_json credentials (needs DID) */
@@ -151,6 +236,28 @@ export interface CredentialConfig {
   /** Dynamic field mapping (for jwt_vc_json) */
   mapping?: Record<string, unknown>;
   idTokenClaimsMapping?: Record<string, unknown>;
+}
+
+function issuerDisplayDefaults(
+  deptKey: string,
+  tenantId: string,
+  defaultName: string,
+  defaultLogoAltText: string,
+  defaultLogoPath: string
+): IssuerDisplayDefaults {
+  const tenantPrefix = tenantId.toUpperCase().replace(/[^A-Z0-9]/g, '_');
+  const keyPrefix = deptKey.toUpperCase().replace(/[^A-Z0-9]/g, '_');
+
+  return {
+    envPrefixes: [
+      `GOV_${keyPrefix}_ISSUER`,
+      `GOV_${tenantPrefix}_ISSUER`,
+      'GOV_ISSUER',
+    ],
+    defaultName,
+    defaultLogoAltText,
+    defaultLogoPath,
+  };
 }
 
 /** W3C VC DM 2.0 context URLs */
@@ -210,6 +317,13 @@ export function buildDepartmentConfigs(
       name: 'Human Resources Department',
       issuerName: 'hr-issuer',
       signingKeyId: `${kmsRef}.hr-signing-key`,
+      issuerDisplayDefaults: issuerDisplayDefaults(
+        'hr',
+        gov.departments.hr,
+        'Human Resources Credential Issuer',
+        'Human Resources issuer logo',
+        '/logos/gov-hr-issuer.png'
+      ),
       credentials: [
         {
           id: GOV_CREDENTIAL_IDS.employeeStatus,
@@ -252,6 +366,13 @@ export function buildDepartmentConfigs(
       name: 'Identity Services Department',
       issuerName: 'identity-issuer',
       signingKeyId: `${kmsRef}.identity-signing-key`,
+      issuerDisplayDefaults: issuerDisplayDefaults(
+        'identity',
+        gov.departments.identity,
+        'Identity Services Issuer',
+        'Identity Services issuer logo',
+        '/logos/gov-identity-issuer.png'
+      ),
       credentials: [
         {
           id: GOV_CREDENTIAL_IDS.photoId,
@@ -284,6 +405,13 @@ export function buildDepartmentConfigs(
       name: 'Revenue Authority',
       issuerName: 'revenue-issuer',
       signingKeyId: `${kmsRef}.revenue-signing-key`,
+      issuerDisplayDefaults: issuerDisplayDefaults(
+        'revenue',
+        gov.departments.revenue,
+        'Revenue Authority Issuer',
+        'Revenue Authority issuer logo',
+        '/logos/gov-revenue-issuer.png'
+      ),
       credentials: [
         {
           id: GOV_CREDENTIAL_IDS.taxRegistration,
@@ -299,6 +427,13 @@ export function buildDepartmentConfigs(
       name: 'Financial Services Authority',
       issuerName: 'finance-issuer',
       signingKeyId: `${kmsRef}.finance-signing-key`,
+      issuerDisplayDefaults: issuerDisplayDefaults(
+        'finance',
+        gov.departments.finance,
+        'Financial Services Issuer',
+        'Financial Services issuer logo',
+        '/logos/gov-finance-issuer.png'
+      ),
       credentials: [
         {
           id: GOV_CREDENTIAL_IDS.bankAccount,
@@ -470,6 +605,12 @@ export function buildDepartmentIssuerConfig(
     tokenKeyId: dept.signingKeyId,
     kms: kmsRef,
     credentialConfigurations,
+    issuerDisplayConfiguration: buildIssuerDisplayConfiguration(
+      dept.issuerDisplayDefaults.envPrefixes,
+      dept.issuerDisplayDefaults.defaultName,
+      dept.issuerDisplayDefaults.defaultLogoAltText,
+      `${gov.serviceBaseUrl}${dept.issuerDisplayDefaults.defaultLogoPath}`
+    ),
     authProviderConfiguration: dept.authProviderConfiguration,
   };
 
