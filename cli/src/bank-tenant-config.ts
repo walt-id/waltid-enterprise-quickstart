@@ -20,6 +20,24 @@ export interface BankTenantConfig {
     clientSecret: string;
     defaultScopes: string[];
   };
+  openId: {
+    issuerDisplayConfiguration: IssuerDisplayConfiguration[];
+    verifierClientMetadata: VerifierClientMetadata;
+  };
+}
+
+export interface IssuerDisplayConfiguration {
+  name: string;
+  locale: string;
+  logo?: {
+    uri: string;
+    alt_text: string;
+  };
+}
+
+export interface VerifierClientMetadata {
+  client_name: string;
+  logo_uri?: string;
 }
 
 const DEFAULT_SCOPES = ['openid', 'profile'];
@@ -76,6 +94,34 @@ function claimDisplay(name: string, locale = 'en') {
 
 function buildVctUrl(bank: BankTenantConfig, credentialId: string): string {
   return `{vctBaseURL}/${credentialId}`;
+}
+
+function buildIssuerDisplayConfiguration(serviceBaseUrl: string): IssuerDisplayConfiguration[] {
+  const logoUri = process.env.BANK_ISSUER_DISPLAY_LOGO_URI || `${serviceBaseUrl}/logo.png`;
+
+  return [
+    {
+      name: process.env.BANK_ISSUER_DISPLAY_NAME || 'Demo Bank Issuer',
+      locale: process.env.BANK_ISSUER_DISPLAY_LOCALE || 'en-US',
+      logo: {
+        uri: logoUri,
+        alt_text: process.env.BANK_ISSUER_DISPLAY_LOGO_ALT_TEXT || 'Demo Bank issuer logo',
+      },
+    },
+  ];
+}
+
+function buildVerifierClientMetadata(serviceBaseUrl: string): VerifierClientMetadata {
+  const clientMetadata: VerifierClientMetadata = {
+    client_name: process.env.BANK_VERIFIER_CLIENT_NAME || 'Demo Bank Verifier',
+  };
+
+  const logoUri = process.env.BANK_VERIFIER_LOGO_URI || `${serviceBaseUrl}/logo.png`;
+  if (logoUri) {
+    clientMetadata.logo_uri = logoUri;
+  }
+
+  return clientMetadata;
 }
 
 /** Credential type definition for bank-tenant issuer profiles */
@@ -211,6 +257,10 @@ export function createBankTenantConfig(): BankTenantConfig {
       clientId: process.env.KEYCLOAK_CLIENT_ID || 'issuer_api',
       clientSecret: process.env.KEYCLOAK_CLIENT_SECRET || '',
       defaultScopes: defaultScopes.length > 0 ? defaultScopes : DEFAULT_SCOPES,
+    },
+    openId: {
+      issuerDisplayConfiguration: buildIssuerDisplayConfiguration(serviceBaseUrl.replace(/\/$/, '')),
+      verifierClientMetadata: buildVerifierClientMetadata(serviceBaseUrl.replace(/\/$/, '')),
     },
   };
 }
@@ -402,24 +452,7 @@ export function buildBankIssuerServiceConfig(
         },
       },
     },
-    issuerDisplayConfiguration: [
-      {
-        name: 'walt.id Issuer',
-        locale: 'en-US',
-        logo: {
-          uri: 'https://issuer.example.com/logo.png',
-          alt_text: 'walt.id Issuer logo',
-        },
-      },
-      {
-        name: 'walt.id Issuer',
-        locale: 'de-DE',
-        logo: {
-          uri: 'https://issuer.example.com/logo-de.png',
-          alt_text: 'walt.id Issuer DE Logo',
-        },
-      },
-    ],
+    issuerDisplayConfiguration: bank.openId.issuerDisplayConfiguration,
     authProviderConfiguration: {
       name: 'Keycloak',
       authorizeUrl: bank.keycloak.authorizeUrl,

@@ -21,6 +21,8 @@ import {
   buildDepartmentConfigs,
   buildDepartmentIssuerConfig,
   buildUntrustedDepartmentConfig,
+  buildIssuerDisplayConfiguration,
+  buildVerifierClientMetadata,
   departmentNeedsDid,
   departmentNeedsDsc,
   departmentNeedsTrustEntity,
@@ -709,6 +711,12 @@ async function createUntrustedDepartment(
     name: 'Untrusted Department',
     issuerName: untrusted.issuerName,
     signingKeyId: untrusted.signingKeyId,
+    issuerDisplayDefaults: {
+      envPrefixes: ['GOV_UNTRUSTED_ISSUER', 'GOV_ISSUER'],
+      defaultName: 'Untrusted Department Issuer',
+      defaultLogoAltText: 'Untrusted department issuer logo',
+      defaultLogoPath: '/logos/gov-untrusted-issuer.png',
+    },
     credentials: [
       {
         id: PHOTO_ID_DOCTYPE,
@@ -744,6 +752,12 @@ async function createUntrustedDepartment(
     baseUrl: gov.serviceBaseUrl,
     tokenKeyId: untrusted.signingKeyId,
     kms: `${ctx.tenantPath}.${RESOURCES.kms}`,
+    issuerDisplayConfiguration: buildIssuerDisplayConfiguration(
+      ['GOV_UNTRUSTED_ISSUER', 'GOV_ISSUER'],
+      'Untrusted Department Issuer',
+      'Untrusted department issuer logo',
+      `${gov.serviceBaseUrl}/logos/gov-untrusted-issuer.png`
+    ),
     credentialConfigurations: {
       [PHOTO_ID_DOCTYPE]: {
         format: 'mso_mdoc',
@@ -814,6 +828,11 @@ async function createUntrustedDepartment(
         type: 'verifier2',
         baseUrl: gov.serviceBaseUrl,
         clientId: 'untrusted-verifier',
+        clientMetadata: buildVerifierClientMetadata(
+          ['GOV_UNTRUSTED_VERIFIER', 'GOV_VERIFIER'],
+          'Untrusted Department Verifier',
+          `${gov.serviceBaseUrl}/logos/gov-untrusted-verifier.png`
+        ),
       };
       ctx.saveJson('create-untrusted-verifier-request.json', verifierRequest);
       const response = await ctx.orgClient.post(
@@ -842,6 +861,11 @@ async function createGovVerifier(
         type: 'verifier2',
         baseUrl: gov.serviceBaseUrl,
         clientId: 'gov-verifier',
+        clientMetadata: buildVerifierClientMetadata(
+          ['GOV_CENTRAL_VERIFIER', 'GOV_VERIFIER'],
+          'Government Services Verifier',
+          `${gov.serviceBaseUrl}/logos/gov-central-verifier.png`
+        ),
       };
       ctx.saveJson('create-gov-verifier-request.json', request, step);
 
