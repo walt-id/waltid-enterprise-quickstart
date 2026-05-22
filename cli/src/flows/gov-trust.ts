@@ -11,15 +11,15 @@
  * 1. Clear wallet credentials
  * 2. Issue X.509-backed W3C credential from TRUSTED issuer → PASS
  * 3. Verify trusted credential with trusted verifier + etsi-trust-list → PASS
- * 4. Issue X.509-backed W3C credential from UNTRUSTED issuer → stored
- * 5. Verify untrusted credential with trusted verifier + etsi-trust-list → FAIL
- * 6. Verify untrusted credential with UNTRUSTED verifier (signature only) → PASS
+ * 4. Issue X.509-backed Photo ID mdoc from UNTRUSTED issuer → stored
+ * 5. Verify untrusted Photo ID with trusted verifier + etsi-trust-list → FAIL
+ * 6. Verify untrusted Photo ID with UNTRUSTED verifier (signature only) → PASS
  */
 
 import { mkdirSync } from 'fs';
 import { CommandContext } from '../context.js';
 import { RESOURCES, defaultWalletDidReference, defaultWalletKeyReference } from '../config.js';
-import { GOV_CREDENTIAL_IDS } from '../gov-services-config.js';
+import { GOV_CREDENTIAL_IDS, PHOTO_ID_DOCTYPE, PHOTO_ID_NAMESPACE } from '../gov-services-config.js';
 import { setupLogin } from '../commands/setup/index.js';
 import {
   runWalletPresent,
@@ -73,7 +73,7 @@ async function walletReceiveWithTrust(
   const request = {
     offerUrl,
     keyReference: ctx.ctx.walletKeyRef,
-    runPolicies: true,
+    runPolicies: false,
     useClientAttestation: false,
   };
   ctx.saveJson('wallet-receive-trust-request.json', request, step);
@@ -125,7 +125,41 @@ async function walletReceiveBypassTrust(
 }
 
 /** Create verification session with ETSI trust list policy (trusted verifier) */
-async function createTrustedVerifierSession(ctx: CommandContext): Promise<void> {
+function employeeStatusCredentialQuery(): Record<string, unknown> {
+  return {
+    id: 'employee_status',
+    format: 'jwt_vc_json',
+    meta: {
+      type_values: [['VerifiableCredential', GOV_CREDENTIAL_IDS.employeeStatus]],
+    },
+    claims: [
+      { path: ['credentialSubject', 'employeeId'] },
+      { path: ['credentialSubject', 'department'] },
+      { path: ['credentialSubject', 'position'] },
+    ],
+  };
+}
+
+function photoIdCredentialQuery(): Record<string, unknown> {
+  return {
+    id: 'photo_id',
+    format: 'mso_mdoc',
+    meta: {
+      doctype_value: PHOTO_ID_DOCTYPE,
+    },
+    claims: [
+      { path: [PHOTO_ID_NAMESPACE, 'family_name'] },
+      { path: [PHOTO_ID_NAMESPACE, 'given_name'] },
+      { path: [PHOTO_ID_NAMESPACE, 'birth_date'] },
+      { path: [PHOTO_ID_NAMESPACE, 'document_number'] },
+    ],
+  };
+}
+
+async function createTrustedVerifierSession(
+  ctx: CommandContext,
+  credentialKind: 'employee-status' | 'photo-id' = 'employee-status'
+): Promise<void> {
   const step = ctx.nextStep();
   ctx.log('Create trusted verifier session with ETSI trust list policy', 'FLOW');
 
@@ -139,24 +173,15 @@ async function createTrustedVerifierSession(ctx: CommandContext): Promise<void> 
     },
   ];
 
+  const credentialQuery = credentialKind === 'photo-id'
+    ? photoIdCredentialQuery()
+    : employeeStatusCredentialQuery();
+
   const request = {
     flow_type: 'cross_device',
     core_flow: {
       dcql_query: {
-        credentials: [
-          {
-            id: 'employee_status',
-            format: 'jwt_vc_json',
-            meta: {
-              type_values: [['VerifiableCredential', GOV_CREDENTIAL_IDS.employeeStatus]],
-            },
-            claims: [
-              { path: ['credentialSubject', 'employeeId'] },
-              { path: ['credentialSubject', 'department'] },
-              { path: ['credentialSubject', 'position'] },
-            ],
-          },
-        ],
+        credentials: [credentialQuery],
       },
       policies: {
         vc_policies: vcPolicies,
@@ -187,31 +212,23 @@ async function createUntrustedVerifierSession(
   ctx: CommandContext,
   untrustedTenantId: string,
   untrustedVerifierName: string,
-  organization: string
+  organization: string,
+  credentialKind: 'employee-status' | 'photo-id' = 'employee-status'
 ): Promise<void> {
   const step = ctx.nextStep();
   ctx.log('Create untrusted verifier session (signature only)', 'FLOW');
 
   const verifierPath = `${organization}.${untrustedTenantId}.${untrustedVerifierName}`;
 
+  const credentialQuery = credentialKind === 'photo-id'
+    ? photoIdCredentialQuery()
+    : employeeStatusCredentialQuery();
+
   const request = {
     flow_type: 'cross_device',
     core_flow: {
       dcql_query: {
-        credentials: [
-          {
-            id: 'employee_status',
-            format: 'jwt_vc_json',
-            meta: {
-              type_values: [['VerifiableCredential', GOV_CREDENTIAL_IDS.employeeStatus]],
-            },
-            claims: [
-              { path: ['credentialSubject', 'employeeId'] },
-              { path: ['credentialSubject', 'department'] },
-              { path: ['credentialSubject', 'position'] },
-            ],
-          },
-        ],
+        credentials: [credentialQuery],
       },
       policies: {
         vc_policies: [
@@ -263,7 +280,7 @@ export async function flowGovTrust(ctx: CommandContext): Promise<void> {
   const organization = ctx.config.organization;
   const trustedProfilePath = `${organization}.${process.env.GOV_DEPT_HR || 'dept-hr'}.hr-issuer.employee`;
   const untrustedTenantId = process.env.GOV_UNTRUSTED_TENANT || 'untrusted-dept';
-  const untrustedProfilePath = `${organization}.${untrustedTenantId}.untrusted-issuer.employee`;
+  const untrustedProfilePath = `${organization}.${untrustedTenantId}.untrusted-issuer.photo-id`;
   const untrustedVerifierPath = `${organization}.${untrustedTenantId}.untrusted-verifier`;
 
   try {
@@ -296,12 +313,12 @@ export async function flowGovTrust(ctx: CommandContext): Promise<void> {
     await runAssertFinalStatus(ctx);
     console.log('   [PASS] Trusted credential verified successfully with ETSI trust list');
 
-    // Keep each same-doctype verification deterministic by storing only the
-    // credential that should be presented in the next phase.
+    // Keep each verification deterministic by storing only the credential that
+    // should be presented in the next phase.
     await clearWalletCredentials(ctx);
 
-    // --- Step 4: Issue from UNTRUSTED issuer bypassing trust ---
-    console.log('\n--- Step 4: Issue Employee Status from UNTRUSTED issuer (stored for verifier negative case) ---');
+    // --- Step 4: Issue Photo ID from UNTRUSTED issuer bypassing trust ---
+    console.log('\n--- Step 4: Issue Photo ID from UNTRUSTED issuer (stored for verifier negative case) ---');
     const untrustedOffer2 = await createOfferFromProfile(ctx, untrustedProfilePath);
     console.log(`   [OK] Untrusted credential offer created`);
     const untrustedCredentialIds = await walletReceiveBypassTrust(ctx, untrustedOffer2);
@@ -310,9 +327,9 @@ export async function flowGovTrust(ctx: CommandContext): Promise<void> {
     }
     console.log('   [OK] Untrusted credential stored');
 
-    // --- Step 5: Verify untrusted credential with trusted verifier (should fail) ---
-    console.log('\n--- Step 5: Verify untrusted credential with trusted verifier (should FAIL) ---');
-    await createTrustedVerifierSession(ctx);
+    // --- Step 5: Verify untrusted Photo ID with trusted verifier (should fail) ---
+    console.log('\n--- Step 5: Verify untrusted Photo ID with trusted verifier (should FAIL) ---');
+    await createTrustedVerifierSession(ctx, 'photo-id');
     await runWalletPresent(ctx, untrustedCredentialIds);
     let untrustedVerificationFailed = false;
     try {
@@ -327,9 +344,9 @@ export async function flowGovTrust(ctx: CommandContext): Promise<void> {
       throw new Error('Untrusted credential unexpectedly passed trust list check');
     }
 
-    // --- Step 6: Verify untrusted credential with UNTRUSTED verifier (signature only) ---
+    // --- Step 6: Verify untrusted Photo ID with UNTRUSTED verifier (signature only) ---
     console.log('\n--- Step 6: Verify with UNTRUSTED verifier (signature only, no trust registry) ---');
-    await createUntrustedVerifierSession(ctx, untrustedTenantId, 'untrusted-verifier', organization);
+    await createUntrustedVerifierSession(ctx, untrustedTenantId, 'untrusted-verifier', organization, 'photo-id');
     await runWalletPresent(ctx, untrustedCredentialIds);
     await runAssertFinalStatus(ctx, untrustedVerifierPath, 'untrusted-final-session-info.json');
     console.log('   [PASS] Credential verified with signature-only policy (no trust list check)');

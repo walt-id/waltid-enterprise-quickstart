@@ -10,6 +10,7 @@
  */
 
 import { join } from 'path';
+import { buildOrgUrl } from './config.js';
 import { loadEnvFile } from './env.js';
 
 export interface GovServicesConfig {
@@ -458,7 +459,7 @@ export function buildUntrustedDepartmentConfig(
     issuerName: 'untrusted-issuer',
     verifierName: 'untrusted-verifier',
     signingKeyId: `${kmsRef}.untrusted-signing-key`,
-    credentialProfileSuffix: 'employee',
+    credentialProfileSuffix: 'photo-id',
   };
 }
 
@@ -471,10 +472,15 @@ export function loadGovServicesEnv(cliDir: string): void {
 }
 
 export function createGovServicesConfig(): GovServicesConfig {
+  const organization = process.env.ORGANIZATION || 'waltid';
+  const baseUrl = process.env.BASE_URL || 'enterprise.localhost';
+  const port = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
+  const derivedOrgUrl = buildOrgUrl(baseUrl, organization, port);
+
   const serviceBaseUrl =
     process.env.GOV_SERVICES_BASE_URL ||
     process.env.ISSUER_BASE_URL ||
-    '';
+    derivedOrgUrl;
 
   if (!serviceBaseUrl) {
     throw new Error(

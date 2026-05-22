@@ -16,13 +16,14 @@ import {
   CredentialConfig,
   UntrustedDepartmentConfig,
   PHOTO_ID_DOCTYPE,
+  PHOTO_ID_NAMESPACE,
   buildDepartmentConfigs,
   buildDepartmentIssuerConfig,
   buildUntrustedDepartmentConfig,
-  buildIssuerDisplayConfiguration,
   buildVerifierClientMetadata,
   departmentNeedsDsc,
   GOV_CREDENTIAL_IDS,
+  photoIdDefaultValues,
 } from '../../gov-services-config.js';
 import { setupLogin } from './auth.js';
 import {
@@ -38,40 +39,8 @@ import {
 /** Map of department key to their DSC PEM (for X.509-backed issuers) */
 const departmentDscPems: Map<string, string> = new Map();
 
-const W3C_X509_MAPPING = {
-  id: '<uuid>',
-  issuanceDate: '<timestamp>',
-  expirationDate: '<timestamp-in:365d>',
-};
-
-function buildEmployeeStatusCredentialData(
-  issuerName: string,
-  issuerUrl: string
-): Record<string, unknown> {
-  return {
-    '@context': ['https://www.w3.org/2018/credentials/v1', 'https://purl.imsglobal.org/spec/ob/v3p0/context.json'],
-    id: 'urn:uuid:placeholder',
-    type: ['VerifiableCredential', GOV_CREDENTIAL_IDS.employeeStatus],
-    name: 'Employee Status',
-    issuanceDate: '2024-01-01T00:00:00Z',
-    issuer: {
-      type: ['Profile'],
-      name: issuerName,
-      url: issuerUrl,
-    },
-    credentialSubject: {
-      type: ['Person'],
-      employeeId: 'EMP-2024-999',
-      department: issuerName,
-      position: 'Contractor',
-      clearanceLevel: 'None',
-      startDate: '2024-01-15',
-    },
-  };
-}
-
 /** Build x5c chain for profiles using a department's DSC */
-async function buildDepartmentMdocX5Chain(
+async function buildDepartmentX5Chain(
   ctx: CommandContext,
   deptKey: string
 ): Promise<Array<{ type: string; pemEncodedCertificate: string }> | undefined> {
@@ -368,9 +337,9 @@ async function createDepartmentProfiles(
           request.idTokenClaimsMapping = cred.idTokenClaimsMapping;
         }
 
-        // Add x5Chain for X.509-backed credentials (mdoc and W3C JWT VC)
-        if (cred.format === 'mso_mdoc' || cred.format === 'jwt_vc_json') {
-          const x5Chain = await buildDepartmentMdocX5Chain(ctx, deptKey);
+        // Add x5Chain for X.509-backed credentials (mdoc, W3C JWT VC, and SD-JWT VC)
+        if (cred.format === 'mso_mdoc' || cred.format === 'jwt_vc_json' || cred.format === 'dc+sd-jwt') {
+          const x5Chain = await buildDepartmentX5Chain(ctx, deptKey);
           if (!x5Chain) {
             throw new Error(
               `Document signer certificate required for ${cred.id} profile. ` +
@@ -629,11 +598,11 @@ async function createUntrustedDepartment(
     },
     credentials: [
       {
-        id: GOV_CREDENTIAL_IDS.employeeStatus,
-        format: 'jwt_vc_json',
+        id: GOV_CREDENTIAL_IDS.photoId,
+        format: 'mso_mdoc',
+        doctype: PHOTO_ID_DOCTYPE,
         profileSuffix: untrusted.credentialProfileSuffix,
-        sampleData: buildEmployeeStatusCredentialData('Untrusted Department', gov.serviceBaseUrl),
-        mapping: W3C_X509_MAPPING,
+        sampleData: { ...photoIdDefaultValues },
       },
     ],
   };
@@ -656,33 +625,7 @@ async function createUntrustedDepartment(
   ];
 
   // 4. Create untrusted issuer service
-  const issuerConfig = {
-    type: 'issuer2',
-    _id: issuerPath,
-    baseUrl: gov.serviceBaseUrl,
-    tokenKeyId: untrusted.signingKeyId,
-    kms: `${ctx.tenantPath}.${RESOURCES.kms}`,
-    issuerDisplayConfiguration: buildIssuerDisplayConfiguration(
-      ['GOV_UNTRUSTED_ISSUER', 'GOV_ISSUER'],
-      'Untrusted Department Issuer',
-      'Untrusted department issuer logo',
-      `${gov.serviceBaseUrl}/logos/gov-untrusted-issuer.png`
-    ),
-    credentialConfigurations: {
-      [GOV_CREDENTIAL_IDS.employeeStatus]: {
-        format: 'jwt_vc_json',
-        scope: GOV_CREDENTIAL_IDS.employeeStatus,
-        credential_signing_alg_values_supported: ['ES256'],
-        cryptographic_binding_methods_supported: ['jwk'],
-        proof_types_supported: {
-          jwt: { proof_signing_alg_values_supported: ['ES256'] },
-        },
-        credential_definition: {
-          type: ['VerifiableCredential', GOV_CREDENTIAL_IDS.employeeStatus],
-        },
-      },
-    },
-  };
+  const issuerConfig = buildDepartmentIssuerConfig(organization, ctx.tenantPath, untrustedDeptForDsc, gov);
 
   const { created: issuerCreated } = await ctx.tolerantCreate(
     `Issuer ${untrusted.issuerName}`,
@@ -706,18 +649,16 @@ async function createUntrustedDepartment(
 
   const profileRequest: Record<string, unknown> = {
     name: untrusted.credentialProfileSuffix,
-    credentialConfigurationId: GOV_CREDENTIAL_IDS.employeeStatus,
+    credentialConfigurationId: GOV_CREDENTIAL_IDS.photoId,
     issuerKeyId: untrusted.signingKeyId,
-    credentialData: buildEmployeeStatusCredentialData('Untrusted Department', gov.serviceBaseUrl),
-    mapping: W3C_X509_MAPPING,
-    x5Chain: untrustedX5Chain,
-    idTokenClaimsMapping: {
-      '$.employeeId': '$.credentialSubject.employeeId',
-      '$.department': '$.credentialSubject.department',
-      '$.position': '$.credentialSubject.position',
-      '$.clearanceLevel': '$.credentialSubject.clearanceLevel',
-      '$.startDate': '$.credentialSubject.startDate',
+    credentialData: {
+      [PHOTO_ID_NAMESPACE]: {
+        ...photoIdDefaultValues[PHOTO_ID_NAMESPACE],
+        issuing_authority: 'Untrusted Department',
+        document_number: 'UNTRUSTED-ID-2024-001',
+      },
     },
+    x5Chain: untrustedX5Chain,
   };
 
   ctx.saveJson('create-untrusted-profile-request.json', profileRequest, step);
