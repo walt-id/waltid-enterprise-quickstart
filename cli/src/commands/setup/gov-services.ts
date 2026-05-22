@@ -1,7 +1,6 @@
 /**
  * Government services tenant setup: a multi-department ecosystem with:
  * - Central government tenant (KMS, wallet, verifier)
- * - DID service and DID store for issuer DIDs (jwt_vc_json credentials)
  * - Department tenants (HR, Identity, Revenue, Finance)
  * - Issuers for each department with various credential formats
  * - Credential profiles for each credential type
@@ -17,15 +16,13 @@ import {
   CredentialConfig,
   UntrustedDepartmentConfig,
   PHOTO_ID_DOCTYPE,
-  photoIdDefaultValues,
   buildDepartmentConfigs,
   buildDepartmentIssuerConfig,
   buildUntrustedDepartmentConfig,
   buildIssuerDisplayConfiguration,
   buildVerifierClientMetadata,
-  departmentNeedsDid,
   departmentNeedsDsc,
-  departmentNeedsTrustEntity,
+  GOV_CREDENTIAL_IDS,
 } from '../../gov-services-config.js';
 import { setupLogin } from './auth.js';
 import {
@@ -38,13 +35,42 @@ import {
   setupCreateIacaCertificate,
 } from './keys.js';
 
-/** Map of department key to their DID (for jwt_vc_json issuers) */
-const departmentDids: Map<string, string> = new Map();
-
-/** Map of department key to their DSC PEM (for mso_mdoc issuers) */
+/** Map of department key to their DSC PEM (for X.509-backed issuers) */
 const departmentDscPems: Map<string, string> = new Map();
 
-/** Build x5c chain for mso_mdoc profiles using department's DSC */
+const W3C_X509_MAPPING = {
+  id: '<uuid>',
+  issuanceDate: '<timestamp>',
+  expirationDate: '<timestamp-in:365d>',
+};
+
+function buildEmployeeStatusCredentialData(
+  issuerName: string,
+  issuerUrl: string
+): Record<string, unknown> {
+  return {
+    '@context': ['https://www.w3.org/2018/credentials/v1', 'https://purl.imsglobal.org/spec/ob/v3p0/context.json'],
+    id: 'urn:uuid:placeholder',
+    type: ['VerifiableCredential', GOV_CREDENTIAL_IDS.employeeStatus],
+    name: 'Employee Status',
+    issuanceDate: '2024-01-01T00:00:00Z',
+    issuer: {
+      type: ['Profile'],
+      name: issuerName,
+      url: issuerUrl,
+    },
+    credentialSubject: {
+      type: ['Person'],
+      employeeId: 'EMP-2024-999',
+      department: issuerName,
+      position: 'Contractor',
+      clearanceLevel: 'None',
+      startDate: '2024-01-15',
+    },
+  };
+}
+
+/** Build x5c chain for profiles using a department's DSC */
 async function buildDepartmentMdocX5Chain(
   ctx: CommandContext,
   deptKey: string
@@ -222,110 +248,6 @@ async function createIacaCertificateForKey(
   return pem;
 }
 
-/** Create DID service and DID store for issuer DIDs */
-async function createDidServices(ctx: CommandContext): Promise<void> {
-  ctx.log('Create DID service and DID store', 'GOV-SETUP');
-
-  // Create DID store
-  const { created: storeCreated } = await ctx.tolerantCreate(
-    'DID store',
-    async () => {
-      const response = await ctx.orgClient.post(
-        `/v1/${ctx.tenantPath}.${RESOURCES.didStore}/resource-api/services/create`,
-        { type: 'did-store' }
-      );
-      return response;
-    }
-  );
-
-  if (storeCreated) {
-    console.log(`   [OK] DID store created: ${ctx.tenantPath}.${RESOURCES.didStore}`);
-  }
-
-  // Create DID service
-  const { created: serviceCreated } = await ctx.tolerantCreate(
-    'DID service',
-    async () => {
-      const response = await ctx.orgClient.post(
-        `/v1/${ctx.tenantPath}.${RESOURCES.didService}/resource-api/services/create`,
-        { type: 'did' }
-      );
-      return response;
-    }
-  );
-
-  if (serviceCreated) {
-    console.log(`   [OK] DID service created: ${ctx.tenantPath}.${RESOURCES.didService}`);
-  }
-}
-
-/** Link DID service dependencies (KMS and DID store) */
-async function linkDidServiceDependencies(ctx: CommandContext): Promise<void> {
-  ctx.log('Link DID service dependencies', 'GOV-SETUP');
-
-  // Link KMS to DID service
-  try {
-    await ctx.orgClient.post(
-      `/v1/${ctx.tenantPath}.${RESOURCES.didService}/did-service-api/dids/dependencies/add`,
-      `${ctx.tenantPath}.${RESOURCES.kms}`,
-      'text/plain'
-    );
-    console.log(`   [OK] Linked KMS to DID service`);
-  } catch (error: any) {
-    if (error.status === 409 || error.message?.includes('already')) {
-      console.log(`   [SKIP] KMS already linked to DID service`);
-    } else {
-      throw error;
-    }
-  }
-
-  // Link DID store to DID service
-  try {
-    await ctx.orgClient.post(
-      `/v1/${ctx.tenantPath}.${RESOURCES.didService}/did-service-api/dids/dependencies/add`,
-      `${ctx.tenantPath}.${RESOURCES.didStore}`,
-      'text/plain'
-    );
-    console.log(`   [OK] Linked DID store to DID service`);
-  } catch (error: any) {
-    if (error.status === 409 || error.message?.includes('already')) {
-      console.log(`   [SKIP] DID store already linked to DID service`);
-    } else {
-      throw error;
-    }
-  }
-}
-
-/** Create a DID for a department's issuer using their signing key */
-async function createDepartmentDid(
-  ctx: CommandContext,
-  deptKey: string,
-  dept: DepartmentConfig
-): Promise<string> {
-  ctx.log(`Create DID for ${dept.name}`, 'GOV-SETUP');
-
-  // Create did:key using the department's signing key
-  const createResponse = await ctx.orgClient.post(
-    `/v1/${ctx.tenantPath}.${RESOURCES.didService}/did-service-api/dids/create/key`,
-    {
-      keyId: dept.signingKeyId,
-    }
-  );
-
-  const createdDid =
-    createResponse.data?.did ||
-    createResponse.data?.data?.did ||
-    createResponse.data?.id ||
-    createResponse.data;
-
-  console.log(`   [OK] DID created for ${dept.name}: ${createdDid}`);
-  
-  // Store the DID for later use in profile creation
-  departmentDids.set(deptKey, createdDid);
-  
-  return createdDid;
-}
-
 /** Create a department tenant */
 async function createDepartmentTenant(
   ctx: CommandContext,
@@ -418,7 +340,6 @@ async function createDepartmentProfiles(
   dept: DepartmentConfig
 ): Promise<void> {
   const issuerPath = `${organization}.${dept.tenantId}.${dept.issuerName}`;
-  const issuerDid = departmentDids.get(deptKey);
 
   for (const cred of dept.credentials) {
     const profileId = `${issuerPath}.${cred.profileSuffix}`;
@@ -438,9 +359,6 @@ async function createDepartmentProfiles(
 
         // Add W3C VC specific fields for jwt_vc_json credentials
         if (cred.format === 'jwt_vc_json') {
-          if (issuerDid) {
-            request.issuerDid = issuerDid;
-          }
           if (cred.mapping) {
             request.mapping = cred.mapping;
           }
@@ -450,8 +368,8 @@ async function createDepartmentProfiles(
           request.idTokenClaimsMapping = cred.idTokenClaimsMapping;
         }
 
-        // Add x5cChain for mso_mdoc credentials (using department's DSC)
-        if (cred.format === 'mso_mdoc') {
+        // Add x5Chain for X.509-backed credentials (mdoc and W3C JWT VC)
+        if (cred.format === 'mso_mdoc' || cred.format === 'jwt_vc_json') {
           const x5Chain = await buildDepartmentMdocX5Chain(ctx, deptKey);
           if (!x5Chain) {
             throw new Error(
@@ -541,18 +459,10 @@ async function loadGovIssuersIntoTrustRegistry(
   const trustedEntities: any[] = [];
 
   for (const [deptKey, dept] of Object.entries(departments)) {
-    const issuerDid = departmentDids.get(deptKey);
     const dscPem = departmentDscPems.get(deptKey);
     const entityId = `gov-${deptKey}`;
 
     const identities: any[] = [];
-
-    if (issuerDid) {
-      identities.push({
-        matchType: 'DID_KEY',
-        value: issuerDid,
-      });
-    }
 
     if (dscPem) {
       identities.push({
@@ -576,7 +486,7 @@ async function loadGovIssuersIntoTrustRegistry(
       services: [
         {
           serviceId: `${deptKey}-credential-issuing`,
-          serviceType: 'MDL_ISSUER',
+          serviceType: 'CREDENTIAL_ISSUER',
           status: 'GRANTED',
           statusStart: new Date().toISOString(),
           identities,
@@ -719,11 +629,11 @@ async function createUntrustedDepartment(
     },
     credentials: [
       {
-        id: PHOTO_ID_DOCTYPE,
-        format: 'mso_mdoc',
-        doctype: PHOTO_ID_DOCTYPE,
+        id: GOV_CREDENTIAL_IDS.employeeStatus,
+        format: 'jwt_vc_json',
         profileSuffix: untrusted.credentialProfileSuffix,
-        sampleData: { ...photoIdDefaultValues },
+        sampleData: buildEmployeeStatusCredentialData('Untrusted Department', gov.serviceBaseUrl),
+        mapping: W3C_X509_MAPPING,
       },
     ],
   };
@@ -759,14 +669,16 @@ async function createUntrustedDepartment(
       `${gov.serviceBaseUrl}/logos/gov-untrusted-issuer.png`
     ),
     credentialConfigurations: {
-      [PHOTO_ID_DOCTYPE]: {
-        format: 'mso_mdoc',
-        scope: PHOTO_ID_DOCTYPE,
-        doctype: PHOTO_ID_DOCTYPE,
-        credential_signing_alg_values_supported: [-7, -9],
-        cryptographic_binding_methods_supported: ['cose_key'],
+      [GOV_CREDENTIAL_IDS.employeeStatus]: {
+        format: 'jwt_vc_json',
+        scope: GOV_CREDENTIAL_IDS.employeeStatus,
+        credential_signing_alg_values_supported: ['ES256'],
+        cryptographic_binding_methods_supported: ['jwk'],
         proof_types_supported: {
           jwt: { proof_signing_alg_values_supported: ['ES256'] },
+        },
+        credential_definition: {
+          type: ['VerifiableCredential', GOV_CREDENTIAL_IDS.employeeStatus],
         },
       },
     },
@@ -794,10 +706,18 @@ async function createUntrustedDepartment(
 
   const profileRequest: Record<string, unknown> = {
     name: untrusted.credentialProfileSuffix,
-    credentialConfigurationId: PHOTO_ID_DOCTYPE,
+    credentialConfigurationId: GOV_CREDENTIAL_IDS.employeeStatus,
     issuerKeyId: untrusted.signingKeyId,
-    credentialData: { ...photoIdDefaultValues },
+    credentialData: buildEmployeeStatusCredentialData('Untrusted Department', gov.serviceBaseUrl),
+    mapping: W3C_X509_MAPPING,
     x5Chain: untrustedX5Chain,
+    idTokenClaimsMapping: {
+      '$.employeeId': '$.credentialSubject.employeeId',
+      '$.department': '$.credentialSubject.department',
+      '$.position': '$.credentialSubject.position',
+      '$.clearanceLevel': '$.credentialSubject.clearanceLevel',
+      '$.startDate': '$.credentialSubject.startDate',
+    },
   };
 
   ctx.saveJson('create-untrusted-profile-request.json', profileRequest, step);
@@ -922,7 +842,7 @@ async function createGovWallet(ctx: CommandContext): Promise<void> {
   if (created) {
     console.log(`   [OK] Wallet initialized`);
   } else {
-    console.log(`   [SKIP] Wallet already exists (DID reference: ${ctx.ctx.tenantPath})`);
+    console.log(`   [SKIP] Wallet already exists`);
   }
 }
 
@@ -931,16 +851,14 @@ async function createGovWallet(ctx: CommandContext): Promise<void> {
  *
  * Creates:
  * 1. Central government tenant with KMS and wallet
- * 2. DID service and DID store (for W3C credential issuers)
- * 3. X.509 services and IACA certificate (for mdoc credentials)
+ * 2. X.509 services and IACA certificate
  * 4. Department tenants (HR, Identity, Revenue, Finance)
  * 5. Signing keys for each department (in central KMS)
- * 6. DIDs for departments with jwt_vc_json credentials (using their signing key)
- * 7. DSCs for departments with mso_mdoc credentials (using their signing key)
+ * 6. DSCs for departments (using their signing key)
  * 8. Trust registry service (linked to verifier)
  * 9. Issuers for each department
  * 10. Credential profiles for each credential type
- * 11. All trusted issuers loaded into trust registry (DIDs, DSCs, IACA)
+ * 11. All trusted issuers loaded into trust registry (DSCs)
  * 12. Untrusted department with issuer + verifier (for negative test cases)
  */
 export async function runGovServicesSetup(
@@ -959,8 +877,7 @@ export async function runGovServicesSetup(
   const departments = buildDepartmentConfigs(organization, gov);
   const untrustedDept = buildUntrustedDepartmentConfig(organization, gov);
 
-  // Clear any previous mappings
-  departmentDids.clear();
+  // Clear any previous certificate mappings
   departmentDscPems.clear();
 
   await setupLogin(ctx);
@@ -972,32 +889,21 @@ export async function runGovServicesSetup(
   await createGovWallet(ctx);
   await createGovVerifier(ctx, gov);
 
-  // 2. Create DID service and DID store (needed for W3C jwt_vc_json credentials)
-  await createDidServices(ctx);
-  await linkDidServiceDependencies(ctx);
-
-  // 3. Import keys and create IACA certificate (needed for mdoc DSCs)
+  // 2. Import keys and create IACA certificate (needed for department DSCs)
   await setupImportKeys(ctx);
   await setupCreateIacaCertificate(ctx);
 
-  // 4. Create department tenants
+  // 3. Create department tenants
   for (const dept of Object.values(departments)) {
     await createDepartmentTenant(ctx, organization, dept);
   }
 
-  // 5. Create signing keys for each department (in central KMS)
+  // 4. Create signing keys for each department (in central KMS)
   for (const dept of Object.values(departments)) {
     await createDepartmentSigningKey(ctx, dept);
   }
 
-  // 6. Create DIDs for departments that need them (jwt_vc_json or any trust entity)
-  for (const [deptKey, dept] of Object.entries(departments)) {
-    if (departmentNeedsDid(dept) || departmentNeedsTrustEntity(dept)) {
-      await createDepartmentDid(ctx, deptKey, dept);
-    }
-  }
-
-  // 7. Create DSCs for departments that have mso_mdoc credentials
+  // 5. Create DSCs for departments with credentials
   for (const [deptKey, dept] of Object.entries(departments)) {
     if (departmentNeedsDsc(dept)) {
       await createDepartmentDsc(ctx, deptKey, dept);
@@ -1028,12 +934,8 @@ export async function runGovServicesSetup(
   console.log('\nTrusted issuers (in trust registry):');
   for (const [deptKey, dept] of Object.entries(departments)) {
     const issuerPath = `${organization}.${dept.tenantId}.${dept.issuerName}`;
-    const did = departmentDids.get(deptKey);
     const hasDsc = departmentDscPems.has(deptKey);
     console.log(`  - ${dept.name}: ${issuerPath}`);
-    if (did) {
-      console.log(`      DID: ${did}`);
-    }
     if (hasDsc) {
       console.log(`      DSC: ${deptKey}-dsc`);
     }

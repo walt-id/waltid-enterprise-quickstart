@@ -93,7 +93,7 @@ const SDJWT_PROOF_TYPES = {
 };
 
 const JWT_VC_PROOF_TYPES = {
-  cryptographic_binding_methods_supported: ['did:key'],
+  cryptographic_binding_methods_supported: ['jwk'],
   credential_signing_alg_values_supported: ['ES256'],
   proof_types_supported: {
     jwt: { proof_signing_alg_values_supported: ['ES256'] },
@@ -210,14 +210,9 @@ export interface DepartmentConfig {
   issuerDisplayDefaults: IssuerDisplayDefaults;
 }
 
-/** Check if a department has any jwt_vc_json credentials (needs DID) */
-export function departmentNeedsDid(dept: DepartmentConfig): boolean {
-  return dept.credentials.some(cred => cred.format === 'jwt_vc_json');
-}
-
-/** Check if a department has any mso_mdoc credentials (needs DSC) */
+/** Check if a department needs an X.509 document signer certificate */
 export function departmentNeedsDsc(dept: DepartmentConfig): boolean {
-  return dept.credentials.some(cred => cred.format === 'mso_mdoc');
+  return dept.credentials.length > 0;
 }
 
 /** Check if a department has any credentials (needs trust registry identity) */
@@ -266,12 +261,6 @@ const W3C_VC_CONTEXT = ['https://www.w3.org/2018/credentials/v1', 'https://purl.
 /** Standard W3C VC mapping for dynamic fields */
 const W3C_VC_MAPPING = {
   id: '<uuid>',
-  issuer: {
-    id: '<issuerDid>',
-  },
-  credentialSubject: {
-    id: '<subjectDid>',
-  },
   issuanceDate: '<timestamp>',
   expirationDate: '<timestamp-in:365d>',
 };
@@ -293,10 +282,8 @@ function buildW3cVcCredentialData(
       type: ['Profile'],
       name: issuerName,
       url: issuerUrl,
-      id: 'did:placeholder:issuer',
     },
     credentialSubject: {
-      id: 'did:placeholder:subject',
       type: ['Person'],
       ...subjectData,
     },
@@ -471,7 +458,7 @@ export function buildUntrustedDepartmentConfig(
     issuerName: 'untrusted-issuer',
     verifierName: 'untrusted-verifier',
     signingKeyId: `${kmsRef}.untrusted-signing-key`,
-    credentialProfileSuffix: 'photo-id',
+    credentialProfileSuffix: 'employee',
   };
 }
 

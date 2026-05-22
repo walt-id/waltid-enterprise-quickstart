@@ -181,20 +181,27 @@ export async function runCreateVerificationSession(
 }
 
 /** Wallet presents credential */
-export async function runWalletPresent(ctx: CommandContext, credentialIds: string[] = []): Promise<void> {
+export async function runWalletPresent(
+  ctx: CommandContext,
+  credentialIds: string[] = [],
+  includeDidReference = true
+): Promise<void> {
   const step = ctx.nextStep();
   ctx.log('Wallet presents credential', 'RUN');
 
   const request: {
     requestUrl: string;
     keyReference: string;
-    didReference: string;
+    didReference?: string;
     credentials?: Array<{ credential: string }>;
   } = {
     requestUrl: ctx.ctx.requestUrl,
     keyReference: ctx.ctx.walletKeyRef,
-    didReference: ctx.ctx.walletDid || defaultWalletDidReference(ctx.tenantPath),
   };
+
+  if (includeDidReference) {
+    request.didReference = ctx.ctx.walletDid || defaultWalletDidReference(ctx.tenantPath);
+  }
 
   if (credentialIds.length > 0) {
     request.credentials = credentialIds.map(credential => ({ credential }));

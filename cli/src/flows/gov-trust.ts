@@ -9,9 +9,9 @@
  * 
  * Steps:
  * 1. Clear wallet credentials
- * 2. Issue from TRUSTED issuer, wallet receives with trust list validation → PASS
+ * 2. Issue X.509-backed W3C credential from TRUSTED issuer → PASS
  * 3. Verify trusted credential with trusted verifier + etsi-trust-list → PASS
- * 4. Issue from UNTRUSTED issuer, wallet receives WITHOUT trust validation → stored
+ * 4. Issue X.509-backed W3C credential from UNTRUSTED issuer → stored
  * 5. Verify untrusted credential with trusted verifier + etsi-trust-list → FAIL
  * 6. Verify untrusted credential with UNTRUSTED verifier (signature only) → PASS
  */
@@ -19,7 +19,7 @@
 import { mkdirSync } from 'fs';
 import { CommandContext } from '../context.js';
 import { RESOURCES, defaultWalletDidReference, defaultWalletKeyReference } from '../config.js';
-import { PHOTO_ID_DOCTYPE, PHOTO_ID_NAMESPACE } from '../gov-services-config.js';
+import { GOV_CREDENTIAL_IDS } from '../gov-services-config.js';
 import { setupLogin } from '../commands/setup/index.js';
 import {
   runWalletPresent,
@@ -73,7 +73,6 @@ async function walletReceiveWithTrust(
   const request = {
     offerUrl,
     keyReference: ctx.ctx.walletKeyRef,
-    didReference: defaultWalletDidReference(ctx.tenantPath),
     runPolicies: true,
     useClientAttestation: false,
   };
@@ -107,7 +106,6 @@ async function walletReceiveBypassTrust(
   const request = {
     offerUrl,
     keyReference: ctx.ctx.walletKeyRef,
-    didReference: defaultWalletDidReference(ctx.tenantPath),
     runPolicies: false,
     useClientAttestation: false,
   };
@@ -147,15 +145,15 @@ async function createTrustedVerifierSession(ctx: CommandContext): Promise<void> 
       dcql_query: {
         credentials: [
           {
-            id: 'photo_id',
-            format: 'mso_mdoc',
+            id: 'employee_status',
+            format: 'jwt_vc_json',
             meta: {
-              doctype_value: PHOTO_ID_DOCTYPE,
+              type_values: [['VerifiableCredential', GOV_CREDENTIAL_IDS.employeeStatus]],
             },
             claims: [
-              { path: [PHOTO_ID_NAMESPACE, 'family_name'] },
-              { path: [PHOTO_ID_NAMESPACE, 'given_name'] },
-              { path: [PHOTO_ID_NAMESPACE, 'birth_date'] },
+              { path: ['credentialSubject', 'employeeId'] },
+              { path: ['credentialSubject', 'department'] },
+              { path: ['credentialSubject', 'position'] },
             ],
           },
         ],
@@ -202,15 +200,15 @@ async function createUntrustedVerifierSession(
       dcql_query: {
         credentials: [
           {
-            id: 'photo_id',
-            format: 'mso_mdoc',
+            id: 'employee_status',
+            format: 'jwt_vc_json',
             meta: {
-              doctype_value: PHOTO_ID_DOCTYPE,
+              type_values: [['VerifiableCredential', GOV_CREDENTIAL_IDS.employeeStatus]],
             },
             claims: [
-              { path: [PHOTO_ID_NAMESPACE, 'family_name'] },
-              { path: [PHOTO_ID_NAMESPACE, 'given_name'] },
-              { path: [PHOTO_ID_NAMESPACE, 'birth_date'] },
+              { path: ['credentialSubject', 'employeeId'] },
+              { path: ['credentialSubject', 'department'] },
+              { path: ['credentialSubject', 'position'] },
             ],
           },
         ],
@@ -263,9 +261,9 @@ export async function flowGovTrust(ctx: CommandContext): Promise<void> {
   mkdirSync(ctx.workdir, { recursive: true });
 
   const organization = ctx.config.organization;
-  const trustedProfilePath = `${organization}.${process.env.GOV_DEPT_IDENTITY || 'dept-identity'}.identity-issuer.photo-id`;
+  const trustedProfilePath = `${organization}.${process.env.GOV_DEPT_HR || 'dept-hr'}.hr-issuer.employee`;
   const untrustedTenantId = process.env.GOV_UNTRUSTED_TENANT || 'untrusted-dept';
-  const untrustedProfilePath = `${organization}.${untrustedTenantId}.untrusted-issuer.photo-id`;
+  const untrustedProfilePath = `${organization}.${untrustedTenantId}.untrusted-issuer.employee`;
   const untrustedVerifierPath = `${organization}.${untrustedTenantId}.untrusted-verifier`;
 
   try {
@@ -277,13 +275,12 @@ export async function flowGovTrust(ctx: CommandContext): Promise<void> {
     if (!ctx.ctx.walletDid) {
       ctx.ctx.walletDid = defaultWalletDidReference(ctx.tenantPath);
     }
-
     // --- Step 1: Clear existing credentials ---
     console.log('\n--- Step 1: Clear wallet credentials ---');
     await clearWalletCredentials(ctx);
 
     // --- Step 2: Issue from TRUSTED issuer ---
-    console.log('\n--- Step 2: Issue Photo ID from TRUSTED issuer (Identity) ---');
+    console.log('\n--- Step 2: Issue Employee Status from TRUSTED issuer (HR) ---');
     const trustedOffer = await createOfferFromProfile(ctx, trustedProfilePath);
     console.log(`   [OK] Trusted credential offer created`);
     const trustedCredentialIds = await walletReceiveWithTrust(ctx, trustedOffer);
@@ -304,7 +301,7 @@ export async function flowGovTrust(ctx: CommandContext): Promise<void> {
     await clearWalletCredentials(ctx);
 
     // --- Step 4: Issue from UNTRUSTED issuer bypassing trust ---
-    console.log('\n--- Step 4: Issue Photo ID from UNTRUSTED issuer (stored for verifier negative case) ---');
+    console.log('\n--- Step 4: Issue Employee Status from UNTRUSTED issuer (stored for verifier negative case) ---');
     const untrustedOffer2 = await createOfferFromProfile(ctx, untrustedProfilePath);
     console.log(`   [OK] Untrusted credential offer created`);
     const untrustedCredentialIds = await walletReceiveBypassTrust(ctx, untrustedOffer2);
