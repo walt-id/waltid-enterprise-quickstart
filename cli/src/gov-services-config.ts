@@ -369,23 +369,6 @@ export function buildDepartmentConfigs(
           profileSuffix: 'photo-id',
           sampleData: { ...photoIdDefaultValues },
         },
-        {
-          id: GOV_CREDENTIAL_IDS.addressProof,
-          format: 'jwt_vc_json',
-          profileSuffix: 'address',
-          mapping: { ...W3C_VC_MAPPING },
-          sampleData: buildW3cVcCredentialData(
-            GOV_CREDENTIAL_IDS.addressProof,
-            'Identity Services Department',
-            gov.serviceBaseUrl,
-            {
-              street: 'Musterstraße 123',
-              city: 'Berlin',
-              postalCode: '10115',
-              country: 'DE',
-            }
-          ),
-        },
       ],
     },
     revenue: {
@@ -438,6 +421,23 @@ export function buildDepartmentConfigs(
               bankName: 'Demo Bank',
               accountHolder: 'Max Mustermann',
               verifiedDate: '2024-01-15',
+            }
+          ),
+        },
+        {
+          id: GOV_CREDENTIAL_IDS.addressProof,
+          format: 'jwt_vc_json',
+          profileSuffix: 'address',
+          mapping: { ...W3C_VC_MAPPING },
+          sampleData: buildW3cVcCredentialData(
+            GOV_CREDENTIAL_IDS.addressProof,
+            'Financial Services Authority',
+            gov.serviceBaseUrl,
+            {
+              street: 'Musterstraße 123',
+              city: 'Berlin',
+              postalCode: '10115',
+              country: 'DE',
             }
           ),
         },
