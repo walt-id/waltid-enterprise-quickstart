@@ -31,6 +31,9 @@ import {
   departmentNeedsDsc,
   GOV_CREDENTIAL_IDS,
   photoIdDefaultValues,
+  buildIssuerDisplayConfiguration,
+  firstEnv,
+  displayEnvNames,
 } from '../../gov-services-config.js';
 import { setupLogin } from './auth.js';
 import {
@@ -145,6 +148,13 @@ async function createDepartmentDsc(
     }
   }
 
+  // Use same env-based naming as metadata display
+  const displayName = buildIssuerDisplayConfiguration(
+    dept.issuerDisplayDefaults.envPrefixes,
+    dept.issuerDisplayDefaults.defaultName,
+    dept.issuerDisplayDefaults.defaultLogoAltText
+  )[0].name;
+
   const request = {
     storedCertificateId: dscCertId,
     iacaSigner: {
@@ -157,7 +167,7 @@ async function createDepartmentDsc(
     },
     certificateData: {
       country: 'US',
-      commonName: `${dept.name} Document Signer`,
+      commonName: `${displayName} Document Signer`,
       crlDistributionPointUri: 'https://gov.example/crl',
     },
     dsKeyDescriptor: {
@@ -212,7 +222,7 @@ async function createIacaCertificateForKey(
     storedCertificateId: certId,
     certificateData: {
       country: 'US',
-      commonName,
+      commonName, // Already env-based or passed explicitly
       issuerAlternativeNameConf: {
         uri: `https://gov.example/${certId}`,
       },
@@ -543,10 +553,17 @@ async function loadGovIssuersIntoTrustRegistry(
 
     const credentialTypes = dept.credentials.map(c => c.id);
 
+    // Use same env-based naming as metadata display
+    const displayName = buildIssuerDisplayConfiguration(
+      dept.issuerDisplayDefaults.envPrefixes,
+      dept.issuerDisplayDefaults.defaultName,
+      dept.issuerDisplayDefaults.defaultLogoAltText
+    )[0].name;
+
     trustedEntities.push({
       entityId,
       entityType: 'PID_PROVIDER',
-      legalName: dept.name,
+      legalName: displayName,
       country: 'US',
       services: [
         {
@@ -561,10 +578,16 @@ async function loadGovIssuersIntoTrustRegistry(
   }
 
   if (trustedVerifierCertificatePem) {
+    // Use same env-based naming as metadata display
+    const verifierDisplayName = buildVerifierClientMetadata(
+      ['GOV_CENTRAL_VERIFIER', 'GOV_VERIFIER'],
+      'Government Services Verifier'
+    ).client_name;
+
     trustedEntities.push({
       entityId: 'gov-central-verifier',
       entityType: 'VERIFIER',
-      legalName: 'Government Services Verifier',
+      legalName: verifierDisplayName,
       country: 'US',
       services: [
         {
@@ -697,11 +720,15 @@ async function createUntrustedDepartment(
 
   // 3. Create a private IACA + DSC for the untrusted issuer. Neither is loaded
   // into the trust registry, so trust-list validation has a real negative case.
+  const untrustedIacaName = firstEnv(
+    displayEnvNames(['GOV_UNTRUSTED_ISSUER', 'GOV_ISSUER'], 'IACA_NAME'),
+    'Untrusted Department Test IACA'
+  );
   const untrustedIacaPem = await createIacaCertificateForKey(
     ctx,
     'untrusted-iaca-cert',
     untrustedIacaKeyId,
-    'Untrusted Department Test IACA'
+    untrustedIacaName
   );
 
   const untrustedDeptForDsc: DepartmentConfig = {

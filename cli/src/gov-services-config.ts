@@ -104,7 +104,7 @@ const JWT_VC_PROOF_TYPES = {
   },
 };
 
-function firstEnv(names: string[], fallback: string): string {
+export function firstEnv(names: string[], fallback: string): string {
   for (const name of names) {
     const value = process.env[name];
     if (value) {
@@ -124,7 +124,7 @@ function optionalFirstEnv(names: string[]): string | undefined {
   return undefined;
 }
 
-function displayEnvNames(prefixes: string[], suffix: string): string[] {
+export function displayEnvNames(prefixes: string[], suffix: string): string[] {
   return prefixes.map(prefix => `${prefix}_${suffix}`);
 }
 
