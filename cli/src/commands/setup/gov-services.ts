@@ -8,6 +8,7 @@
  * Configuration is loaded from cli/gov-services.env (see gov-services.env.example).
  */
 
+import { createHash } from 'crypto';
 import { CommandContext } from '../../context.js';
 import {
   RESOURCES,
@@ -46,11 +47,17 @@ import {
   setupCreateIacaCertificate,
 } from './keys.js';
 
-/** Map of department key to their DSC PEM (for X.509-backed issuers) */
+/** Map of department key to their DSC PEM */
 const departmentDscPems: Map<string, string> = new Map();
 const GOV_VERIFIER_CERT_KEY = 'gov-verifier';
 
 type X5Chain = Array<{ type: string; pemEncodedCertificate: string }>;
+
+/** Compute SHA-256 hash of a certificate PEM to use as client ID */
+function computeCertificateHash(pem: string): string {
+  const hash = createHash('sha256').update(pem).digest('hex');
+  return hash;
+}
 
 function buildVerifierCertificateJwks(keyId: string, x5Chain: X5Chain): { keys: Array<Record<string, unknown>> } {
   return {
@@ -63,6 +70,11 @@ function buildVerifierCertificateJwks(keyId: string, x5Chain: X5Chain): { keys: 
       },
     ],
   };
+}
+
+/** Convert X5Chain to x5c array (base64-encoded DER certificates) */
+function buildX5cArray(x5Chain: X5Chain): string[] {
+  return x5Chain.map(cert => pemToX5cCertificate(cert.pemEncodedCertificate));
 }
 
 /** Build x5c chain for profiles using a department's DSC */
@@ -306,6 +318,7 @@ async function createDepartmentSigningKey(
 async function createGovVerifierCertificate(ctx: CommandContext): Promise<{
   x5Chain: X5Chain;
   certificatePem: string;
+  clientId: string;
 }> {
   const signingKeyId = `${ctx.tenantPath}.${RESOURCES.kms}.gov-verifier-signing-key`;
   ctx.log('Create central verifier signing certificate', 'GOV-SETUP');
@@ -344,7 +357,10 @@ async function createGovVerifierCertificate(ctx: CommandContext): Promise<{
     throw new Error('Central verifier certificate chain could not be built');
   }
 
-  return { x5Chain, certificatePem };
+  // Use certificate hash as client_id (cryptographically tied to the DSC)
+  const clientId = "x509_hash:" + computeCertificateHash(certificatePem);
+
+  return { x5Chain, certificatePem, clientId };
 }
 
 /** Create issuer service for a department */
@@ -490,6 +506,30 @@ async function linkGovVerifierToTrustRegistry(ctx: CommandContext): Promise<void
   } catch (error: any) {
     if (error.status === 409 || error.message?.includes('already')) {
       console.log(`   [SKIP] Trust registry already linked to verifier`);
+    } else {
+      throw error;
+    }
+  }
+}
+
+/** Link verifier to KMS for DSC key access */
+async function linkVerifierToKms(
+  ctx: CommandContext,
+  verifierPath: string,
+  kmsPath: string,
+  verifierName: string
+): Promise<void> {
+  ctx.log(`Link ${verifierName} to KMS`, 'GOV-SETUP');
+
+  try {
+    await ctx.orgClient.postRaw(
+      `/v1/${verifierPath}/verifier2-service-api/dependencies/add`,
+      kmsPath
+    );
+    console.log(`   [OK] KMS linked to ${verifierName}`);
+  } catch (error: any) {
+    if (error.status === 409 || error.message?.includes('already')) {
+      console.log(`   [SKIP] KMS already linked to ${verifierName}`);
     } else {
       throw error;
     }
@@ -770,6 +810,54 @@ async function createUntrustedDepartment(
     },
   ];
 
+  // 3b. Create a separate DSC for the untrusted verifier
+  const untrustedVerifierSigningKeyId = `${ctx.tenantPath}.${RESOURCES.kms}.untrusted-verifier-signing-key`;
+  const { created: verifierKeyCreated } = await ctx.tolerantCreate(
+    'Key untrusted-verifier-signing-key',
+    async () => {
+      const response = await ctx.orgClient.post(
+        `/v1/${untrustedVerifierSigningKeyId}/kms-service-api/keys/generate`,
+        { backend: 'jwk', keyType: 'secp256r1' }
+      );
+      return response;
+    }
+  );
+  if (verifierKeyCreated) {
+    console.log(`   [OK] Untrusted verifier signing key created: ${untrustedVerifierSigningKeyId}`);
+  }
+
+  const untrustedVerifierDeptForDsc: DepartmentConfig = {
+    tenantId: untrusted.tenantId,
+    name: 'Untrusted Department Verifier',
+    issuerName: untrusted.verifierName,
+    signingKeyId: untrustedVerifierSigningKeyId,
+    issuerDisplayDefaults: {
+      envPrefixes: ['GOV_UNTRUSTED_VERIFIER', 'GOV_VERIFIER'],
+      defaultName: 'Untrusted Department Verifier',
+      defaultLogoAltText: 'Untrusted department verifier logo',
+      defaultLogoPath: '/logos/gov-untrusted-verifier.png',
+    },
+    credentials: [],
+  };
+  const untrustedVerifierDscPem = await createDepartmentDsc(
+    ctx,
+    'untrusted-verifier',
+    untrustedVerifierDeptForDsc,
+    { pem: untrustedIacaPem, keyIdPath: untrustedIacaKeyId }
+  );
+  // Use certificate hash as client_id (cryptographically tied to the DSC)
+  const untrustedVerifierClientId = computeCertificateHash(untrustedVerifierDscPem);
+  const untrustedVerifierX5Chain = [
+    {
+      type: 'pem-encoded-x509-certificate-descriptor',
+      pemEncodedCertificate: untrustedVerifierDscPem,
+    },
+    {
+      type: 'pem-encoded-x509-certificate-descriptor',
+      pemEncodedCertificate: untrustedIacaPem,
+    },
+  ];
+
   // 4. Create untrusted issuer service
   const issuerConfig = buildDepartmentIssuerConfig(
     organization,
@@ -840,12 +928,13 @@ async function createUntrustedDepartment(
       const verifierRequest = {
         type: 'verifier2',
         baseUrl: gov.serviceBaseUrl,
-        clientId: 'untrusted-verifier',
+        clientId: untrustedVerifierClientId,
+        x5c: buildX5cArray(untrustedVerifierX5Chain),
         clientMetadata: buildVerifierClientMetadata(
           ['GOV_UNTRUSTED_VERIFIER', 'GOV_VERIFIER'],
           'Untrusted Department Verifier',
           `${gov.serviceBaseUrl}/logos/gov-untrusted-verifier.png`,
-          buildVerifierCertificateJwks('untrusted-verifier', untrustedX5Chain)
+          buildVerifierCertificateJwks(untrustedVerifierClientId, untrustedVerifierX5Chain)
         ),
       };
       ctx.saveJson('create-untrusted-verifier-request.json', verifierRequest);
@@ -858,13 +947,17 @@ async function createUntrustedDepartment(
     }
   );
   if (verifierCreated) {
-    console.log(`   [OK] Untrusted verifier created: ${verifierPath} (no trust registry)`);
+    console.log(`   [OK] Untrusted verifier created: ${verifierPath} (clientId: ${untrustedVerifierClientId})`);
   }
+
+  // 7. Link untrusted verifier to KMS (for DSC key access)
+  const centralKmsPath = `${ctx.tenantPath}.${RESOURCES.kms}`;
+  await linkVerifierToKms(ctx, verifierPath, centralKmsPath, 'untrusted verifier');
 }
 async function createGovVerifier(
   ctx: CommandContext,
   gov: GovServicesConfig,
-  verifierCertificate: { x5Chain: X5Chain }
+  verifierCertificate: { x5Chain: X5Chain; clientId: string }
 ): Promise<void> {
   const step = ctx.nextStep();
   ctx.log('Create central government verifier', 'GOV-SETUP');
@@ -875,12 +968,13 @@ async function createGovVerifier(
       const request = {
         type: 'verifier2',
         baseUrl: gov.serviceBaseUrl,
-        clientId: 'gov-verifier',
+        clientId: verifierCertificate.clientId,
+        x5c: buildX5cArray(verifierCertificate.x5Chain),
         clientMetadata: buildVerifierClientMetadata(
           ['GOV_CENTRAL_VERIFIER', 'GOV_VERIFIER'],
           'Government Services Verifier',
           `${gov.serviceBaseUrl}/logos/gov-central-verifier.png`,
-          buildVerifierCertificateJwks('gov-verifier', verifierCertificate.x5Chain)
+          buildVerifierCertificateJwks(verifierCertificate.clientId, verifierCertificate.x5Chain)
         ),
       };
       ctx.saveJson('create-gov-verifier-request.json', request, step);
@@ -895,7 +989,7 @@ async function createGovVerifier(
   );
 
   if (created) {
-    console.log(`   [OK] Verifier created (baseUrl: ${gov.serviceBaseUrl})`);
+    console.log(`   [OK] Verifier created (clientId: ${verifierCertificate.clientId})`);
   }
 }
 
@@ -1010,6 +1104,11 @@ export async function runGovServicesSetup(
   // into the gov trust source below.
   const govVerifierCertificate = await createGovVerifierCertificate(ctx);
   await createGovVerifier(ctx, gov, govVerifierCertificate);
+
+  // 7b. Link central verifier to KMS (for DSC key access)
+  const centralKmsPath = `${ctx.tenantPath}.${RESOURCES.kms}`;
+  const centralVerifierPath = `${ctx.tenantPath}.${RESOURCES.verifier2}`;
+  await linkVerifierToKms(ctx, centralVerifierPath, centralKmsPath, 'central verifier');
 
   // 8. Create trust registry and link services
   await createGovTrustRegistry(ctx);
