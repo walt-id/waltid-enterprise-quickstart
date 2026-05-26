@@ -45,6 +45,9 @@ export interface IssuerDisplayConfiguration {
 export interface VerifierClientMetadata {
   client_name: string;
   logo_uri?: string;
+  jwks?: {
+    keys: Array<Record<string, unknown>>;
+  };
 }
 
 interface IssuerDisplayDefaults {
@@ -150,7 +153,8 @@ export function buildIssuerDisplayConfiguration(
 export function buildVerifierClientMetadata(
   envPrefixes: string[],
   defaultClientName: string,
-  defaultLogoUri?: string
+  defaultLogoUri?: string,
+  jwks?: { keys: Array<Record<string, unknown>> }
 ): VerifierClientMetadata {
   const clientMetadata: VerifierClientMetadata = {
     client_name: firstEnv(displayEnvNames(envPrefixes, 'CLIENT_NAME'), defaultClientName),
@@ -159,6 +163,9 @@ export function buildVerifierClientMetadata(
   const logoUri = optionalFirstEnv(displayEnvNames(envPrefixes, 'LOGO_URI')) || defaultLogoUri;
   if (logoUri) {
     clientMetadata.logo_uri = logoUri;
+  }
+  if (jwks) {
+    clientMetadata.jwks = jwks;
   }
 
   return clientMetadata;

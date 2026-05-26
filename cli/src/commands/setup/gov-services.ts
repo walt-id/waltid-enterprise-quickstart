@@ -38,12 +38,35 @@ import {
 
 /** Map of department key to their DSC PEM (for X.509-backed issuers) */
 const departmentDscPems: Map<string, string> = new Map();
+const GOV_VERIFIER_CERT_KEY = 'gov-verifier';
+
+type X5Chain = Array<{ type: string; pemEncodedCertificate: string }>;
+
+function pemToX5c(pem: string): string {
+  return pem
+    .replace(/-----BEGIN CERTIFICATE-----/g, '')
+    .replace(/-----END CERTIFICATE-----/g, '')
+    .replace(/\s+/g, '');
+}
+
+function buildVerifierCertificateJwks(keyId: string, x5Chain: X5Chain): { keys: Array<Record<string, unknown>> } {
+  return {
+    keys: [
+      {
+        kty: 'EC',
+        use: 'sig',
+        kid: keyId,
+        x5c: x5Chain.map(cert => pemToX5c(cert.pemEncodedCertificate)),
+      },
+    ],
+  };
+}
 
 /** Build x5c chain for profiles using a department's DSC */
 async function buildDepartmentX5Chain(
   ctx: CommandContext,
   deptKey: string
-): Promise<Array<{ type: string; pemEncodedCertificate: string }> | undefined> {
+): Promise<X5Chain | undefined> {
   const dscPem = departmentDscPems.get(deptKey);
   if (!dscPem) {
     return undefined;
@@ -64,7 +87,7 @@ async function buildDepartmentX5Chain(
     }
   }
 
-  const x5Chain: Array<{ type: string; pemEncodedCertificate: string }> = [
+  const x5Chain: X5Chain = [
     {
       type: 'pem-encoded-x509-certificate-descriptor',
       pemEncodedCertificate: dscPem,
@@ -270,6 +293,50 @@ async function createDepartmentSigningKey(
   }
 }
 
+async function createGovVerifierCertificate(ctx: CommandContext): Promise<{
+  x5Chain: X5Chain;
+  certificatePem: string;
+}> {
+  const signingKeyId = `${ctx.tenantPath}.${RESOURCES.kms}.gov-verifier-signing-key`;
+  ctx.log('Create central verifier signing certificate', 'GOV-SETUP');
+
+  const { created: keyCreated } = await ctx.tolerantCreate(
+    'Key gov-verifier-signing-key',
+    async () => {
+      const response = await ctx.orgClient.post(
+        `/v1/${signingKeyId}/kms-service-api/keys/generate`,
+        { backend: 'jwk', keyType: 'secp256r1' }
+      );
+      return response;
+    }
+  );
+  if (keyCreated) {
+    console.log(`   [OK] Central verifier signing key created: ${signingKeyId}`);
+  }
+
+  const verifierDeptForDsc: DepartmentConfig = {
+    tenantId: ctx.config.tenant,
+    name: 'Government Services Verifier',
+    issuerName: RESOURCES.verifier2,
+    signingKeyId,
+    issuerDisplayDefaults: {
+      envPrefixes: ['GOV_CENTRAL_VERIFIER', 'GOV_VERIFIER'],
+      defaultName: 'Government Services Verifier',
+      defaultLogoAltText: 'Government services verifier logo',
+      defaultLogoPath: '/logos/gov-central-verifier.png',
+    },
+    credentials: [],
+  };
+
+  const certificatePem = await createDepartmentDsc(ctx, GOV_VERIFIER_CERT_KEY, verifierDeptForDsc);
+  const x5Chain = await buildDepartmentX5Chain(ctx, GOV_VERIFIER_CERT_KEY);
+  if (!x5Chain) {
+    throw new Error('Central verifier certificate chain could not be built');
+  }
+
+  return { x5Chain, certificatePem };
+}
+
 /** Create issuer service for a department */
 async function createDepartmentIssuer(
   ctx: CommandContext,
@@ -418,7 +485,8 @@ async function loadGovIssuersIntoTrustRegistry(
   ctx: CommandContext,
   organization: string,
   departments: Record<string, DepartmentConfig>,
-  gov: GovServicesConfig
+  gov: GovServicesConfig,
+  trustedVerifierCertificatePem?: string
 ): Promise<void> {
   const step = ctx.nextStep();
   ctx.log('Load trusted government issuers into trust registry', 'GOV-SETUP');
@@ -459,6 +527,29 @@ async function loadGovIssuersIntoTrustRegistry(
           status: 'GRANTED',
           statusStart: new Date().toISOString(),
           identities,
+        },
+      ],
+    });
+  }
+
+  if (trustedVerifierCertificatePem) {
+    trustedEntities.push({
+      entityId: 'gov-central-verifier',
+      entityType: 'VERIFIER',
+      legalName: 'Government Services Verifier',
+      country: 'US',
+      services: [
+        {
+          serviceId: 'gov-central-verification',
+          serviceType: 'VERIFIER',
+          status: 'GRANTED',
+          statusStart: new Date().toISOString(),
+          identities: [
+            {
+              matchType: 'CERTIFICATE_PEM',
+              value: trustedVerifierCertificatePem,
+            },
+          ],
         },
       ],
     });
@@ -692,7 +783,8 @@ async function createUntrustedDepartment(
         clientMetadata: buildVerifierClientMetadata(
           ['GOV_UNTRUSTED_VERIFIER', 'GOV_VERIFIER'],
           'Untrusted Department Verifier',
-          `${gov.serviceBaseUrl}/logos/gov-untrusted-verifier.png`
+          `${gov.serviceBaseUrl}/logos/gov-untrusted-verifier.png`,
+          buildVerifierCertificateJwks('untrusted-verifier', untrustedX5Chain)
         ),
       };
       ctx.saveJson('create-untrusted-verifier-request.json', verifierRequest);
@@ -710,7 +802,8 @@ async function createUntrustedDepartment(
 }
 async function createGovVerifier(
   ctx: CommandContext,
-  gov: GovServicesConfig
+  gov: GovServicesConfig,
+  verifierCertificate: { x5Chain: X5Chain }
 ): Promise<void> {
   const step = ctx.nextStep();
   ctx.log('Create central government verifier', 'GOV-SETUP');
@@ -725,7 +818,8 @@ async function createGovVerifier(
         clientMetadata: buildVerifierClientMetadata(
           ['GOV_CENTRAL_VERIFIER', 'GOV_VERIFIER'],
           'Government Services Verifier',
-          `${gov.serviceBaseUrl}/logos/gov-central-verifier.png`
+          `${gov.serviceBaseUrl}/logos/gov-central-verifier.png`,
+          buildVerifierCertificateJwks('gov-verifier', verifierCertificate.x5Chain)
         ),
       };
       ctx.saveJson('create-gov-verifier-request.json', request, step);
@@ -796,10 +890,11 @@ async function createGovWallet(ctx: CommandContext): Promise<void> {
  * 4. Department tenants (HR, Identity, Revenue, Finance)
  * 5. Signing keys for each department (in central KMS)
  * 6. DSCs for departments (using their signing key)
+ * 7. Central verifier certificate (loaded into trust registry)
  * 8. Trust registry service (linked to verifier)
  * 9. Issuers for each department
  * 10. Credential profiles for each credential type
- * 11. All trusted issuers loaded into trust registry (DSCs)
+ * 11. All trusted issuers and central verifier loaded into trust registry (DSCs)
  * 12. Untrusted department with issuer + verifier (for negative test cases)
  */
 export async function runGovServicesSetup(
@@ -828,7 +923,6 @@ export async function runGovServicesSetup(
   await setupCreateServices(ctx);
   await setupLinkX509Dependencies(ctx);
   await createGovWallet(ctx);
-  await createGovVerifier(ctx, gov);
 
   // 2. Import keys and create IACA certificate (needed for department DSCs)
   await setupImportKeys(ctx);
@@ -851,6 +945,11 @@ export async function runGovServicesSetup(
     }
   }
 
+  // 7. Create a certificate-backed central verifier. Its certificate is loaded
+  // into the gov trust source below.
+  const govVerifierCertificate = await createGovVerifierCertificate(ctx);
+  await createGovVerifier(ctx, gov, govVerifierCertificate);
+
   // 8. Create trust registry and link services
   await createGovTrustRegistry(ctx);
   await linkGovVerifierToTrustRegistry(ctx);
@@ -865,8 +964,14 @@ export async function runGovServicesSetup(
     await createDepartmentProfiles(ctx, organization, deptKey, dept);
   }
 
-  // 11. Load all trusted issuers into trust registry
-  await loadGovIssuersIntoTrustRegistry(ctx, organization, departments, gov);
+  // 11. Load all trusted issuers and the central verifier into trust registry
+  await loadGovIssuersIntoTrustRegistry(
+    ctx,
+    organization,
+    departments,
+    gov,
+    govVerifierCertificate.certificatePem
+  );
 
   // 12. Create untrusted department (issuer + verifier for negative cases)
   await createUntrustedDepartment(ctx, organization, untrustedDept, gov);
@@ -888,6 +993,6 @@ export async function runGovServicesSetup(
   console.log(`  - Tenant: ${organization}.${untrustedDept.tenantId}`);
   console.log(`  - Issuer: ${organization}.${untrustedDept.tenantId}.${untrustedDept.issuerName}`);
   console.log(`    Profile: ${organization}.${untrustedDept.tenantId}.${untrustedDept.issuerName}.${untrustedDept.credentialProfileSuffix}`);
-  console.log(`  - Verifier (no trust registry): ${organization}.${untrustedDept.tenantId}.${untrustedDept.verifierName}`);
+  console.log(`  - Verifier (certificate NOT in trust registry): ${organization}.${untrustedDept.tenantId}.${untrustedDept.verifierName}`);
   console.log(`\nTrust registry source ID: ${gov.trustedSourceId}`);
 }
