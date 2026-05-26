@@ -9,7 +9,14 @@
  */
 
 import { CommandContext } from '../../context.js';
-import { RESOURCES, CERT_IDS, KEY_IDS, defaultWalletKeyReference, defaultWalletDidReference } from '../../config.js';
+import {
+  RESOURCES,
+  CERT_IDS,
+  KEY_IDS,
+  defaultWalletKeyReference,
+  defaultWalletDidReference,
+  pemToX5cCertificate,
+} from '../../config.js';
 import {
   GovServicesConfig,
   DepartmentConfig,
@@ -42,13 +49,6 @@ const GOV_VERIFIER_CERT_KEY = 'gov-verifier';
 
 type X5Chain = Array<{ type: string; pemEncodedCertificate: string }>;
 
-function pemToX5c(pem: string): string {
-  return pem
-    .replace(/-----BEGIN CERTIFICATE-----/g, '')
-    .replace(/-----END CERTIFICATE-----/g, '')
-    .replace(/\s+/g, '');
-}
-
 function buildVerifierCertificateJwks(keyId: string, x5Chain: X5Chain): { keys: Array<Record<string, unknown>> } {
   return {
     keys: [
@@ -56,7 +56,7 @@ function buildVerifierCertificateJwks(keyId: string, x5Chain: X5Chain): { keys: 
         kty: 'EC',
         use: 'sig',
         kid: keyId,
-        x5c: x5Chain.map(cert => pemToX5c(cert.pemEncodedCertificate)),
+        x5c: x5Chain.map(cert => pemToX5cCertificate(cert.pemEncodedCertificate)),
       },
     ],
   };
@@ -341,6 +341,7 @@ async function createGovVerifierCertificate(ctx: CommandContext): Promise<{
 async function createDepartmentIssuer(
   ctx: CommandContext,
   organization: string,
+  deptKey: string,
   dept: DepartmentConfig,
   gov: GovServicesConfig
 ): Promise<void> {
@@ -350,7 +351,12 @@ async function createDepartmentIssuer(
   const { created } = await ctx.tolerantCreate(
     `Issuer ${dept.issuerName}`,
     async () => {
-      const request = buildDepartmentIssuerConfig(organization, ctx.tenantPath, dept, gov);
+      const dscPem = departmentDscPems.get(deptKey);
+      if (!dscPem) {
+        throw new Error(`Document signer certificate required for signed metadata: ${dept.name}`);
+      }
+
+      const request = buildDepartmentIssuerConfig(organization, ctx.tenantPath, dept, gov, dscPem);
       ctx.saveJson(`create-issuer-${dept.tenantId}-request.json`, request);
 
       const response = await ctx.orgClient.post(
@@ -474,6 +480,28 @@ async function linkGovVerifierToTrustRegistry(ctx: CommandContext): Promise<void
   } catch (error: any) {
     if (error.status === 409 || error.message?.includes('already')) {
       console.log(`   [SKIP] Trust registry already linked to verifier`);
+    } else {
+      throw error;
+    }
+  }
+}
+
+/** Link central wallet to trust registry for signed issuer metadata trust checks */
+async function linkGovWalletToTrustRegistry(ctx: CommandContext): Promise<void> {
+  ctx.log('Link central wallet to trust registry', 'GOV-SETUP');
+
+  const trustRegistryTarget = `${ctx.tenantPath}.${RESOURCES.trustRegistry}`;
+  const walletTarget = `${ctx.tenantPath}.${RESOURCES.wallet}`;
+
+  try {
+    await ctx.orgClient.postRaw(
+      `/v1/${walletTarget}/wallet-service-api/dependencies/add`,
+      trustRegistryTarget
+    );
+    console.log(`   [OK] Trust registry linked to wallet`);
+  } catch (error: any) {
+    if (error.status === 409 || error.message?.includes('already')) {
+      console.log(`   [SKIP] Trust registry already linked to wallet`);
     } else {
       throw error;
     }
@@ -716,7 +744,13 @@ async function createUntrustedDepartment(
   ];
 
   // 4. Create untrusted issuer service
-  const issuerConfig = buildDepartmentIssuerConfig(organization, ctx.tenantPath, untrustedDeptForDsc, gov);
+  const issuerConfig = buildDepartmentIssuerConfig(
+    organization,
+    ctx.tenantPath,
+    untrustedDeptForDsc,
+    gov,
+    untrustedDscPem
+  );
 
   const { created: issuerCreated } = await ctx.tolerantCreate(
     `Issuer ${untrusted.issuerName}`,
@@ -953,10 +987,11 @@ export async function runGovServicesSetup(
   // 8. Create trust registry and link services
   await createGovTrustRegistry(ctx);
   await linkGovVerifierToTrustRegistry(ctx);
+  await linkGovWalletToTrustRegistry(ctx);
 
   // 9. Create issuers for each department
-  for (const dept of Object.values(departments)) {
-    await createDepartmentIssuer(ctx, organization, dept, gov);
+  for (const [deptKey, dept] of Object.entries(departments)) {
+    await createDepartmentIssuer(ctx, organization, deptKey, dept, gov);
   }
 
   // 10. Create credential profiles

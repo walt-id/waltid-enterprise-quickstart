@@ -10,7 +10,7 @@
  */
 
 import { join } from 'path';
-import { buildOrgUrl } from './config.js';
+import { buildOrgUrl, buildSignedMetadataConfig } from './config.js';
 import { loadEnvFile } from './env.js';
 
 export interface GovServicesConfig {
@@ -579,7 +579,8 @@ export function buildDepartmentIssuerConfig(
   organization: string,
   mainTenantPath: string,
   dept: DepartmentConfig,
-  gov: GovServicesConfig
+  gov: GovServicesConfig,
+  metadataSigningCertificatePem?: string
 ): Record<string, unknown> {
   const issuerPath = `${organization}.${dept.tenantId}.${dept.issuerName}`;
   const kmsRef = `${mainTenantPath}.kms`;
@@ -613,6 +614,10 @@ export function buildDepartmentIssuerConfig(
     ),
     authProviderConfiguration: dept.authProviderConfiguration,
   };
+
+  if (metadataSigningCertificatePem) {
+    config.signedMetadataConfig = buildSignedMetadataConfig(dept.signingKeyId, [metadataSigningCertificatePem]);
+  }
 
   if (Object.keys(sdJwtVcTypeMetadata).length > 0) {
     config.sdJwtVcTypeMetadataConfiguration = sdJwtVcTypeMetadata;
