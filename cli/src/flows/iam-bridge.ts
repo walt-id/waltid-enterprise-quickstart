@@ -68,33 +68,68 @@ async function setupIamBridge(ctx: CommandContext): Promise<void> {
   console.log(`   [INFO] IAM Bridge Issuer URL: ${issuerUrl}`);
   console.log(`   [INFO] Enterprise UI URL: ${webWalletBaseUrl}`);
   
-  // Standard cross-device verification setup for CLI testing
-  // Uses ISO mDL format - same as the main verification flow
-  const verificationSetup = {
-    flow_type: 'cross_device',
-    core_flow: {
-      dcql_query: {
-        credentials: [
-          {
-            id: 'my_mdl',
-            format: 'mso_mdoc',
-            meta: {
-              doctype_value: 'org.iso.18013.5.1.mDL',
-            },
-            claims: [
-              { path: ['org.iso.18013.5.1', 'family_name'] },
-              { path: ['org.iso.18013.5.1', 'given_name'] },
-              { path: ['org.iso.18013.5.1', 'birth_date'] },
-              { path: ['org.iso.18013.5.1', 'document_number'] },
-              { path: ['org.iso.18013.5.1', 'issue_date'] },
-              { path: ['org.iso.18013.5.1', 'expiry_date'] },
-              { path: ['org.iso.18013.5.1', 'issuing_country'] },
-              { path: ['org.iso.18013.5.1', 'issuing_authority'] },
-              { path: ['org.iso.18013.5.1', 'un_distinguishing_sign'] },
-            ],
-          },
+  // DCQL query for mDL credential verification
+  const dcqlQuery = {
+    credentials: [
+      {
+        id: 'my_mdl',
+        format: 'mso_mdoc',
+        meta: {
+          doctype_value: 'org.iso.18013.5.1.mDL',
+        },
+        claims: [
+          { path: ['org.iso.18013.5.1', 'family_name'] },
+          { path: ['org.iso.18013.5.1', 'given_name'] },
+          { path: ['org.iso.18013.5.1', 'birth_date'] },
+          { path: ['org.iso.18013.5.1', 'document_number'] },
+          { path: ['org.iso.18013.5.1', 'issue_date'] },
+          { path: ['org.iso.18013.5.1', 'expiry_date'] },
+          { path: ['org.iso.18013.5.1', 'issuing_country'] },
+          { path: ['org.iso.18013.5.1', 'issuing_authority'] },
+          { path: ['org.iso.18013.5.1', 'un_distinguishing_sign'] },
         ],
       },
+    ],
+  };
+  
+  // Cross-device (QR code) verification setup
+  const qrVerificationSetup = {
+    flow_type: 'cross_device',
+    core_flow: {
+      dcql_query: dcqlQuery,
+    },
+  };
+  
+  // Deep link verification setup (same as QR but used for mobile)
+  const deepLinkVerificationSetup = {
+    flow_type: 'cross_device',
+    core_flow: {
+      dcql_query: dcqlQuery,
+    },
+  };
+  
+  // Multi-flow configuration - enable QR, deep link, and web wallet by default
+  // DC API is disabled by default (requires explicit expectedOrigins configuration)
+  const flows = {
+    qr: {
+      enabled: true,
+      buttonLabel: 'Scan QR Code',
+      verificationSetup: qrVerificationSetup,
+    },
+    dc_api: {
+      enabled: false, // Disabled by default - requires explicit expectedOrigins
+      buttonLabel: 'Browser Wallet (DC API)',
+      // DC API setup would need: expectedOrigins, key, x5c for signed requests
+    },
+    deep_link: {
+      enabled: true,
+      buttonLabel: 'Open Mobile Wallet',
+      verificationSetup: deepLinkVerificationSetup,
+    },
+    web_wallet: {
+      enabled: true,
+      buttonLabel: 'Open Web Wallet',
+      targetUrl: webWalletBaseUrl,
     },
   };
   
@@ -125,9 +160,10 @@ async function setupIamBridge(ctx: CommandContext): Promise<void> {
       { oidcClaim: 'issuing_authority', credentialPath: '$["org.iso.18013.5.1"]["issuing_authority"]', transform: 'NONE' },
       { oidcClaim: 'un_distinguishing_sign', credentialPath: '$["org.iso.18013.5.1"]["un_distinguishing_sign"]', transform: 'NONE' },
     ],
-    // Standard cross-device verification setup for CLI testing
-    // (DC API is handled separately in the browser with dc_api=true)
-    defaultVerificationSetup: verificationSetup,
+    // Multi-flow configuration (WAL-1039)
+    flows: flows,
+    // Keep defaultVerificationSetup for backward compatibility with legacy code paths
+    defaultVerificationSetup: qrVerificationSetup,
     tokenLifetime: {
       idTokenExpirySeconds: 3600,
       accessTokenExpirySeconds: 3600,
@@ -153,6 +189,8 @@ async function setupIamBridge(ctx: CommandContext): Promise<void> {
   ctx.saveJson('create-iam-bridge-response.json', response.data, step);
   
   console.log(`   [OK] IAM Bridge service created at ${iamBridgePath}`);
+  console.log(`   [INFO] Enabled flows: QR, Deep Link, Web Wallet`);
+  console.log(`   [INFO] DC API disabled by default (requires explicit configuration)`);
 }
 
 /** Configure verification setup for IAM Bridge */
@@ -488,53 +526,39 @@ async function simulateOidcAuthorize(ctx: CommandContext): Promise<{ bridgeSessi
   const state = `test-state-${Date.now()}`;
   const nonce = `test-nonce-${Date.now()}`;
   
-  // Make authorize request using fetch for more control
-  const authorizeUrl = `/v1/${iamBridgePath}/iam-bridge-api/authorize?` +
-    `response_type=code&` +
-    `client_id=${KEYCLOAK_CLIENT_ID}&` +
-    `redirect_uri=${encodeURIComponent(redirectUri)}&` +
-    `scope=openid%20profile%20email&` +
-    `state=${state}&` +
-    `nonce=${nonce}`;
+  // With the new multi-flow architecture (WAL-1039), /authorize just renders a button page.
+  // We need to call /sessions/create to actually create a verification session.
+  // For CLI testing, we use the QR flow type.
+  const createSessionRequest = {
+    client_id: KEYCLOAK_CLIENT_ID,
+    redirect_uri: redirectUri,
+    response_type: 'code',
+    scope: 'openid profile email',
+    state: state,
+    nonce: nonce,
+    flow_type: 'qr', // Use QR flow for CLI testing
+  };
   
-  const fullUrl = `${ctx.orgBaseUrl}${authorizeUrl}`;
-  const headers: Record<string, string> = {};
-  if (ctx.ctx.token) {
-    headers['Authorization'] = `Bearer ${ctx.ctx.token}`;
+  ctx.saveJson('iam-bridge-create-session-request.json', createSessionRequest, step);
+  
+  const response = await ctx.orgClient.post(
+    `/v1/${iamBridgePath}/iam-bridge-api/sessions/create`,
+    createSessionRequest
+  );
+  
+  const data = response.data;
+  ctx.saveJson('iam-bridge-create-session-response.json', data, step);
+  
+  if (!data.success) {
+    throw new Error(`Failed to create session: ${data.error_description || data.error}`);
   }
   
-  const response = await fetch(fullUrl, {
-    method: 'GET',
-    headers,
-    redirect: 'manual',
-  });
-  
-  const html = await response.text();
-  
-  // Parse the HTML response to extract session info
-  // Look for various patterns the HTML might use
-  const sessionIdMatch = html.match(/sessionId['": \s]*['"]([^'"]+)['"]/) || 
-                         html.match(/data-session-id=['"]([^'"]+)['"]/) ||
-                         html.match(/bridgeSessionId['": \s]*['"]([^'"]+)['"]/) ||
-                         html.match(/\/sessions\/([a-f0-9-]+)\/status/);
-  const verificationUrlMatch = html.match(/verificationUrl['": \s]*['"]([^'"]+)['"]/) ||
-                               html.match(/(openid4vp:\/\/[^'"<>\s]+)/) ||
-                               html.match(/data-verification-url=['"]([^'"]+)['"]/) ||
-                               html.match(/text:\s*['"]?(openid4vp:\/\/[^'"]+)['"]?/);  
-  if (!sessionIdMatch || !verificationUrlMatch) {
-    ctx.saveJson('iam-bridge-authorize-raw.html', html, step);
-    console.log('   [DEBUG] Raw HTML saved to logs - could not parse session info');
-    throw new Error('Could not extract session info from authorize response');
-  }
-  
-  const bridgeSessionId = sessionIdMatch[1];
-  let verificationUrl = verificationUrlMatch[1];
-  verificationUrl = verificationUrl.replace(/\\u0026/g, '&').replace(/&amp;/g, '&');
-  
-  ctx.saveJson('iam-bridge-authorize-response.json', { bridgeSessionId, verificationUrl, state, nonce }, step);
+  const bridgeSessionId = data.bridge_session_id;
+  const verificationUrl = data.verification_url;
   
   console.log(`   [OK] Bridge session created: ${bridgeSessionId}`);
-  console.log(`        Verification URL: ${verificationUrl.substring(0, 80)}...`);
+  console.log(`        Flow type: ${data.flow_type}`);
+  console.log(`        Verification URL: ${verificationUrl?.substring(0, 80)}...`);
   
   // Store for wallet presentation
   ctx.ctx.sessionId = bridgeSessionId;
@@ -542,7 +566,6 @@ async function simulateOidcAuthorize(ctx: CommandContext): Promise<{ bridgeSessi
   
   return { bridgeSessionId, verificationUrl };
 }
-
 /** Poll IAM Bridge session status */
 async function pollSessionStatus(ctx: CommandContext, bridgeSessionId: string): Promise<any> {
   const step = ctx.nextStep();

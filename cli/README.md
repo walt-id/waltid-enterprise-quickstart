@@ -187,16 +187,25 @@ npx tsx walt.ts --flow-credential-revocation
 
 Demonstrates the IAM Bridge service which acts as an OIDC Identity Provider backed by Verifiable Credential presentations. This enables IAM systems like Keycloak, Auth0, Okta, or Entra ID to accept VC-based logins.
 
+**Multi-Flow Architecture (WAL-1039):**
+The IAM Bridge supports multiple presentation flows, each configurable independently:
+- **QR Code**: Cross-device flow - scan QR code with mobile wallet
+- **DC API**: Chrome Digital Credentials API for browser-native wallets
+- **Deep Link**: Same-device flow using `openid4vp://` deep links
+- **Web Wallet**: Opens the Enterprise UI web wallet
+
+By default, QR, Deep Link, and Web Wallet flows are enabled. DC API requires explicit configuration.
+
 **Prerequisites:**
 - Base setup completed (`--setup-all`)
 - Keycloak instance (local Docker or remote)
 
 **Flow Steps:**
-1. Create IAM Bridge service with Keycloak client configuration
+1. Create IAM Bridge service with multi-flow configuration
 2. Generate Keycloak realm with IAM Bridge as identity provider
 3. Start Keycloak (if local) or provide realm for import (if remote)
 4. Issue mDL credential to wallet
-5. Simulate OIDC authorization request
+5. Create verification session via `/sessions/create` endpoint
 6. Present credential via IAM Bridge
 7. Exchange authorization code for tokens
 8. Verify user info contains credential claims
@@ -364,7 +373,7 @@ export IAM_BRIDGE_ISSUER_URL=https://iam-bridge.enterprise.test.waltid.cloud
 export ENTERPRISE_UI_URL=https://waltid.enterprise.test.waltid.cloud
 
 # Run setup and IAM Bridge flow
-npx tsx walt.ts --setup-all
+npx tsx walt.ts --recreate
 npx tsx walt.ts --flow-iam-bridge
 
 # The flow will generate keycloak-realm.json - import it to your Keycloak
@@ -476,3 +485,11 @@ See [AGENTS.md](./AGENTS.md) for detailed guidance on:
 - Adding new run commands
 - Creating new flows
 - API patterns and conventions
+
+## IAM Bridge Demo
+export BASE_URL=https://iam-bridge.enterprise.test.waltid.cloud
+export ORGANIZATION=waltid
+export KEYCLOAK_URL=https://keycloak.demo.walt.id
+export KEYCLOAK_REALM=waltid-vc
+export IAM_BRIDGE_ISSUER_URL=https://iam-bridge.enterprise.test.waltid.cloud
+export ENTERPRISE_UI_URL=https://iam-bridge.enterprise.test.waltid.cloud
