@@ -53,9 +53,19 @@ const GOV_VERIFIER_CERT_KEY = 'gov-verifier';
 
 type X5Chain = Array<{ type: string; pemEncodedCertificate: string }>;
 
-/** Compute SHA-256 hash of a certificate PEM to use as client ID */
+/** Compute SHA-256 hash of a certificate's DER encoding to use as client ID (Base64URL encoded) */
 function computeCertificateHash(pem: string): string {
-  const hash = createHash('sha256').update(pem).digest('hex');
+  // Extract base64 content from PEM (strip headers and whitespace)
+  const base64 = pem
+    .replace(/-----BEGIN CERTIFICATE-----/g, '')
+    .replace(/-----END CERTIFICATE-----/g, '')
+    .replace(/\s+/g, '');
+
+  // Decode base64 to get DER bytes
+  const der = Buffer.from(base64, 'base64');
+
+  // Hash the DER-encoded certificate and encode as Base64URL (as per OpenID4VP x509_hash spec)
+  const hash = createHash('sha256').update(der).digest('base64url');
   return hash;
 }
 

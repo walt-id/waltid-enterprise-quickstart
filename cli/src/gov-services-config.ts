@@ -269,6 +269,12 @@ const W3C_VC_CONTEXT = ['https://www.w3.org/2018/credentials/v1', 'https://purl.
 /** Standard W3C VC mapping for dynamic fields */
 const W3C_VC_MAPPING = {
   id: '<uuid>',
+  issuer: {
+    id: '<issuerId>',
+  },
+  credentialSubject: {
+    id: '<subjectDid>',
+  },
   issuanceDate: '<timestamp>',
   expirationDate: '<timestamp-in:365d>',
 };
@@ -288,10 +294,12 @@ function buildW3cVcCredentialData(
     issuanceDate: '2024-01-01T00:00:00Z',
     issuer: {
       type: ['Profile'],
+      id: 'did:placeholder:issuer',
       name: issuerName,
       url: issuerUrl,
     },
     credentialSubject: {
+      id: 'did:placeholder:subject',
       type: ['Person'],
       ...subjectData,
     },
