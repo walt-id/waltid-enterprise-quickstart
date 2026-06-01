@@ -41,6 +41,7 @@ import {
   setupEtsiTrustRegistry,
   runBankTenantSetup,
   runGovServicesSetup,
+  runEudiDemoSetup,
 } from './setup/index.js';
 
 import {
