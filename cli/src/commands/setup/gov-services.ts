@@ -856,7 +856,7 @@ async function createUntrustedDepartment(
     { pem: untrustedIacaPem, keyIdPath: untrustedIacaKeyId }
   );
   // Use certificate hash as client_id (cryptographically tied to the DSC)
-  const untrustedVerifierClientId = computeCertificateHash(untrustedVerifierDscPem);
+  const untrustedVerifierClientId = "x509_hash:" + computeCertificateHash(untrustedVerifierDscPem);
   const untrustedVerifierX5Chain = [
     {
       type: 'pem-encoded-x509-certificate-descriptor',
