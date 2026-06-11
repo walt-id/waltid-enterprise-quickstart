@@ -83,3 +83,43 @@ This will create a host alias for the enterprise stack at `probable-boxer-proven
 
 This will allow you to use different public URLs for the enterprise stack which are accessible over the internet, making it easier to test the enterprise stack in a real-world scenario.
 
+
+## Self-Signed Certificates (Remote Systems)
+
+When connecting to remote systems with self-signed certificates, you'll get:
+```
+Error code: DEPTH_ZERO_SELF_SIGNED_CERT
+```
+
+### Solution 1: Use the insecure wrapper (quick)
+```bash
+ADMIN_EMAIL=admin@example.com \
+ADMIN_PASSWORD=yourpassword \
+BASE_URL=https://your-remote-system.example.com \
+./walt-insecure.sh --setup-all
+```
+
+### Solution 2: Set environment variable
+```bash
+export NODE_TLS_REJECT_UNAUTHORIZED=0
+ADMIN_EMAIL=admin@example.com \
+ADMIN_PASSWORD=yourpassword \
+BASE_URL=https://your-remote-system.example.com \
+npx tsx walt.ts --setup-all
+```
+
+### Solution 3: Install the CA certificate (production)
+```bash
+# Download the CA certificate
+curl -k https://your-remote-system.example.com/ca.crt > ca.crt
+
+# Install it (Ubuntu/Debian)
+sudo cp ca.crt /usr/local/share/ca-certificates/
+sudo update-ca-certificates
+
+# Now Node.js will trust it
+npx tsx walt.ts --setup-all
+```
+
+**⚠️ Warning:** `NODE_TLS_REJECT_UNAUTHORIZED=0` disables certificate validation and should only be used for testing/development systems with self-signed certificates.
+
