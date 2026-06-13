@@ -31,7 +31,8 @@ export async function setupCreateOidcBridge(ctx: CommandContext): Promise<void> 
   }
   
   // Get configuration from context or environment
-  const issuerUrl = ctx.config.iamBridgeIssuerUrl || ctx.orgBaseUrl;
+  // Use orgBaseUrl which is already properly constructed with protocol and port
+  const issuerUrl = ctx.orgBaseUrl;
   const clientId = process.env.OIDC_BRIDGE_CLIENT_ID || DEFAULT_CLIENT_ID;
   const clientSecret = process.env.OIDC_BRIDGE_CLIENT_SECRET || DEFAULT_CLIENT_SECRET;
   const redirectUri = process.env.OIDC_BRIDGE_REDIRECT_URI || 'http://login-app.localhost:3001/login/oidc-callback';
