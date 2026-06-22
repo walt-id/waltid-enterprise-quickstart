@@ -73,6 +73,30 @@ export const MDL_DOC_TYPE = 'org.iso.18013.5.1.mDL';
 /** Verifier2 client ID */
 export const VERIFIER2_CLIENT_ID = 'walt-cli-verifier';
 
+export type SignedMetadataConfig = {
+  enabled: boolean;
+  signingKeyId: string;
+  x5cCertificateChain: string[];
+};
+
+export function pemToX5cCertificate(pem: string): string {
+  return pem
+    .replace(/-----BEGIN CERTIFICATE-----/g, '')
+    .replace(/-----END CERTIFICATE-----/g, '')
+    .replace(/\s+/g, '');
+}
+
+export function buildSignedMetadataConfig(
+  signingKeyId: string,
+  certificatePems: string[]
+): SignedMetadataConfig {
+  return {
+    enabled: true,
+    signingKeyId,
+    x5cCertificateChain: certificatePems.map(pemToX5cCertificate),
+  };
+}
+
 // ============================================================================
 // Type Definitions
 // ============================================================================
