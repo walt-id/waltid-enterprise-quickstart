@@ -56,3 +56,6 @@ export { runBankTenantSetup } from './bank-tenant.js';
 
 // Government services tenant
 export { runGovServicesSetup } from './gov-services.js';
+
+// OIDC Bridge
+export { setupCreateOidcBridge } from './oidc-bridge.js';

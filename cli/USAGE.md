@@ -85,6 +85,10 @@ These commands create resources in the enterprise stack. Run them in order, or u
 | `--setup-etsi-trust-registry` | Complete ETSI trust registry setup (create, link, import lists) |
 | `--setup-import-trust-list <file>` | Import trust list from file (TSL XML, LoTE JSON) |
 | `--clear-wallet-credentials` | Clear all credentials from wallet (useful between flows) |
+| `--setup-create-oidc-bridge` | Create OIDC Bridge with default settings |
+
+
+
 
 ### Run Commands
 

@@ -56,6 +56,7 @@ import {
   setupCreateTrustRegistry,
   setupEtsiTrustRegistry,
   setupImportTrustList,
+  setupCreateOidcBridge,
   
   // Run commands
   runCreateCredentialOffer,
@@ -141,6 +142,7 @@ Additional Setup Commands:
   --setup-create-trust-registry  Create trust registry service
   --setup-etsi-trust-registry  Complete ETSI trust registry setup (create, link, import lists)
   --setup-import-trust-list <file>  Import trust list from file
+  --setup-create-oidc-bridge  Create OIDC Bridge service (for Ory Hydra integration)
   --clear-wallet-credentials  Clear all credentials from wallet (useful between flows)
 
 Run Commands (execute use cases):
@@ -258,6 +260,7 @@ async function main(): Promise<void> {
     '--setup-create-trust-registry', '--setup-etsi-trust-registry', '--setup-import-trust-list',
     '--setup-create-superadmin', '--setup-create-organization',
     '--setup-create-admin-role', '--setup-create-admin-account',
+    '--setup-create-oidc-bridge',
     '--clear-wallet-credentials',
     '--run-all', '--run-create-credential-offer', '--run-create-credential-offer-with-status',
     '--run-wallet-receive-credential',
@@ -378,6 +381,7 @@ async function main(): Promise<void> {
       '--setup-obtain-wallet-attestation': () => setupObtainWalletAttestation(ctx),
       '--setup-create-trust-registry': () => setupCreateTrustRegistry(ctx),
       '--setup-etsi-trust-registry': () => setupEtsiTrustRegistry(ctx),
+      '--setup-create-oidc-bridge': () => setupCreateOidcBridge(ctx),
       '--clear-wallet-credentials': () => clearWalletCredentials(ctx),
     };
 
