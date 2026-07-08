@@ -67,7 +67,7 @@ npx tsx walt.ts --setup-gov-services
 
 ## Advanced Usage
 
-You can also run specific setup commands by running
+You can also run specific setup commands by running. Check the [docs folder](docs) for the full set of commands.
 
 ```bash
 npx tsx walt.ts --setup-<command>
