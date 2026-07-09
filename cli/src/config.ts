@@ -49,7 +49,7 @@ export const KEY_IDS = {
   attesterSigningKey: 'attester-signing-key',
 } as const;
 
-/** Default IDs created by wallet-service init-wallet */
+/** Default IDs created by wallet-service init-services */
 export const WALLET_DEFAULT_IDS = {
   key: 'wallet_key',
   did: 'wallet_did',
@@ -259,14 +259,64 @@ export function defaultHostAliasTarget(organization: string): string {
   return `${organization}.host-alias`;
 }
 
-/** Default wallet key reference created by init-wallet */
+/** Default wallet key reference created by init-services */
 export function defaultWalletKeyReference(tenantPath: string): string {
   return `${tenantPath}.${RESOURCES.walletKms}.${WALLET_DEFAULT_IDS.key}`;
 }
 
-/** Default wallet DID reference created by init-wallet */
+/** Default wallet DID reference created by init-services */
 export function defaultWalletDidReference(tenantPath: string): string {
   return `${tenantPath}.${RESOURCES.walletDidStore}.${WALLET_DEFAULT_IDS.did}`;
+}
+
+/** Build the Wallet2 composable init request used by /resource-api/services/init. */
+export function buildWalletInitServicesRequest(
+  tenantPath: string,
+  didType: 'key' | 'jwk' | 'web' = 'key',
+  keyType = 'secp256r1'
+) {
+  const walletTarget = `${tenantPath}.${RESOURCES.wallet}`;
+  const kmsTarget = `${tenantPath}.${RESOURCES.walletKms}`;
+  const didStoreTarget = `${tenantPath}.${RESOURCES.walletDidStore}`;
+  const didServiceTarget = `${tenantPath}.${RESOURCES.walletDidService}`;
+  const credentialStoreTarget = `${tenantPath}.${RESOURCES.walletCredentialStore}`;
+
+  return {
+    wallet: {
+      createIfNotFound: true,
+      target: walletTarget,
+      kms: {
+        createIfNotFound: true,
+        target: kmsTarget,
+        key: {
+          createIfNotFound: true,
+          target: `${kmsTarget}.${WALLET_DEFAULT_IDS.key}`,
+          config: {
+            backend: 'jwk',
+            keyType,
+          },
+        },
+      },
+      didStore: {
+        createIfNotFound: true,
+        target: didStoreTarget,
+      },
+      didService: {
+        createIfNotFound: true,
+        target: didServiceTarget,
+        dependencies: [kmsTarget, didStoreTarget],
+        did: {
+          createIfNotFound: true,
+          target: `${didStoreTarget}.${WALLET_DEFAULT_IDS.did}`,
+          type: didType,
+        },
+      },
+      credentialStore: {
+        createIfNotFound: true,
+        target: credentialStoreTarget,
+      },
+    },
+  };
 }
 
 /**

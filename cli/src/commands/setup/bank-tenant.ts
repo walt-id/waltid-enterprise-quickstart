@@ -7,7 +7,14 @@
  */
 
 import { CommandContext } from '../../context.js';
-import { RESOURCES, KEY_IDS, CERT_IDS, defaultWalletKeyReference, defaultWalletDidReference } from '../../config.js';
+import {
+  RESOURCES,
+  KEY_IDS,
+  CERT_IDS,
+  buildWalletInitServicesRequest,
+  defaultWalletKeyReference,
+  defaultWalletDidReference,
+} from '../../config.js';
 import {
   BankTenantConfig,
   buildBankIssuerServiceConfig,
@@ -79,7 +86,7 @@ async function buildMdocX5Chain(
 
 /**
  * Initialize wallet with its own KMS (separate from issuer KMS), DID service/store,
- * credential store, and did:key. Uses init-wallet wizard (wallet-service setup docs).
+ * credential store, and did:key through the composable init-services endpoint.
  */
 export async function setupBankCreateWallet(ctx: CommandContext): Promise<void> {
   const step = ctx.nextStep();
@@ -90,27 +97,14 @@ export async function setupBankCreateWallet(ctx: CommandContext): Promise<void> 
   const { created } = await ctx.tolerantCreate(
     'Wallet',
     async () => {
-      const request = {
-        createKms: true,
-        kmsName: RESOURCES.walletKms,
-        createKeyInKms: {
-          keyType: 'secp256r1',
-        },
-        createDidStore: true,
-        didStoreName: RESOURCES.walletDidStore,
-        createDidService: true,
-        didServiceName: RESOURCES.walletDidService,
-        createDidWithDidService: 'key',
-        createCredentialStore: true,
-        credentialStoreName: RESOURCES.walletCredentialStore,
-      };
-      ctx.saveJson('init-bank-wallet-request.json', request, step);
+      const request = buildWalletInitServicesRequest(ctx.tenantPath, 'key');
+      ctx.saveJson('init-bank-wallet-services-request.json', request, step);
 
       const response = await ctx.orgClient.post(
-        `/v1/${ctx.tenantPath}/wallet-service-api/init-wallet`,
+        `/v1/${ctx.tenantPath}/resource-api/services/init`,
         request
       );
-      ctx.saveJson('init-bank-wallet-response.json', response.data, step);
+      ctx.saveJson('init-bank-wallet-services-response.json', response.data, step);
       return response;
     }
   );

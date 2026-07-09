@@ -79,8 +79,7 @@ export async function runWalletReceiveCredential(ctx: CommandContext): Promise<v
 
   const request = {
     offerUrl: ctx.ctx.offerId,
-    keyReference: ctx.ctx.walletKeyRef,
-    runPolicies: false,
+    keyId: ctx.ctx.walletKeyRef,
     useClientAttestation: true,
   };
   ctx.saveJson('wallet-receive-request.json', request, step);
@@ -92,7 +91,8 @@ export async function runWalletReceiveCredential(ctx: CommandContext): Promise<v
   ctx.saveJson('wallet-receive-response.json', response.data, step);
 
   const receivedCount = Array.isArray(response.data) ? response.data.length : 0;
-  console.log(`   [OK] Credential received (count: ${receivedCount})`);
+  const credentialIds = Array.isArray(response.data?.credentialIds) ? response.data.credentialIds : [];
+  console.log(`   [OK] Credential received (count: ${credentialIds.length || receivedCount})`);
 }
 
 // ============================================================================
@@ -184,26 +184,24 @@ export async function runCreateVerificationSession(
 export async function runWalletPresent(ctx: CommandContext, credentialIds: string[] = []): Promise<void> {
   const step = ctx.nextStep();
   ctx.log('Wallet presents credential', 'RUN');
+  if (credentialIds.length > 0) {
+    console.log(`   [INFO] Wallet2 will auto-select credentials; ignoring explicit IDs: ${credentialIds.join(', ')}`);
+  }
 
   const request: {
     requestUrl: string;
-    keyReference: string;
-    didReference: string;
-    credentials?: Array<{ credential: string }>;
+    keyId: string;
+    did: string;
   } = {
     requestUrl: ctx.ctx.requestUrl,
-    keyReference: ctx.ctx.walletKeyRef,
-    didReference: ctx.ctx.walletDid || defaultWalletDidReference(ctx.tenantPath),
+    keyId: ctx.ctx.walletKeyRef,
+    did: ctx.ctx.walletDid || defaultWalletDidReference(ctx.tenantPath),
   };
-
-  if (credentialIds.length > 0) {
-    request.credentials = credentialIds.map(credential => ({ credential }));
-  }
 
   ctx.saveJson('wallet-present-request.json', request, step);
 
   const response = await ctx.orgClient.post(
-    `/v1/${ctx.tenantPath}.${RESOURCES.wallet}/wallet-service-api/credentials/present`,
+    `/v2/${ctx.tenantPath}.${RESOURCES.wallet}/wallet-service-api/credentials/present`,
     request
   );
   ctx.saveJson('wallet-present-response.json', response.data, step);

@@ -9,7 +9,12 @@
  */
 
 import { CommandContext } from '../../context.js';
-import { RESOURCES, defaultWalletKeyReference, defaultWalletDidReference } from '../../config.js';
+import {
+  RESOURCES,
+  buildWalletInitServicesRequest,
+  defaultWalletKeyReference,
+  defaultWalletDidReference,
+} from '../../config.js';
 
 /** Create tenant */
 export async function setupCreateTenant(ctx: CommandContext): Promise<void> {
@@ -44,23 +49,14 @@ export async function setupCreateWallet(ctx: CommandContext): Promise<void> {
   const { created } = await ctx.tolerantCreate(
     'Wallet',
     async () => {
-      const request = {
-        createKeyInKms: {
-          keyType: 'secp256r1',
-        },
-        createDidWithDidService: 'jwk',
-        kmsName: RESOURCES.walletKms,
-        didStoreName: RESOURCES.walletDidStore,
-        didServiceName: RESOURCES.walletDidService,
-        credentialStoreName: RESOURCES.walletCredentialStore,
-      };
-      ctx.saveJson('init-wallet-request.json', request, step);
+      const request = buildWalletInitServicesRequest(ctx.tenantPath, 'jwk');
+      ctx.saveJson('init-services-wallet-request.json', request, step);
 
       const response = await ctx.orgClient.post(
-        `/v1/${ctx.tenantPath}/wallet-service-api/init-wallet`,
+        `/v1/${ctx.tenantPath}/resource-api/services/init`,
         request
       );
-      ctx.saveJson('init-wallet-response.json', response.data, step);
+      ctx.saveJson('init-services-wallet-response.json', response.data, step);
       return response;
     }
   );

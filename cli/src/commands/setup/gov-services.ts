@@ -10,7 +10,14 @@
  */
 
 import { CommandContext } from '../../context.js';
-import { RESOURCES, CERT_IDS, KEY_IDS, defaultWalletKeyReference, defaultWalletDidReference } from '../../config.js';
+import {
+  RESOURCES,
+  CERT_IDS,
+  KEY_IDS,
+  buildWalletInitServicesRequest,
+  defaultWalletKeyReference,
+  defaultWalletDidReference,
+} from '../../config.js';
 import {
   GovServicesConfig,
   DepartmentConfig,
@@ -891,27 +898,14 @@ async function createGovWallet(ctx: CommandContext): Promise<void> {
   const { created } = await ctx.tolerantCreate(
     'Wallet',
     async () => {
-      const request = {
-        createKms: true,
-        kmsName: RESOURCES.walletKms,
-        createKeyInKms: {
-          keyType: 'secp256r1',
-        },
-        createDidStore: true,
-        didStoreName: RESOURCES.walletDidStore,
-        createDidService: true,
-        didServiceName: RESOURCES.walletDidService,
-        createDidWithDidService: 'key',
-        createCredentialStore: true,
-        credentialStoreName: RESOURCES.walletCredentialStore,
-      };
-      ctx.saveJson('init-gov-wallet-request.json', request, step);
+      const request = buildWalletInitServicesRequest(ctx.tenantPath, 'key');
+      ctx.saveJson('init-gov-wallet-services-request.json', request, step);
 
       const response = await ctx.orgClient.post(
-        `/v1/${ctx.tenantPath}/wallet-service-api/init-wallet`,
+        `/v1/${ctx.tenantPath}/resource-api/services/init`,
         request
       );
-      ctx.saveJson('init-gov-wallet-response.json', response.data, step);
+      ctx.saveJson('init-gov-wallet-services-response.json', response.data, step);
       return response;
     }
   );

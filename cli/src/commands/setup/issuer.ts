@@ -276,7 +276,7 @@ export async function setupLinkWalletToAttester(ctx: CommandContext): Promise<vo
 
   try {
     await ctx.orgClient.postRaw(
-      `/v1/${ctx.tenantPath}.${RESOURCES.wallet}/wallet-service-api/dependencies/add`,
+      `/v2/${ctx.tenantPath}.${RESOURCES.wallet}/wallet-service-api/dependencies/add`,
       `${ctx.tenantPath}.${RESOURCES.clientAttester}`
     );
     console.log(`   [OK] Client attester linked to wallet`);
@@ -301,7 +301,7 @@ export async function setupObtainWalletAttestation(ctx: CommandContext): Promise
   ctx.saveJson('obtain-attestation-request.json', request, step);
 
   const response = await ctx.orgClient.post(
-    `/v1/${ctx.tenantPath}.${RESOURCES.wallet}/wallet-service-api/client-attestation/obtain`,
+    `/v2/${ctx.tenantPath}.${RESOURCES.wallet}/wallet-service-api/client-attestation/obtain`,
     request
   );
   ctx.saveJson('obtain-attestation-response.json', response.data, step);

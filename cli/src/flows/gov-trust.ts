@@ -30,6 +30,14 @@ import {
 
 /** Extract stored wallet credential IDs from a receive response. */
 function extractStoredCredentialIds(receiveResponse: unknown): string[] {
+  if (
+    typeof receiveResponse === 'object' &&
+    receiveResponse !== null &&
+    Array.isArray((receiveResponse as any).credentialIds)
+  ) {
+    return (receiveResponse as any).credentialIds.filter((id: unknown): id is string => typeof id === 'string');
+  }
+
   if (!Array.isArray(receiveResponse)) {
     return [];
   }
@@ -72,9 +80,8 @@ async function walletReceiveWithTrust(
 
   const request = {
     offerUrl,
-    keyReference: ctx.ctx.walletKeyRef,
-    didReference: defaultWalletDidReference(ctx.tenantPath),
-    runPolicies: true,
+    keyId: ctx.ctx.walletKeyRef,
+    did: ctx.ctx.walletDid,
     useClientAttestation: false,
   };
   ctx.saveJson('wallet-receive-trust-request.json', request, step);
@@ -86,9 +93,8 @@ async function walletReceiveWithTrust(
     );
     ctx.saveJson('wallet-receive-trust-response.json', response.data, step);
 
-    const receivedCount = Array.isArray(response.data) ? response.data.length : 0;
     const credentialIds = extractStoredCredentialIds(response.data);
-    console.log(`   [OK] Credential received (count: ${receivedCount})`);
+    console.log(`   [OK] Credential received (count: ${credentialIds.length})`);
     console.log(`        Credential IDs: ${credentialIds.join(', ')}`);
     return credentialIds;
   } catch (error: any) {
@@ -106,9 +112,8 @@ async function walletReceiveBypassTrust(
 
   const request = {
     offerUrl,
-    keyReference: ctx.ctx.walletKeyRef,
-    didReference: defaultWalletDidReference(ctx.tenantPath),
-    runPolicies: false,
+    keyId: ctx.ctx.walletKeyRef,
+    did: ctx.ctx.walletDid,
     useClientAttestation: false,
   };
   ctx.saveJson('wallet-receive-no-trust-request.json', request, step);
@@ -119,9 +124,8 @@ async function walletReceiveBypassTrust(
   );
   ctx.saveJson('wallet-receive-no-trust-response.json', response.data, step);
 
-  const receivedCount = Array.isArray(response.data) ? response.data.length : 0;
   const credentialIds = extractStoredCredentialIds(response.data);
-  console.log(`   [OK] Credential received (count: ${receivedCount})`);
+  console.log(`   [OK] Credential received (count: ${credentialIds.length})`);
   console.log(`        Credential IDs: ${credentialIds.join(', ')}`);
   return credentialIds;
 }
