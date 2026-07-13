@@ -25,7 +25,7 @@ spec:
       containers:
         - name: waltid-enterprise-ui
           image: {{ .Values.web.image.repository }}:{{ .Values.web.image.tag }}
-          imagePullPolicy: {{ .Values.web.image.pullPolicy }}
+          imagePullPolicy: {{ .Values.web.image.imagePullPolicy }}
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
