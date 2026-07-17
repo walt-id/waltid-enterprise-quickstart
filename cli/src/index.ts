@@ -23,6 +23,7 @@ import { CommandContext } from './context.js';
 import { loadWaltEnv } from './env.js';
 import { loadBankTenantEnv, createBankTenantConfig } from './bank-tenant-config.js';
 import { loadGovServicesEnv, createGovServicesConfig } from './gov-services-config.js';
+import { loadEudiDemoEnv, createEudiDemoConfig } from './eudi-demo-config.js';
 import {
   // System commands
   runSystemInit,
@@ -75,6 +76,7 @@ import {
   runFull,
   runBankTenantSetup,
   runGovServicesSetup,
+  runEudiDemoSetup,
 } from './commands/index.js';
 
 import { flowEtsiTrustLists, flowCredentialRevocation, flowGovTrust } from './flows/index.js';
@@ -136,6 +138,7 @@ Setup Commands (create resources):
   --setup-obtain-wallet-attestation  Obtain wallet attestation
   --setup-bank-tenant     Set up bank-tenant (issuer, wallet, verifier, KMS, X509)
   --setup-gov-services    Set up government services (multi-department issuers, verifier)
+  --setup-eudi-demo       Set up EUDI demo (WRP Registry auth, RP certificate, verifier2)
 
 Additional Setup Commands:
   --setup-create-trust-registry  Create trust registry service
@@ -194,6 +197,13 @@ Government services (cli/gov-services.env — copy from gov-services.env.example
   GOV_SERVICES_BASE_URL   Public base URL for issuers and verifier
   GOV_DEPT_*              Department tenant IDs (HR, Identity, Revenue, Finance)
 
+EUDI demo (cli/eudi-demo.env — copy from eudi-demo.env.example):
+  EUDI_REGISTRY_BASE_URL  WRP Registry URL (default: https://registry.serviceproviders.eudiw.dev)
+  EUDI_TENANT             Tenant ID (default: eudi-demo)
+  EUDI_SERVICE_BASE_URL   Public base URL for verifier service
+  EUDI_LEGAL_ENTITY_*     Legal entity information for WRP registration
+  EUDI_CERTIFICATE_PASSWORD  Password for PKCS#12 certificate
+
 Examples:
   # Full setup and run (default)
   npx tsx walt.ts
@@ -225,6 +235,9 @@ Examples:
 
   # Set up government services (requires cli/gov-services.env)
   npx tsx walt.ts --setup-gov-services
+
+  # Set up EUDI demo with WRP Registry (requires cli/eudi-demo.env)
+  npx tsx walt.ts --setup-eudi-demo
 `);
 }
 
@@ -255,6 +268,7 @@ async function main(): Promise<void> {
     '--setup-link-wallet-to-attester', '--setup-obtain-wallet-attestation',
     '--setup-bank-tenant',
     '--setup-gov-services',
+    '--setup-eudi-demo',
     '--setup-create-trust-registry', '--setup-etsi-trust-registry', '--setup-import-trust-list',
     '--setup-create-superadmin', '--setup-create-organization',
     '--setup-create-admin-role', '--setup-create-admin-account',
@@ -285,6 +299,9 @@ async function main(): Promise<void> {
   if (args.includes('--setup-gov-services') || args.includes('--flow-gov-trust')) {
     loadGovServicesEnv(cliDir);
   }
+  if (args.includes('--setup-eudi-demo')) {
+    loadEudiDemoEnv(cliDir);
+  }
 
   // Create config and context
   const projectRoot = join(cliDir, '..');
@@ -304,6 +321,14 @@ async function main(): Promise<void> {
       ctx.ensureWorkdir();
       const govConfig = createGovServicesConfig();
       await runGovServicesSetup(ctx, govConfig);
+      ctx.saveHttpLog();
+      return;
+    }
+
+    if (args.includes('--setup-eudi-demo')) {
+      ctx.ensureWorkdir();
+      const eudiConfig = createEudiDemoConfig();
+      await runEudiDemoSetup(ctx, eudiConfig);
       ctx.saveHttpLog();
       return;
     }

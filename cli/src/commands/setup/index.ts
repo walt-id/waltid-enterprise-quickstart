@@ -56,3 +56,6 @@ export { runBankTenantSetup } from './bank-tenant.js';
 
 // Government services tenant
 export { runGovServicesSetup } from './gov-services.js';
+
+// EUDI demo (WRP Registry)
+export { runEudiDemoSetup } from './eudi-demo.js';
