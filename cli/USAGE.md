@@ -118,6 +118,7 @@ These commands manage credential status and revocation.
 | Command | Description |
 |---------|-------------|
 | `--flow-etsi-trust-lists` | Run ETSI trust lists verification flow (see below) |
+| `--flow-wal-1186-trust-lists` | Test root-omitted certificate paths and signed LoTE validation |
 | `--flow-credential-revocation` | Run credential revocation flow (see below) |
 
 #### ETSI Trust Lists Flow (`--flow-etsi-trust-lists`)
@@ -155,6 +156,46 @@ npx tsx walt.ts --setup-etsi-trust-registry  # ETSI-specific setup
 # Run flow (can be run multiple times)
 npx tsx walt.ts --flow-etsi-trust-lists
 ```
+
+#### WAL-1186 Trust Lists Acceptance (`--flow-wal-1186-trust-lists`)
+
+This flow provides focused acceptance coverage for the Trust Registry chain-resolution and signed-LoTE changes:
+
+1. Load or reuse a LoTE source containing the full IACA/root certificate.
+2. Resolve the document signer as a leaf-only chain and require `CERTIFICATE_PATH` evidence.
+3. Confirm that an unrelated certificate returns `NOT_TRUSTED`.
+4. Optionally validate compact-JWS LoTE content with an explicit signer pin and confirm that the same source is rejected without signer trust.
+5. Create a dedicated mdoc issuer profile whose `x5Chain` contains only the document signer.
+6. Issue, present, and verify that credential through Verifier2's linked Trust Registry.
+7. Assert the `etsi-trust-list` policy result and matched trust source, not only the final session status.
+
+**Prerequisites:**
+
+```bash
+npx tsx walt.ts --setup-all
+```
+
+**Chain-resolution and Verifier2 test:**
+
+```bash
+npx tsx walt.ts --flow-wal-1186-trust-lists
+```
+
+**Include signed LoTE validation:**
+
+```bash
+export WAL1186_SIGNED_LOTE_FILE=/path/to/aeon-issuer-lote.json.jws
+export WAL1186_SIGNER_CERT_FILE=/path/to/aeon-lote-signer.pem
+npx tsx walt.ts --flow-wal-1186-trust-lists
+```
+
+The signer certificate must normally come from an independent trusted source. For a functional test of JWS mechanics only, explicitly set:
+
+```bash
+export WAL1186_ALLOW_EMBEDDED_SIGNER_TEST_PIN=true
+```
+
+The flow writes every request, response, trust decision, and final Verifier2 session to its timestamped directory under `cli/logs/`.
 
 #### Credential Revocation Flow (`--flow-credential-revocation`)
 
