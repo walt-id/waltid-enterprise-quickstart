@@ -37,25 +37,25 @@ This flow demonstrates trust list verification using the Enterprise Trust Regist
 npx tsx walt.ts --flow-etsi-trust-lists
 ```
 
-### WAL-1186 Trust Lists Acceptance Flow
+### Trust List Assurance Flow
 
 This flow verifies registry-owned certificate path construction with an mdoc that omits its IACA/root, rejects an unrelated certificate, and verifies the same leaf-only credential through Verifier2's linked Trust Registry.
 
 ```bash
 # Requires the normal base and ETSI Trust Registry setup
 npx tsx walt.ts --setup-all
-npx tsx walt.ts --flow-wal-1186-trust-lists
+npx tsx walt.ts --flow-trust-list-assurance
 ```
 
 To also validate compact-JWS LoTE loading, configure a signed artifact and its independently trusted signer certificate:
 
 ```bash
-WAL1186_SIGNED_LOTE_FILE=/path/to/list.json.jws \
-WAL1186_SIGNER_CERT_FILE=/path/to/source-signer.pem \
-npx tsx walt.ts --flow-wal-1186-trust-lists
+TRUST_LIST_SIGNED_LOTE_FILE=/path/to/list.json.jws \
+TRUST_LIST_SIGNER_CERT_FILE=/path/to/source-signer.pem \
+npx tsx walt.ts --flow-trust-list-assurance
 ```
 
-For a local mechanics-only test, `WAL1186_ALLOW_EMBEDDED_SIGNER_TEST_PIN=true` explicitly pins `x5c[0]`. This is intentionally opt-in because an embedded certificate is not independent signer trust.
+For a local mechanics-only test, `TRUST_LIST_ALLOW_EMBEDDED_SIGNER_TEST_PIN=true` explicitly pins `x5c[0]`. This is intentionally opt-in because an embedded certificate is not independent signer trust.
 
 ### Credential Revocation Flow
 

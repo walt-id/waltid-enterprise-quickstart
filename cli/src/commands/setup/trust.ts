@@ -11,6 +11,7 @@ import { readFileSync, existsSync } from 'fs';
 import { basename } from 'path';
 import { CommandContext } from '../../context.js';
 import { RESOURCES, CERT_IDS } from '../../config.js';
+import { buildCertificateAnchorLote, MDL_ISSUER_SERVICE_TYPE } from '../../trust-registry/index.js';
 
 /** Create trust registry service */
 export async function setupCreateTrustRegistry(ctx: CommandContext): Promise<void> {
@@ -55,7 +56,7 @@ export async function setupImportTrustList(ctx: CommandContext, filePath: string
   const request = {
     sourceId,
     content,
-    validateSignature: false,
+    acceptancePolicy: 'ALLOW_UNSIGNED',
   };
   ctx.saveJson('import-trust-list-request.json', request, step);
 
@@ -99,16 +100,22 @@ export async function linkVerifier2ToTrustRegistry(ctx: CommandContext): Promise
 export async function importPublicTrustLists(ctx: CommandContext): Promise<void> {
   const publicTrustLists = [
     {
-      sourceId: 'ewc-pilot',
-      url: 'https://ewc-consortium.github.io/ewc-trust-list/EWC-TL',
-      description: 'EWC Pilot Trust List (JSON/LoTE format, unauthenticated)',
-      validateSignature: false,
+      sourceId: 'at-tsl-authenticated',
+      url: 'https://www.signatur.rtr.at/vertrauensliste.xml',
+      description: 'Austrian TSL (XML format, XMLDSig integrity verified)',
+      acceptancePolicy: 'REQUIRE_VALID_SIGNATURE',
     },
     {
-      sourceId: 'at-tsl-authenticated', 
-      url: 'https://www.signatur.rtr.at/currenttl.xml',
-      description: 'Austrian TSL (XML format, XMLDSig VALIDATED)',
-      validateSignature: true,
+      sourceId: 'it-tsl-authenticated',
+      url: 'https://eidas.agid.gov.it/TL/TSL-IT.xml',
+      description: 'Italian TSL (XML format, XMLDSig integrity verified)',
+      acceptancePolicy: 'REQUIRE_VALID_SIGNATURE',
+    },
+    {
+      sourceId: 'eu-lotl',
+      url: 'https://ec.europa.eu/tools/lotl/eu-lotl.xml',
+      description: 'EU LoTL (signed pointer list; member lists are not loaded automatically)',
+      acceptancePolicy: 'REQUIRE_VALID_SIGNATURE',
     },
   ];
   
@@ -119,7 +126,7 @@ export async function importPublicTrustLists(ctx: CommandContext): Promise<void>
     const request = {
       sourceId: trustList.sourceId,
       url: trustList.url,
-      validateSignature: trustList.validateSignature,
+      acceptancePolicy: trustList.acceptancePolicy,
     };
     ctx.saveJson(`import-${trustList.sourceId}-request.json`, request, step);
     
@@ -179,39 +186,14 @@ export async function loadIacaIntoTrustRegistry(ctx: CommandContext): Promise<vo
   // Use a fixed sourceId so we can detect duplicates
   const sourceId = 'journey-iaca-local';
   
-  // Create a LoTE-format JSON source with the IACA certificate
-  const loteSource = {
-    listMetadata: {
-      listId: sourceId,
-      listType: 'mdl-issuers',
-      territory: 'US',
-      issueDate: new Date().toISOString(),
-      nextUpdate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
-      sequenceNumber: '1',
-    },
-    trustedEntities: [
-      {
-        entityId: 'journey-test-iaca',
-        entityType: 'PID_PROVIDER',
-        legalName: 'Walt CLI Journey Test IACA',
-        country: 'US',
-        services: [
-          {
-            serviceId: 'mdl-issuing',
-            serviceType: 'MDL_ISSUER',
-            status: 'GRANTED',
-            statusStart: new Date().toISOString(),
-            identities: [
-              {
-                matchType: 'CERTIFICATE_PEM',
-                value: iacaPem,
-              },
-            ],
-          },
-        ],
-      },
-    ],
-  };
+  const loteSource = buildCertificateAnchorLote(sourceId, 'US', [{
+    id: 'journey-test-iaca',
+    legalName: 'Walt CLI Journey Test IACA',
+    country: 'US',
+    serviceName: 'mDL issuing',
+    serviceType: MDL_ISSUER_SERVICE_TYPE,
+    certificatePem: iacaPem,
+  }]);
   
   ctx.saveJson('journey-iaca-lote-source.json', loteSource, step);
   
@@ -219,7 +201,7 @@ export async function loadIacaIntoTrustRegistry(ctx: CommandContext): Promise<vo
     sourceId: sourceId,
     content: JSON.stringify(loteSource),
     sourceUrl: 'local://journey-test',
-    validateSignature: false,
+    acceptancePolicy: 'ALLOW_UNSIGNED',
   };
   ctx.saveJson('load-journey-iaca-request.json', request, step);
   
@@ -268,22 +250,31 @@ export async function listTrustSources(ctx: CommandContext): Promise<void> {
     sourceId: string;
     displayName?: string;
     sourceFamily?: string;
+    format?: string;
+    freshnessState?: string;
     territory?: string;
     entitiesCount?: number;
-    authenticityState?: string;
+    assurance?: {
+      authenticityState?: string;
+      accepted?: boolean;
+    };
   }>;
   
   console.log(`   [OK] Trust registry has ${sources.length} source(s):`);
   for (const src of sources) {
-    const authIcon = src.authenticityState === 'VALIDATED' ? '[y]' : '[n]';
+    const authenticity = src.assurance?.authenticityState || 'UNKNOWN';
+    const authIcon = src.assurance?.accepted ? '[y]' : '[n]';
     console.log(`        ${authIcon} ${src.sourceId}`);
-    console.log(`           Family: ${src.sourceFamily || 'unknown'}, Territory: ${src.territory || '?'}`);
-    console.log(`           Authenticity: ${src.authenticityState || 'UNKNOWN'}`);
+    console.log(`           Family: ${src.sourceFamily || 'unknown'}, Format: ${src.format || 'unknown'}`);
+    console.log(`           Territory: ${src.territory || '?'}, Freshness: ${src.freshnessState || 'UNKNOWN'}`);
+    console.log(`           Authenticity: ${authenticity}`);
   }
   
   console.log('');
-  console.log('   [y] VALIDATED = XMLDSig signature verified (requireAuthenticated: true will pass)');
-  console.log('   [n]️  SKIPPED_DEMO = No signature validation (requireAuthenticated: true will fail)');
+  console.log('   [y] AUTHENTICATED = signature and independently trusted signer verified');
+  console.log('   [y] INTEGRITY_VERIFIED = signature integrity verified; signer trust not evaluated');
+  console.log('   [y] UNVERIFIED = explicitly admitted unsigned or unchecked source');
+  console.log('   [n] FAILED/UNKNOWN = source is not active for trust resolution');
 }
 
 /** Complete ETSI trust registry setup */

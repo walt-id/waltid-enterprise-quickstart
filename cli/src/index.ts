@@ -79,7 +79,7 @@ import {
   runEudiDemoSetup,
 } from './commands/index.js';
 
-import { flowEtsiTrustLists, flowCredentialRevocation, flowGovTrust, flowWal1186TrustLists } from './flows/index.js';
+import { flowEtsiTrustLists, flowCredentialRevocation, flowGovTrust, flowTrustListAssurance } from './flows/index.js';
 
 // ============================================================================
 // CLI Setup
@@ -165,7 +165,7 @@ Credential Revocation Commands:
 
 Flows (special use cases):
   --flow-etsi-trust-lists  Run ETSI trust lists verification flow
-  --flow-wal-1186-trust-lists  Test root-omitted chains and signed LoTE validation
+  --flow-trust-list-assurance  Test certificate paths, signed LoTE, and verifier integration
   --flow-credential-revocation  Run credential revocation flow
   --flow-gov-trust         Run government trust list validation flow (requires --setup-gov-services)
 
@@ -186,8 +186,8 @@ Environment Variables:
 General CLI settings (cli/walt.env — copy from walt.env.example):
   HOST_ALIAS_DOMAIN       Custom domain for host alias (used by --recreate / --init-system)
   HOST_ALIAS_TARGET       Host alias service target (default: {ORGANIZATION}.host-alias)
-  WAL1186_SIGNED_LOTE_FILE  Optional compact-JWS LoTE file for WAL-1186 acceptance
-  WAL1186_SIGNER_CERT_FILE  Independently trusted signer certificate for the JWS
+  TRUST_LIST_SIGNED_LOTE_FILE  Optional compact-JWS LoTE file
+  TRUST_LIST_SIGNER_CERT_FILE  Independently trusted signer certificate for the JWS
 
 Bank tenant (cli/bank-tenant.env — copy from bank-tenant.env.example):
   BANK_TENANT             Tenant ID (default: bank-tenant)
@@ -282,7 +282,7 @@ async function main(): Promise<void> {
     '--run-create-verification-session-status-only',
     '--run-wallet-present', '--run-assert-final-status', '--run-assert-final-status-failed',
     '--run-revoke-credential', '--run-unrevoke-credential', '--run-update-credential-status',
-    '--flow-etsi-trust-lists', '--flow-wal-1186-trust-lists', '--flow-credential-revocation', '--flow-gov-trust',
+    '--flow-etsi-trust-lists', '--flow-trust-list-assurance', '--flow-credential-revocation', '--flow-gov-trust',
   ];
   
   for (const arg of args) {
@@ -487,8 +487,8 @@ async function main(): Promise<void> {
       return;
     }
 
-    if (args.includes('--flow-wal-1186-trust-lists')) {
-      await flowWal1186TrustLists(ctx);
+    if (args.includes('--flow-trust-list-assurance')) {
+      await flowTrustListAssurance(ctx);
       return;
     }
 

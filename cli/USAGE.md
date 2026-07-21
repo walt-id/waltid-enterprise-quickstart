@@ -118,7 +118,7 @@ These commands manage credential status and revocation.
 | Command | Description |
 |---------|-------------|
 | `--flow-etsi-trust-lists` | Run ETSI trust lists verification flow (see below) |
-| `--flow-wal-1186-trust-lists` | Test root-omitted certificate paths and signed LoTE validation |
+| `--flow-trust-list-assurance` | Test certificate paths, signed LoTE, and verifier integration |
 | `--flow-credential-revocation` | Run credential revocation flow (see below) |
 
 #### ETSI Trust Lists Flow (`--flow-etsi-trust-lists`)
@@ -139,13 +139,15 @@ Run `--setup-etsi-trust-registry` once to set up the trust registry, import trus
 The `--setup-etsi-trust-registry` command performs:
 - Create trust registry service
 - Link Verifier2 to Trust Registry
-- Import public trust lists (EWC Pilot, Austrian TSL)
+- Import the Austrian and Italian national TSLs and the EU LoTL
 - Load local IACA certificate into trust registry
 - List trust sources with authenticity states
 
 **Authenticity States:**
-- ✅ `VALIDATED` - XMLDSig signature verified (passes `requireAuthenticated: true`)
-- ⚠️ `SKIPPED_DEMO` - No signature validation (fails `requireAuthenticated: true`)
+- ✅ `AUTHENTICATED` - signature integrity and independently trusted signer established
+- ✅ `INTEGRITY_VERIFIED` - signature integrity established; signer trust not evaluated
+- ⚠️ `UNVERIFIED` - intentionally unsigned source or verification explicitly disabled
+- ❌ `FAILED` - signature or signer validation failed
 
 **Usage:**
 ```bash
@@ -157,7 +159,7 @@ npx tsx walt.ts --setup-etsi-trust-registry  # ETSI-specific setup
 npx tsx walt.ts --flow-etsi-trust-lists
 ```
 
-#### WAL-1186 Trust Lists Acceptance (`--flow-wal-1186-trust-lists`)
+#### Trust List Assurance (`--flow-trust-list-assurance`)
 
 This flow provides focused acceptance coverage for the Trust Registry chain-resolution and signed-LoTE changes:
 
@@ -178,21 +180,21 @@ npx tsx walt.ts --setup-all
 **Chain-resolution and Verifier2 test:**
 
 ```bash
-npx tsx walt.ts --flow-wal-1186-trust-lists
+npx tsx walt.ts --flow-trust-list-assurance
 ```
 
 **Include signed LoTE validation:**
 
 ```bash
-export WAL1186_SIGNED_LOTE_FILE=/path/to/aeon-issuer-lote.json.jws
-export WAL1186_SIGNER_CERT_FILE=/path/to/aeon-lote-signer.pem
-npx tsx walt.ts --flow-wal-1186-trust-lists
+export TRUST_LIST_SIGNED_LOTE_FILE=/path/to/issuer-lote.json.jws
+export TRUST_LIST_SIGNER_CERT_FILE=/path/to/lote-signer.pem
+npx tsx walt.ts --flow-trust-list-assurance
 ```
 
 The signer certificate must normally come from an independent trusted source. For a functional test of JWS mechanics only, explicitly set:
 
 ```bash
-export WAL1186_ALLOW_EMBEDDED_SIGNER_TEST_PIN=true
+export TRUST_LIST_ALLOW_EMBEDDED_SIGNER_TEST_PIN=true
 ```
 
 The flow writes every request, response, trust decision, and final Verifier2 session to its timestamped directory under `cli/logs/`.

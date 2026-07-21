@@ -18,10 +18,12 @@ import {
   requireSuccessfulLoad,
   resolveTrustCertificateChain,
   TrustDecision,
+  buildCertificateAnchorLote,
+  MDL_ISSUER_SERVICE_TYPE,
 } from '../trust-registry/index.js';
 
-const SOURCE_ID = 'wal-1186-local-iaca';
-const PROFILE_ID = 'mdl-profile-wal-1186';
+const SOURCE_ID = 'trust-list-local-iaca';
+const PROFILE_ID = 'mdl-profile-trust-list-assurance';
 
 async function retrieveCertificate(ctx: CommandContext, certificateId: string): Promise<string> {
   const response = await ctx.orgClient.get(
@@ -30,32 +32,6 @@ async function retrieveCertificate(ctx: CommandContext, certificateId: string): 
   const pem = response.data.data?.pem || response.data.certificatePem || response.data.pem;
   if (!pem) throw new Error(`Certificate '${certificateId}' did not contain PEM data`);
   return pem;
-}
-
-function buildAnchorLote(iacaPem: string): object {
-  return {
-    listMetadata: {
-      listId: SOURCE_ID,
-      listType: 'mdl-issuers',
-      territory: 'US',
-      issueDate: new Date().toISOString(),
-      nextUpdate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
-      sequenceNumber: '1',
-    },
-    trustedEntities: [{
-      entityId: 'wal-1186-test-iaca',
-      entityType: 'PID_PROVIDER',
-      legalName: 'WAL-1186 CLI Test IACA',
-      country: 'US',
-      services: [{
-        serviceId: 'wal-1186-mdl-issuing',
-        serviceType: 'MDL_ISSUER',
-        status: 'GRANTED',
-        statusStart: new Date().toISOString(),
-        identities: [{ matchType: 'CERTIFICATE_PEM', value: iacaPem }],
-      }],
-    }],
-  };
 }
 
 async function ensureAnchorSource(ctx: CommandContext, iacaPem: string): Promise<string> {
@@ -68,16 +44,23 @@ async function ensureAnchorSource(ctx: CommandContext, iacaPem: string): Promise
   }
 
   const step = ctx.nextStep();
-  const lote = buildAnchorLote(iacaPem);
+  const lote = buildCertificateAnchorLote(SOURCE_ID, 'US', [{
+    id: 'trust-list-test-iaca',
+    legalName: 'Trust List Test IACA',
+    country: 'US',
+    serviceName: 'mDL issuing',
+    serviceType: MDL_ISSUER_SERVICE_TYPE,
+    certificatePem: iacaPem,
+  }]);
   const request = {
     sourceId: SOURCE_ID,
     content: JSON.stringify(lote),
-    validateSignature: false,
+    acceptancePolicy: 'ALLOW_UNSIGNED' as const,
   };
-  ctx.saveJson('wal-1186-anchor-lote.json', lote, step);
-  ctx.saveJson('wal-1186-anchor-load-request.json', request, step);
+  ctx.saveJson('trust-list-anchor-lote.json', lote, step);
+  ctx.saveJson('trust-list-anchor-load-request.json', request, step);
   const result = requireSuccessfulLoad(await loadTrustSource(ctx, request));
-  ctx.saveJson('wal-1186-anchor-load-response.json', result, step);
+  ctx.saveJson('trust-list-anchor-load-response.json', result, step);
   console.log(`   [OK] Registry anchor loaded (${result.identitiesLoaded || 0} identities)`);
   return SOURCE_ID;
 }
@@ -104,11 +87,11 @@ async function testDirectChainResolution(
   const request = {
     certificateChainPemOrDer: [leafPem],
     expectedEntityType: 'PID_PROVIDER',
-    expectedServiceType: 'MDL_ISSUER',
+    expectedServiceType: MDL_ISSUER_SERVICE_TYPE,
   };
-  ctx.saveJson('wal-1186-resolve-chain-request.json', request, step);
+  ctx.saveJson('trust-list-resolve-chain-request.json', request, step);
   const decision = await resolveTrustCertificateChain(ctx, request);
-  ctx.saveJson('wal-1186-resolve-chain-response.json', decision, step);
+  ctx.saveJson('trust-list-resolve-chain-response.json', decision, step);
   requirePathDecision(decision, expectedSourceId);
   console.log('   [PASS] Leaf-only chain resolved to registry-owned IACA');
 
@@ -117,9 +100,9 @@ async function testDirectChainResolution(
     ...request,
     certificateChainPemOrDer: [unrelatedPem],
   };
-  ctx.saveJson('wal-1186-resolve-unrelated-request.json', negativeRequest, negativeStep);
+  ctx.saveJson('trust-list-resolve-unrelated-request.json', negativeRequest, negativeStep);
   const negative = await resolveTrustCertificateChain(ctx, negativeRequest);
-  ctx.saveJson('wal-1186-resolve-unrelated-response.json', negative, negativeStep);
+  ctx.saveJson('trust-list-resolve-unrelated-response.json', negative, negativeStep);
   if (negative.decision !== 'NOT_TRUSTED') {
     throw new Error(`Expected unrelated certificate to be NOT_TRUSTED, got ${negative.decision}`);
   }
@@ -152,48 +135,51 @@ function certificateSha256(pem: string): string {
 }
 
 async function testSignedLote(ctx: CommandContext): Promise<void> {
-  const jwsPath = process.env.WAL1186_SIGNED_LOTE_FILE;
+  const jwsPath = process.env.TRUST_LIST_SIGNED_LOTE_FILE;
   if (!jwsPath) {
-    console.log('   [SKIP] WAL1186_SIGNED_LOTE_FILE is not configured');
+    console.log('   [SKIP] TRUST_LIST_SIGNED_LOTE_FILE is not configured');
     return;
   }
   if (!existsSync(jwsPath)) throw new Error(`Signed LoTE file not found: ${jwsPath}`);
 
   const jws = readFileSync(jwsPath, 'utf8').trim();
-  const signerPath = process.env.WAL1186_SIGNER_CERT_FILE;
+  const signerPath = process.env.TRUST_LIST_SIGNER_CERT_FILE;
   let signerPem: string;
   if (signerPath) {
     if (!existsSync(signerPath)) throw new Error(`Signer certificate not found: ${signerPath}`);
     signerPem = readFileSync(signerPath, 'utf8');
-  } else if (process.env.WAL1186_ALLOW_EMBEDDED_SIGNER_TEST_PIN === 'true') {
+  } else if (process.env.TRUST_LIST_ALLOW_EMBEDDED_SIGNER_TEST_PIN === 'true') {
     console.log('   [WARN] Using embedded x5c signer as an explicit functional-test pin');
     console.log('          This does not model independent production signer trust.');
     signerPem = embeddedSignerAsPem(jws);
   } else {
     throw new Error(
-      'Set WAL1186_SIGNER_CERT_FILE, or explicitly enable WAL1186_ALLOW_EMBEDDED_SIGNER_TEST_PIN=true for a functional test'
+      'Set TRUST_LIST_SIGNER_CERT_FILE, or explicitly enable TRUST_LIST_ALLOW_EMBEDDED_SIGNER_TEST_PIN=true for a functional test'
     );
   }
 
-  const sourceId = process.env.WAL1186_SIGNED_SOURCE_ID || 'wal-1186-signed-lote';
+  const sourceId = process.env.TRUST_LIST_SIGNED_SOURCE_ID || 'signed-lote-source';
   const existing = (await listTrustRegistrySources(ctx)).find(source => source.sourceId === sourceId);
   if (!existing) {
     const step = ctx.nextStep();
     const request = {
       sourceId,
       content: jws,
-      validateSignature: true,
+      acceptancePolicy: 'REQUIRE_AUTHENTICATED' as const,
       trustedSignerCertificates: [signerPem],
     };
-    ctx.saveJson('wal-1186-signed-lote-load-request.json', request, step);
+    ctx.saveJson('trust-list-signed-lote-load-request.json', request, step);
     const result = requireSuccessfulLoad(await loadTrustSource(ctx, request));
-    ctx.saveJson('wal-1186-signed-lote-load-response.json', result, step);
+    ctx.saveJson('trust-list-signed-lote-load-response.json', result, step);
   }
 
   const source = (await listTrustRegistrySources(ctx)).find(item => item.sourceId === sourceId);
   if (!source) throw new Error(`Signed source '${sourceId}' was not listed after loading`);
-  if (source.authenticityState !== 'VALIDATED') {
-    throw new Error(`Expected signed source authenticity VALIDATED, got ${source.authenticityState}`);
+  if (source.assurance.authenticityState !== 'AUTHENTICATED' || !source.assurance.accepted) {
+    throw new Error(
+      `Expected authenticated signed source, got ${source.assurance.authenticityState} ` +
+      `(accepted=${source.assurance.accepted})`
+    );
   }
   if (source.metadata?.signatureFormat !== 'JWS_COMPACT') {
     throw new Error(`Expected JWS_COMPACT metadata, got ${source.metadata?.signatureFormat || '<none>'}`);
@@ -205,13 +191,13 @@ async function testSignedLote(ctx: CommandContext): Promise<void> {
 
   const negativeStep = ctx.nextStep();
   const negativeRequest = {
-    sourceId: `wal-1186-untrusted-signer-${Date.now()}`,
+    sourceId: `untrusted-signer-${Date.now()}`,
     content: jws,
-    validateSignature: true,
+    acceptancePolicy: 'REQUIRE_AUTHENTICATED' as const,
   };
-  ctx.saveJson('wal-1186-missing-signer-load-request.json', negativeRequest, negativeStep);
+  ctx.saveJson('trust-list-missing-signer-load-request.json', negativeRequest, negativeStep);
   const negative = await loadTrustSource(ctx, negativeRequest);
-  ctx.saveJson('wal-1186-missing-signer-load-response.json', negative, negativeStep);
+  ctx.saveJson('trust-list-missing-signer-load-response.json', negative, negativeStep);
   if (negative.success || !negative.error?.includes('trusted signer certificate')) {
     throw new Error(`Expected missing signer trust failure, got: ${JSON.stringify(negative)}`);
   }
@@ -236,25 +222,25 @@ async function recreateLeafOnlyProfile(ctx: CommandContext, leafPem: string): Pr
     }],
     credentialData: {
       'org.iso.18013.5.1': {
-        family_name: 'WAL-1186',
+        family_name: 'Trust List',
         given_name: 'Root Omitted',
         birth_date: '1990-01-01',
         issue_date: '2026-07-17',
         expiry_date: '2029-01-01',
         issuing_country: 'US',
-        issuing_authority: 'WAL-1186 Test DMV',
-        document_number: 'WAL1186',
+        issuing_authority: 'Trust List Test DMV',
+        document_number: 'TRUSTLIST01',
         un_distinguishing_sign: 'USA',
       },
     },
   };
   const step = ctx.nextStep();
-  ctx.saveJson('wal-1186-create-profile-request.json', request, step);
+  ctx.saveJson('trust-list-create-profile-request.json', request, step);
   const response = await ctx.orgClient.post(
     `/v2/${profilePath}/issuer-service-api/credentials/profiles`,
     request
   );
-  ctx.saveJson('wal-1186-create-profile-response.json', response.data, step);
+  ctx.saveJson('trust-list-create-profile-response.json', response.data, step);
   return profilePath;
 }
 
@@ -280,9 +266,9 @@ async function testVerifierIntegration(
     `/v2/${profilePath}/issuer-service-api/credentials/offers`,
     { authMethod: 'PRE_AUTHORIZED' }
   );
-  ctx.saveJson('wal-1186-offer-response.json', offerResponse.data, step);
+  ctx.saveJson('trust-list-offer-response.json', offerResponse.data, step);
   const offerUrl = offerResponse.data.credentialOffer;
-  if (!offerUrl) throw new Error('WAL-1186 profile did not return a credential offer');
+  if (!offerUrl) throw new Error('Trust-list test profile did not return a credential offer');
 
   step = ctx.nextStep();
   const receiveRequest = {
@@ -291,14 +277,14 @@ async function testVerifierIntegration(
     runPolicies: false,
     useClientAttestation: true,
   };
-  ctx.saveJson('wal-1186-wallet-receive-request.json', receiveRequest, step);
+  ctx.saveJson('trust-list-wallet-receive-request.json', receiveRequest, step);
   const receiveResponse = await ctx.orgClient.post(
     `/v2/${ctx.tenantPath}.${RESOURCES.wallet}/wallet-service-api/credentials/receive/pre-authorized`,
     receiveRequest
   );
-  ctx.saveJson('wal-1186-wallet-receive-response.json', receiveResponse.data, step);
+  ctx.saveJson('trust-list-wallet-receive-response.json', receiveResponse.data, step);
   const credentialIds = extractCredentialIds(receiveResponse.data);
-  if (credentialIds.length === 0) throw new Error('No WAL-1186 credential was stored in the wallet');
+  if (credentialIds.length === 0) throw new Error('No trust-list test credential was stored in the wallet');
 
   step = ctx.nextStep();
   const sessionRequest = {
@@ -306,7 +292,7 @@ async function testVerifierIntegration(
     core_flow: {
       dcql_query: {
         credentials: [{
-          id: 'wal_1186_mdl',
+          id: 'trust_list_mdl',
           format: 'mso_mdoc',
           meta: { doctype_value: MDL_DOC_TYPE },
           claims: [
@@ -321,7 +307,7 @@ async function testVerifierIntegration(
           {
             policy: 'etsi-trust-list',
             expectedEntityType: 'PID_PROVIDER',
-            expectedServiceType: 'MDL_ISSUER',
+            expectedServiceType: MDL_ISSUER_SERVICE_TYPE,
             allowStaleSource: false,
             requireAuthenticated: false,
           },
@@ -329,15 +315,15 @@ async function testVerifierIntegration(
       },
     },
   };
-  ctx.saveJson('wal-1186-verification-session-request.json', sessionRequest, step);
+  ctx.saveJson('trust-list-verification-session-request.json', sessionRequest, step);
   const sessionResponse = await ctx.orgClient.post(
     `/v1/${ctx.tenantPath}.${RESOURCES.verifier2}/verifier2-service-api/verification-session/create`,
     sessionRequest
   );
-  ctx.saveJson('wal-1186-verification-session-response.json', sessionResponse.data, step);
+  ctx.saveJson('trust-list-verification-session-response.json', sessionResponse.data, step);
   ctx.ctx.sessionId = sessionResponse.data.sessionId;
   ctx.ctx.requestUrl = sessionResponse.data.bootstrapAuthorizationRequestUrl;
-  if (!ctx.ctx.sessionId || !ctx.ctx.requestUrl) throw new Error('Could not create WAL-1186 verification session');
+  if (!ctx.ctx.sessionId || !ctx.ctx.requestUrl) throw new Error('Could not create trust-list verification session');
 
   await runWalletPresent(ctx, credentialIds);
 
@@ -345,10 +331,10 @@ async function testVerifierIntegration(
   const infoResponse = await ctx.orgClient.get(
     `/v1/${ctx.tenantPath}.${RESOURCES.verifier2}.${ctx.ctx.sessionId}/verifier2-service-api/verification-session/info`
   );
-  ctx.saveJson('wal-1186-final-session-info.json', infoResponse.data, step);
+  ctx.saveJson('trust-list-final-session-info.json', infoResponse.data, step);
   const session = infoResponse.data.session;
   if (session?.status !== 'SUCCESSFUL') {
-    throw new Error(`Expected WAL-1186 session SUCCESSFUL, got ${session?.status || '<empty>'}`);
+    throw new Error(`Expected trust-list session SUCCESSFUL, got ${session?.status || '<empty>'}`);
   }
   const policies = session.policyResults?.vc_policies || [];
   const trustPolicy = policies.find((entry: any) =>
@@ -363,9 +349,9 @@ async function testVerifierIntegration(
   console.log('   [PASS] Verifier2 resolved root-omitted credential through linked Trust Registry');
 }
 
-export async function flowWal1186TrustLists(ctx: CommandContext): Promise<void> {
+export async function flowTrustListAssurance(ctx: CommandContext): Promise<void> {
   console.log('\n========================================');
-  console.log('  Flow: WAL-1186 Trust Lists Acceptance');
+  console.log('  Flow: Trust List Assurance');
   console.log('========================================\n');
   mkdirSync(ctx.workdir, { recursive: true });
 
@@ -390,7 +376,7 @@ export async function flowWal1186TrustLists(ctx: CommandContext): Promise<void> 
     await testVerifierIntegration(ctx, leafPem, anchorSourceId);
 
     console.log('\n========================================');
-    console.log('  PASS - WAL-1186 acceptance complete');
+    console.log('  PASS - Trust list assurance checks complete');
     console.log('========================================\n');
   } finally {
     ctx.saveHttpLog();
