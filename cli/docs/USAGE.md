@@ -397,7 +397,7 @@ The script is tolerant to already-provisioned resources:
 
 ## Extending the CLI
 
-See [AGENTS.md](./AGENTS.md) for detailed guidance on:
+See [AGENTS.md](../AGENTS.md) for detailed guidance on:
 - Adding new setup commands
 - Adding new run commands
 - Creating new flows
