@@ -137,6 +137,7 @@ data "aws_iam_policy_document" "credential_status_user_policy" {
       "s3:DeleteObject",
       "s3:GetObject",
       "s3:ListBucket",
+      "s3:GetBucketLocation",
     ]
     resources = [
       aws_s3_bucket.credential_status[0].arn,
