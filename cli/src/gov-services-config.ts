@@ -10,6 +10,7 @@
  */
 
 import { join } from 'path';
+import { buildOrgUrl, buildSignedMetadataConfig } from './config.js';
 import { loadEnvFile } from './env.js';
 
 export interface GovServicesConfig {
@@ -44,6 +45,9 @@ export interface IssuerDisplayConfiguration {
 export interface VerifierClientMetadata {
   client_name: string;
   logo_uri?: string;
+  jwks?: {
+    keys: Array<Record<string, unknown>>;
+  };
 }
 
 interface IssuerDisplayDefaults {
@@ -93,14 +97,14 @@ const SDJWT_PROOF_TYPES = {
 };
 
 const JWT_VC_PROOF_TYPES = {
-  cryptographic_binding_methods_supported: ['did:key'],
+  cryptographic_binding_methods_supported: ['jwk'],
   credential_signing_alg_values_supported: ['ES256'],
   proof_types_supported: {
     jwt: { proof_signing_alg_values_supported: ['ES256'] },
   },
 };
 
-function firstEnv(names: string[], fallback: string): string {
+export function firstEnv(names: string[], fallback: string): string {
   for (const name of names) {
     const value = process.env[name];
     if (value) {
@@ -120,7 +124,7 @@ function optionalFirstEnv(names: string[]): string | undefined {
   return undefined;
 }
 
-function displayEnvNames(prefixes: string[], suffix: string): string[] {
+export function displayEnvNames(prefixes: string[], suffix: string): string[] {
   return prefixes.map(prefix => `${prefix}_${suffix}`);
 }
 
@@ -149,7 +153,8 @@ export function buildIssuerDisplayConfiguration(
 export function buildVerifierClientMetadata(
   envPrefixes: string[],
   defaultClientName: string,
-  defaultLogoUri?: string
+  defaultLogoUri?: string,
+  jwks?: { keys: Array<Record<string, unknown>> }
 ): VerifierClientMetadata {
   const clientMetadata: VerifierClientMetadata = {
     client_name: firstEnv(displayEnvNames(envPrefixes, 'CLIENT_NAME'), defaultClientName),
@@ -158,6 +163,9 @@ export function buildVerifierClientMetadata(
   const logoUri = optionalFirstEnv(displayEnvNames(envPrefixes, 'LOGO_URI')) || defaultLogoUri;
   if (logoUri) {
     clientMetadata.logo_uri = logoUri;
+  }
+  if (jwks) {
+    clientMetadata.jwks = jwks;
   }
 
   return clientMetadata;
@@ -210,14 +218,9 @@ export interface DepartmentConfig {
   issuerDisplayDefaults: IssuerDisplayDefaults;
 }
 
-/** Check if a department has any jwt_vc_json credentials (needs DID) */
-export function departmentNeedsDid(dept: DepartmentConfig): boolean {
-  return dept.credentials.some(cred => cred.format === 'jwt_vc_json');
-}
-
-/** Check if a department has any mso_mdoc credentials (needs DSC) */
+/** Check if a department needs an X.509 document signer certificate */
 export function departmentNeedsDsc(dept: DepartmentConfig): boolean {
-  return dept.credentials.some(cred => cred.format === 'mso_mdoc');
+  return dept.credentials.length > 0;
 }
 
 /** Check if a department has any credentials (needs trust registry identity) */
@@ -267,7 +270,7 @@ const W3C_VC_CONTEXT = ['https://www.w3.org/2018/credentials/v1', 'https://purl.
 const W3C_VC_MAPPING = {
   id: '<uuid>',
   issuer: {
-    id: '<issuerDid>',
+    id: '<issuerId>',
   },
   credentialSubject: {
     id: '<subjectDid>',
@@ -291,9 +294,9 @@ function buildW3cVcCredentialData(
     issuanceDate: '2024-01-01T00:00:00Z',
     issuer: {
       type: ['Profile'],
+      id: 'did:placeholder:issuer',
       name: issuerName,
       url: issuerUrl,
-      id: 'did:placeholder:issuer',
     },
     credentialSubject: {
       id: 'did:placeholder:subject',
@@ -381,23 +384,6 @@ export function buildDepartmentConfigs(
           profileSuffix: 'photo-id',
           sampleData: { ...photoIdDefaultValues },
         },
-        {
-          id: GOV_CREDENTIAL_IDS.addressProof,
-          format: 'jwt_vc_json',
-          profileSuffix: 'address',
-          mapping: { ...W3C_VC_MAPPING },
-          sampleData: buildW3cVcCredentialData(
-            GOV_CREDENTIAL_IDS.addressProof,
-            'Identity Services Department',
-            gov.serviceBaseUrl,
-            {
-              street: 'Musterstraße 123',
-              city: 'Berlin',
-              postalCode: '10115',
-              country: 'DE',
-            }
-          ),
-        },
       ],
     },
     revenue: {
@@ -453,6 +439,23 @@ export function buildDepartmentConfigs(
             }
           ),
         },
+        {
+          id: GOV_CREDENTIAL_IDS.addressProof,
+          format: 'jwt_vc_json',
+          profileSuffix: 'address',
+          mapping: { ...W3C_VC_MAPPING },
+          sampleData: buildW3cVcCredentialData(
+            GOV_CREDENTIAL_IDS.addressProof,
+            'Financial Services Authority',
+            gov.serviceBaseUrl,
+            {
+              street: 'Musterstraße 123',
+              city: 'Berlin',
+              postalCode: '10115',
+              country: 'DE',
+            }
+          ),
+        },
       ],
     },
   };
@@ -484,10 +487,15 @@ export function loadGovServicesEnv(cliDir: string): void {
 }
 
 export function createGovServicesConfig(): GovServicesConfig {
+  const organization = process.env.ORGANIZATION || 'waltid';
+  const baseUrl = process.env.BASE_URL || 'enterprise.localhost';
+  const port = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
+  const derivedOrgUrl = buildOrgUrl(baseUrl, organization, port);
+
   const serviceBaseUrl =
     process.env.GOV_SERVICES_BASE_URL ||
     process.env.ISSUER_BASE_URL ||
-    '';
+    derivedOrgUrl;
 
   if (!serviceBaseUrl) {
     throw new Error(
@@ -514,7 +522,8 @@ export function createGovServicesConfig(): GovServicesConfig {
 
 /** Build credential configuration for issuer service based on format */
 function buildCredentialConfiguration(
-  cred: CredentialConfig
+  cred: CredentialConfig,
+  gov: GovServicesConfig
 ): Record<string, unknown> {
   if (cred.format === 'mso_mdoc') {
     return {
@@ -523,18 +532,34 @@ function buildCredentialConfiguration(
       doctype: cred.doctype || cred.id,
       ...MDOC_PROOF_TYPES,
       credential_metadata: {
-        display: [{ name: `Photo ID (ISO 23220)`, locale: 'en' }],
+        display: [
+          {
+            name: 'Government Photo ID',
+            locale: 'en',
+            description: 'Official government-issued photo identification document compliant with ISO 23220.',
+            background_color: '#1a365d',
+            background_image: {
+              uri: `https://media.istockphoto.com/id/2161589436/vector/abstract-geometry-triangle-blue-mosaic-texture-background-pattern.jpg?s=612x612&w=0&k=20&c=yNHC5ZTZfsElB2SSe7sy62XjAmiETdarAyBBpBQ59HE=`,
+              alt_text: 'Government Photo ID background pattern',
+            },
+            text_color: '#ffffff',
+            logo: {
+              uri: `https://futurescot.com/wp-content/uploads/2021/06/shutterstock_1013902087-1-1200x675.jpg`,
+              alt_text: 'Government Identity Services logo',
+            },
+          },
+        ],
         claims: [
+          { path: [PHOTO_ID_NAMESPACE, 'portrait'], mandatory: false, display: claimDisplay('Portrait Photo') },
           { path: [PHOTO_ID_NAMESPACE, 'family_name'], mandatory: true, display: claimDisplay('Family Name') },
           { path: [PHOTO_ID_NAMESPACE, 'given_name'], mandatory: true, display: claimDisplay('Given Name') },
-          { path: [PHOTO_ID_NAMESPACE, 'birth_date'], mandatory: true, display: claimDisplay('Birth Date') },
-          { path: [PHOTO_ID_NAMESPACE, 'portrait'], mandatory: false, display: claimDisplay('Portrait') },
+          { path: [PHOTO_ID_NAMESPACE, 'birth_date'], mandatory: true, display: claimDisplay('Date of Birth') },
+          { path: [PHOTO_ID_NAMESPACE, 'nationality'], mandatory: true, display: claimDisplay('Nationality') },
           { path: [PHOTO_ID_NAMESPACE, 'document_number'], mandatory: true, display: claimDisplay('Document Number') },
           { path: [PHOTO_ID_NAMESPACE, 'issue_date'], mandatory: true, display: claimDisplay('Issue Date') },
           { path: [PHOTO_ID_NAMESPACE, 'expiry_date'], mandatory: true, display: claimDisplay('Expiry Date') },
           { path: [PHOTO_ID_NAMESPACE, 'issuing_authority'], mandatory: true, display: claimDisplay('Issuing Authority') },
           { path: [PHOTO_ID_NAMESPACE, 'issuing_country'], mandatory: true, display: claimDisplay('Issuing Country') },
-          { path: [PHOTO_ID_NAMESPACE, 'nationality'], mandatory: true, display: claimDisplay('Nationality') },
         ],
       },
     };
@@ -547,23 +572,150 @@ function buildCredentialConfiguration(
       vct: cred.vct,
       ...SDJWT_PROOF_TYPES,
       credential_metadata: {
-        display: [{ name: 'Tax Registration Credential', locale: 'en' }],
+        display: [
+          {
+            name: 'Tax Registration Certificate',
+            locale: 'en',
+            description: 'Official tax registration and compliance attestation issued by the Revenue Authority.',
+            background_color: '#065f46',
+            background_image: {
+              uri: `https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSXC6vQI8xDL-LbYrc8aAfbVYecp7gwGPIQAQ&s`,
+              alt_text: 'Tax Registration background pattern',
+            },
+            text_color: '#ffffff',
+            logo: {
+              uri: `https://static.vecteezy.com/system/resources/previews/045/364/531/non_2x/simple-tax-document-icon-vector.jpg`,
+              alt_text: 'Revenue Authority logo',
+            },
+          },
+        ],
         claims: [
-          { path: ['tax_id'], mandatory: true, display: claimDisplay('Tax ID') },
-          { path: ['tax_number'], mandatory: true, display: claimDisplay('Tax Number') },
+          { path: ['tax_id'], mandatory: true, display: claimDisplay('Tax Identification Number') },
+          { path: ['tax_number'], mandatory: true, display: claimDisplay('Tax Registration Number') },
           { path: ['tax_assessment_year'], mandatory: true, display: claimDisplay('Assessment Year') },
-          { path: ['annual_income'], mandatory: false, display: claimDisplay('Annual Income') },
           { path: ['tax_class'], mandatory: true, display: claimDisplay('Tax Class') },
-          { path: ['tax_status'], mandatory: true, display: claimDisplay('Tax Status') },
+          { path: ['tax_status'], mandatory: true, display: claimDisplay('Compliance Status') },
+          { path: ['annual_income'], mandatory: false, display: claimDisplay('Annual Income') },
           { path: ['given_name'], mandatory: true, display: claimDisplay('Given Name') },
           { path: ['family_name'], mandatory: true, display: claimDisplay('Family Name') },
-          { path: ['birthdate'], mandatory: false, display: claimDisplay('Birth Date') },
+          { path: ['birthdate'], mandatory: false, display: claimDisplay('Date of Birth') },
         ],
       },
     };
   }
 
-  // jwt_vc_json format
+  // jwt_vc_json format - determine specific credential type
+  if (cred.id === GOV_CREDENTIAL_IDS.employeeStatus) {
+    return {
+      format: 'jwt_vc_json',
+      scope: cred.id,
+      ...JWT_VC_PROOF_TYPES,
+      credential_definition: {
+        type: ['VerifiableCredential', cred.id],
+      },
+      credential_metadata: {
+        display: [
+          {
+            name: 'Employee Status Credential',
+            locale: 'en',
+            description: 'Official government employee status verification issued by Human Resources.',
+            background_color: '#7c3aed',
+            background_image: {
+              uri: `https://static.vecteezy.com/system/resources/thumbnails/041/713/016/small/ai-generated-abstract-blurred-background-of-modern-office-with-glass-walls-shows-desks-and-chairs-with-computer-free-photo.jpg`,
+              alt_text: 'Employee credential background pattern',
+            },
+            text_color: '#ffffff',
+            logo: {
+              uri: `https://thumbs.dreamstime.com/b/employee-benefits-icon-monochrome-simple-sign-employee-benefits-collection-employee-benefits-icon-logo-templates-web-279578970.jpg`,
+              alt_text: 'Human Resources Department logo',
+            },
+          },
+        ],
+        claims: [
+          { path: ['credentialSubject', 'employeeId'], mandatory: true, display: claimDisplay('Employee ID') },
+          { path: ['credentialSubject', 'department'], mandatory: true, display: claimDisplay('Department') },
+          { path: ['credentialSubject', 'position'], mandatory: true, display: claimDisplay('Position') },
+          { path: ['credentialSubject', 'clearanceLevel'], mandatory: true, display: claimDisplay('Security Clearance') },
+          { path: ['credentialSubject', 'startDate'], mandatory: true, display: claimDisplay('Employment Start Date') },
+        ],
+      },
+    };
+  }
+
+  if (cred.id === GOV_CREDENTIAL_IDS.bankAccount) {
+    return {
+      format: 'jwt_vc_json',
+      scope: cred.id,
+      ...JWT_VC_PROOF_TYPES,
+      credential_definition: {
+        type: ['VerifiableCredential', cred.id],
+      },
+      credential_metadata: {
+        display: [
+          {
+            name: 'Bank Account Verification',
+            locale: 'en',
+            description: 'Verified bank account ownership credential issued by the Financial Services Authority.',
+            background_color: '#0369a1',
+            background_image: {
+              uri: `https://mir-s3-cdn-cf.behance.net/project_modules/fs/150772104862615.5f6c4575742c7.jpg`,
+              alt_text: 'Bank account credential background pattern',
+            },
+            text_color: '#ffffff',
+            logo: {
+              uri: `https://static.vecteezy.com/system/resources/previews/029/821/912/non_2x/bank-icon-simple-design-logo-illustration-vector.jpg`,
+              alt_text: 'Financial Services Authority logo',
+            },
+          },
+        ],
+        claims: [
+          { path: ['credentialSubject', 'accountHolder'], mandatory: true, display: claimDisplay('Account Holder') },
+          { path: ['credentialSubject', 'accountNumber'], mandatory: true, display: claimDisplay('Account Number (IBAN)') },
+          { path: ['credentialSubject', 'accountType'], mandatory: true, display: claimDisplay('Account Type') },
+          { path: ['credentialSubject', 'bankName'], mandatory: true, display: claimDisplay('Bank Name') },
+          { path: ['credentialSubject', 'verifiedDate'], mandatory: true, display: claimDisplay('Verification Date') },
+        ],
+      },
+    };
+  }
+
+  if (cred.id === GOV_CREDENTIAL_IDS.addressProof) {
+    return {
+      format: 'jwt_vc_json',
+      scope: cred.id,
+      ...JWT_VC_PROOF_TYPES,
+      credential_definition: {
+        type: ['VerifiableCredential', cred.id],
+      },
+      credential_metadata: {
+        display: [
+          {
+            name: 'Proof of Address',
+            locale: 'en',
+            description: 'Official address verification credential issued by the Financial Services Authority.',
+            background_color: '#b45309',
+            background_image: {
+              uri: `https://ichef.bbci.co.uk/ace/standard/3840/cpsprodpb/95d7/live/c38e6860-ebc5-11f0-88a4-f1fbc524c6d9.jpg`,
+              alt_text: 'Address proof credential background pattern',
+            },
+            text_color: '#ffffff',
+            logo: {
+              uri: `https://img.freepik.com/premium-vector/simple-home-icon-house-logo_1090394-64691.jpg`,
+              alt_text: 'Financial Services Authority logo',
+            },
+          },
+        ],
+        claims: [
+          { path: ['credentialSubject', 'street'], mandatory: true, display: claimDisplay('Street Address') },
+          { path: ['credentialSubject', 'city'], mandatory: true, display: claimDisplay('City') },
+          { path: ['credentialSubject', 'postalCode'], mandatory: true, display: claimDisplay('Postal Code') },
+          { path: ['credentialSubject', 'country'], mandatory: true, display: claimDisplay('Country') },
+        ],
+      },
+    };
+  }
+
+  // Fallback for unknown jwt_vc_json credentials
   return {
     format: 'jwt_vc_json',
     scope: cred.id,
@@ -579,7 +731,8 @@ export function buildDepartmentIssuerConfig(
   organization: string,
   mainTenantPath: string,
   dept: DepartmentConfig,
-  gov: GovServicesConfig
+  gov: GovServicesConfig,
+  metadataSigningCertificatePem?: string
 ): Record<string, unknown> {
   const issuerPath = `${organization}.${dept.tenantId}.${dept.issuerName}`;
   const kmsRef = `${mainTenantPath}.kms`;
@@ -588,7 +741,7 @@ export function buildDepartmentIssuerConfig(
   const sdJwtVcTypeMetadata: Record<string, unknown> = {};
 
   for (const cred of dept.credentials) {
-    credentialConfigurations[cred.id] = buildCredentialConfiguration(cred);
+    credentialConfigurations[cred.id] = buildCredentialConfiguration(cred, gov);
 
     if (cred.format === 'dc+sd-jwt') {
       sdJwtVcTypeMetadata[cred.id] = {
@@ -613,6 +766,10 @@ export function buildDepartmentIssuerConfig(
     ),
     authProviderConfiguration: dept.authProviderConfiguration,
   };
+
+  if (metadataSigningCertificatePem) {
+    config.signedMetadataConfig = buildSignedMetadataConfig(dept.signingKeyId, [metadataSigningCertificatePem]);
+  }
 
   if (Object.keys(sdJwtVcTypeMetadata).length > 0) {
     config.sdJwtVcTypeMetadataConfiguration = sdJwtVcTypeMetadata;
