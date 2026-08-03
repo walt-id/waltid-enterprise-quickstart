@@ -76,8 +76,9 @@ export async function createSuperadminAccount(ctx: CommandContext): Promise<bool
   console.log('   [INFO] Using credentials from: config/superadmin-registration.conf');
   
   try {
-    const orgUrl = buildOrgUrl(ctx.config.baseUrl, ctx.config.organization, ctx.config.port);
-    const response = await fetch(`${orgUrl}/v1/superadmin/create-by-token`, {
+    // Superadmin endpoint is at base URL, not org-scoped URL
+    const baseUrl = buildBaseUrl(ctx.config.baseUrl, ctx.config.port);
+    const response = await fetch(`${baseUrl}/v1/superadmin/create-by-token`, {
       method: 'POST',
       headers: {
         'accept': '*/*',

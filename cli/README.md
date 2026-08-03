@@ -37,6 +37,26 @@ This flow demonstrates trust list verification using the Enterprise Trust Regist
 npx tsx walt.ts --flow-etsi-trust-lists
 ```
 
+### Trust List Assurance Flow
+
+This flow verifies registry-owned certificate path construction with an mdoc that omits its IACA/root, rejects an unrelated certificate, and verifies the same leaf-only credential through Verifier2's linked Trust Registry.
+
+```bash
+# Requires the normal base and ETSI Trust Registry setup
+npx tsx walt.ts --setup-all
+npx tsx walt.ts --flow-trust-list-assurance
+```
+
+To also validate compact-JWS LoTE loading, configure a signed artifact and its independently trusted signer certificate:
+
+```bash
+TRUST_LIST_SIGNED_LOTE_FILE=/path/to/list.json.jws \
+TRUST_LIST_SIGNER_CERT_FILE=/path/to/source-signer.pem \
+npx tsx walt.ts --flow-trust-list-assurance
+```
+
+For a local mechanics-only test, `TRUST_LIST_ALLOW_EMBEDDED_SIGNER_TEST_PIN=true` explicitly pins `x5c[0]`. This is intentionally opt-in because an embedded certificate is not independent signer trust.
+
 ### Credential Revocation Flow
 
 This flow demonstrates the complete credential revocation lifecycle using TokenStatusList CWT. It will issue a credential with status tracking enabled, verify the credential, revoke the credential, and unrevoke the credential.
@@ -83,3 +103,42 @@ This will create a host alias for the enterprise stack at `probable-boxer-proven
 
 This will allow you to use different public URLs for the enterprise stack which are accessible over the internet, making it easier to test the enterprise stack in a real-world scenario.
 
+
+## Self-Signed Certificates (Remote Systems)
+
+When connecting to remote systems with self-signed certificates, you'll get:
+```
+Error code: DEPTH_ZERO_SELF_SIGNED_CERT
+```
+
+### Solution 1: Use the insecure wrapper (quick)
+```bash
+ADMIN_EMAIL=admin@example.com \
+ADMIN_PASSWORD=yourpassword \
+BASE_URL=https://your-remote-system.example.com \
+./walt-insecure.sh --setup-all
+```
+
+### Solution 2: Set environment variable
+```bash
+export NODE_TLS_REJECT_UNAUTHORIZED=0
+ADMIN_EMAIL=admin@example.com \
+ADMIN_PASSWORD=yourpassword \
+BASE_URL=https://your-remote-system.example.com \
+npx tsx walt.ts --setup-all
+```
+
+### Solution 3: Install the CA certificate (production)
+```bash
+# Download the CA certificate
+curl -k https://your-remote-system.example.com/ca.crt > ca.crt
+
+# Install it (Ubuntu/Debian)
+sudo cp ca.crt /usr/local/share/ca-certificates/
+sudo update-ca-certificates
+
+# Now Node.js will trust it
+npx tsx walt.ts --setup-all
+```
+
+**⚠️ Warning:** `NODE_TLS_REJECT_UNAUTHORIZED=0` disables certificate validation and should only be used for testing/development systems with self-signed certificates.

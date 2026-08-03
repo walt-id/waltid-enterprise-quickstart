@@ -37,6 +37,7 @@ import {
   setupImportKeys,
   setupCreateIacaCertificate,
 } from './keys.js';
+import { buildCertificateAnchorLote, MDL_ISSUER_SERVICE_TYPE, type LoteEntityInput } from '../../trust-registry/index.js';
 
 /** Map of department key to their DID (for jwt_vc_json issuers) */
 const departmentDids: Map<string, string> = new Map();
@@ -538,64 +539,30 @@ async function loadGovIssuersIntoTrustRegistry(
 
   const sourceId = gov.trustedSourceId;
 
-  const trustedEntities: any[] = [];
+  const trustedEntities: LoteEntityInput[] = [];
 
   for (const [deptKey, dept] of Object.entries(departments)) {
     const issuerDid = departmentDids.get(deptKey);
     const dscPem = departmentDscPems.get(deptKey);
     const entityId = `gov-${deptKey}`;
 
-    const identities: any[] = [];
-
-    if (issuerDid) {
-      identities.push({
-        matchType: 'DID_KEY',
-        value: issuerDid,
-      });
-    }
-
-    if (dscPem) {
-      identities.push({
-        matchType: 'CERTIFICATE_PEM',
-        value: dscPem,
-      });
-    }
-
-    if (identities.length === 0) {
+    if (!issuerDid && !dscPem) {
       console.log(`   [WARN] ${dept.name} has no identity for trust registry, skipping`);
       continue;
     }
 
-    const credentialTypes = dept.credentials.map(c => c.id);
-
     trustedEntities.push({
-      entityId,
-      entityType: 'PID_PROVIDER',
+      id: entityId,
       legalName: dept.name,
       country: 'US',
-      services: [
-        {
-          serviceId: `${deptKey}-credential-issuing`,
-          serviceType: 'MDL_ISSUER',
-          status: 'GRANTED',
-          statusStart: new Date().toISOString(),
-          identities,
-        },
-      ],
+      serviceName: `${dept.name} credential issuer`,
+      serviceType: MDL_ISSUER_SERVICE_TYPE,
+      certificatePem: dscPem,
+      otherIds: issuerDid ? [issuerDid] : undefined,
     });
   }
 
-  const loteSource = {
-    listMetadata: {
-      listId: sourceId,
-      listType: 'credential-issuers',
-      territory: 'US',
-      issueDate: new Date().toISOString(),
-      nextUpdate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
-      sequenceNumber: '1',
-    },
-    trustedEntities,
-  };
+  const loteSource = buildCertificateAnchorLote(sourceId, 'US', trustedEntities);
 
   ctx.saveJson('gov-trust-lote-source.json', loteSource, step);
 
@@ -603,7 +570,7 @@ async function loadGovIssuersIntoTrustRegistry(
     sourceId,
     content: JSON.stringify(loteSource),
     sourceUrl: 'local://gov-services-demo',
-    validateSignature: false,
+    acceptancePolicy: 'ALLOW_UNSIGNED',
   };
   ctx.saveJson('gov-trust-load-request.json', request, step);
 

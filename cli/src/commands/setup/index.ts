@@ -61,3 +61,5 @@ export { runGovServicesSetup } from './gov-services.js';
 export { setupCreateOidcBridge } from './oidc-bridge.js';
 // EUDI demo (WRP Registry)
 export { runEudiDemoSetup } from './eudi-demo.js';
+// OIDC Bridge
+export { setupCreateOidcBridge } from './oidc-bridge.js';
