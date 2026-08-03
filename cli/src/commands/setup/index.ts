@@ -57,6 +57,8 @@ export { runBankTenantSetup } from './bank-tenant.js';
 // Government services tenant
 export { runGovServicesSetup } from './gov-services.js';
 
+// OIDC Bridge
+export { setupCreateOidcBridge } from './oidc-bridge.js';
 // EUDI demo (WRP Registry)
 export { runEudiDemoSetup } from './eudi-demo.js';
 // OIDC Bridge

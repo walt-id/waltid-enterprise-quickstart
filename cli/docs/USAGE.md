@@ -140,6 +140,7 @@ The `--setup-etsi-trust-registry` command performs:
 - Create trust registry service
 - Link Verifier2 to Trust Registry
 - Import the Austrian and Italian national TSLs and the EU LoTL
+- Import public trust lists (EWC Pilot, Austrian TSL)
 - Load local IACA certificate into trust registry
 - List trust sources with authenticity states
 
