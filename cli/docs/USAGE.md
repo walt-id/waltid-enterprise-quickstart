@@ -168,8 +168,8 @@ This flow provides focused acceptance coverage for the Trust Registry chain-reso
 2. Resolve the document signer as a leaf-only chain and require `CERTIFICATE_PATH` evidence.
 3. Confirm that an unrelated certificate returns `NOT_TRUSTED`.
 4. Optionally validate compact-JWS LoTE content with an explicit signer pin and confirm that the same source is rejected without signer trust.
-5. Create a dedicated mdoc issuer profile whose `x5Chain` contains only the document signer.
-6. Issue, present, and verify that credential through Verifier2's linked Trust Registry.
+5. Issue from the existing `mdl-profile` with a leaf-only `runtimeOverrides.x5Chain` (document signer only; IACA omitted).
+6. Present and verify that credential through Verifier2's linked Trust Registry.
 7. Assert the `etsi-trust-list` policy result and matched trust source, not only the final session status.
 
 **Prerequisites:**

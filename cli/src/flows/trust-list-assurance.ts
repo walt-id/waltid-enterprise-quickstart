@@ -6,7 +6,6 @@ import {
   CERT_IDS,
   defaultWalletDidReference,
   defaultWalletKeyReference,
-  KEY_IDS,
   MDL_DOC_TYPE,
   RESOURCES,
 } from '../config.js';
@@ -23,7 +22,6 @@ import {
 } from '../trust-registry/index.js';
 
 const SOURCE_ID = 'trust-list-local-iaca';
-const PROFILE_ID = 'mdl-profile-trust-list-assurance';
 
 async function retrieveCertificate(ctx: CommandContext, certificateId: string): Promise<string> {
   const response = await ctx.orgClient.get(
@@ -204,46 +202,6 @@ async function testSignedLote(ctx: CommandContext): Promise<void> {
   console.log('   [PASS] Signed LoTE without independent signer trust correctly rejected');
 }
 
-async function recreateLeafOnlyProfile(ctx: CommandContext, leafPem: string): Promise<string> {
-  const profilePath = `${ctx.tenantPath}.${RESOURCES.issuer}.${PROFILE_ID}`;
-  try {
-    await ctx.orgClient.delete(`/v2/${profilePath}/issuer-service-api/credentials/profiles`);
-  } catch (error: any) {
-    if (error.status !== 404) throw error;
-  }
-
-  const request = {
-    name: PROFILE_ID,
-    credentialConfigurationId: MDL_DOC_TYPE,
-    issuerKeyId: `${ctx.tenantPath}.${RESOURCES.kms}.${KEY_IDS.issuerSigningKey}`,
-    x5Chain: [{
-      type: 'pem-encoded-x509-certificate-descriptor',
-      pemEncodedCertificate: leafPem,
-    }],
-    credentialData: {
-      'org.iso.18013.5.1': {
-        family_name: 'Trust List',
-        given_name: 'Root Omitted',
-        birth_date: '1990-01-01',
-        issue_date: '2026-07-17',
-        expiry_date: '2029-01-01',
-        issuing_country: 'US',
-        issuing_authority: 'Trust List Test DMV',
-        document_number: 'TRUSTLIST01',
-        un_distinguishing_sign: 'USA',
-      },
-    },
-  };
-  const step = ctx.nextStep();
-  ctx.saveJson('trust-list-create-profile-request.json', request, step);
-  const response = await ctx.orgClient.post(
-    `/v2/${profilePath}/issuer-service-api/credentials/profiles`,
-    request
-  );
-  ctx.saveJson('trust-list-create-profile-response.json', response.data, step);
-  return profilePath;
-}
-
 function extractCredentialIds(receiveResponse: any): string[] {
   if (!Array.isArray(receiveResponse)) return [];
   return receiveResponse.flatMap(result =>
@@ -253,22 +211,44 @@ function extractCredentialIds(receiveResponse: any): string[] {
   );
 }
 
+/**
+ * Issue from the existing mdl-profile, overriding x5Chain to leaf-only for this offer.
+ * Issuer2 merges CredentialOfferCreateRequest.runtimeOverrides over the profile
+ * (x5Chain replaces; credentialData deep-merges).
+ */
 async function testVerifierIntegration(
   ctx: CommandContext,
   leafPem: string,
   expectedSourceId: string
 ): Promise<void> {
-  const profilePath = await recreateLeafOnlyProfile(ctx, leafPem);
+  const profilePath = `${ctx.tenantPath}.${RESOURCES.issuer}.${RESOURCES.issuerProfile}`;
   await clearWalletCredentials(ctx);
 
   let step = ctx.nextStep();
+  const offerRequest = {
+    authMethod: 'PRE_AUTHORIZED',
+    runtimeOverrides: {
+      x5Chain: [{
+        type: 'pem-encoded-x509-certificate-descriptor',
+        pemEncodedCertificate: leafPem,
+      }],
+      credentialData: {
+        'org.iso.18013.5.1': {
+          family_name: 'Trust List',
+          given_name: 'Root Omitted',
+          document_number: 'TRUSTLIST01',
+        },
+      },
+    },
+  };
+  ctx.saveJson('trust-list-offer-request.json', offerRequest, step);
   const offerResponse = await ctx.orgClient.post(
     `/v2/${profilePath}/issuer-service-api/credentials/offers`,
-    { authMethod: 'PRE_AUTHORIZED' }
+    offerRequest
   );
   ctx.saveJson('trust-list-offer-response.json', offerResponse.data, step);
   const offerUrl = offerResponse.data.credentialOffer;
-  if (!offerUrl) throw new Error('Trust-list test profile did not return a credential offer');
+  if (!offerUrl) throw new Error('mdl-profile did not return a credential offer');
 
   step = ctx.nextStep();
   const receiveRequest = {
@@ -336,15 +316,18 @@ async function testVerifierIntegration(
   if (session?.status !== 'SUCCESSFUL') {
     throw new Error(`Expected trust-list session SUCCESSFUL, got ${session?.status || '<empty>'}`);
   }
-  const policies = session.policyResults?.vc_policies || [];
+  // Verifier2 session info uses snake_case policy_results (not camelCase policyResults)
+  const policies = session.policy_results?.vc_policies || session.policyResults?.vc_policies || [];
   const trustPolicy = policies.find((entry: any) =>
     entry.policy?.policy === 'etsi-trust-list' || entry.policy?.id === 'etsi-trust-list'
   );
   if (!trustPolicy?.success) {
     throw new Error(`ETSI trust-list policy did not succeed: ${trustPolicy?.error || 'result missing'}`);
   }
-  if (trustPolicy.result?.matchedSource?.sourceId !== expectedSourceId) {
-    throw new Error(`ETSI policy matched unexpected source: ${trustPolicy.result?.matchedSource?.sourceId || '<none>'}`);
+  const matchedSourceId =
+    trustPolicy.result?.matchedSource?.sourceId || trustPolicy.result?.matched_source?.sourceId;
+  if (matchedSourceId !== expectedSourceId) {
+    throw new Error(`ETSI policy matched unexpected source: ${matchedSourceId || '<none>'}`);
   }
   console.log('   [PASS] Verifier2 resolved root-omitted credential through linked Trust Registry');
 }
