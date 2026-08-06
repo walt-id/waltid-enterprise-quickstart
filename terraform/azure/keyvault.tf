@@ -28,6 +28,9 @@ resource "azurerm_key_vault" "this" {
   location            = local.location
   tenant_id           = data.azurerm_client_config.current[0].tenant_id
   sku_name            = "standard"
+
+  rbac_authorization_enabled = true
+
   tags = merge(local.common_tags, {
     purpose = "key-management"
   })
