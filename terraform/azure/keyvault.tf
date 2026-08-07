@@ -2,16 +2,22 @@ data "azurerm_client_config" "current" {
   count = var.enable_key_vault ? 1 : 0
 }
 
+data "azuread_client_config" "current" {
+  count = var.enable_key_vault ? 1 : 0
+}
+
 resource "azuread_application" "keyvault" {
   count = var.enable_key_vault ? 1 : 0
 
   display_name = "wid-sp-kv" // waltid service principal for key vault access
+  owners       = [data.azuread_client_config.current[0].object_id]
 }
 
 resource "azuread_service_principal" "keyvault" {
   count = var.enable_key_vault ? 1 : 0
 
   client_id = azuread_application.keyvault[0].client_id
+  owners    = [data.azuread_client_config.current[0].object_id]
 }
 
 resource "azuread_service_principal_password" "keyvault" {
