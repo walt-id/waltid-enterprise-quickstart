@@ -35,17 +35,23 @@ resource "azurerm_key_vault" "this" {
   tenant_id           = data.azurerm_client_config.current[0].tenant_id
   sku_name            = "standard"
 
-  rbac_authorization_enabled = true
+  rbac_authorization_enabled = false
 
   tags = merge(local.common_tags, {
     purpose = "key-management"
   })
 }
 
-resource "azurerm_role_assignment" "keyvault_crypto_officer" {
+resource "azurerm_key_vault_access_policy" "keyvault_crypto_officer" {
   count = var.enable_key_vault ? 1 : 0
 
-  scope                = azurerm_key_vault.this[0].id
-  role_definition_name = "Key Vault Crypto Officer"
-  principal_id         = azuread_service_principal.keyvault[0].object_id
+  key_vault_id = azurerm_key_vault.this[0].id
+  tenant_id    = data.azurerm_client_config.current[0].tenant_id
+  object_id    = azuread_service_principal.keyvault[0].object_id
+
+  key_permissions = [
+    "Backup", "Create", "Decrypt", "Delete", "Encrypt", "Get", "Import",
+    "List", "Purge", "Recover", "Restore", "Sign", "UnwrapKey", "Update",
+    "Verify", "WrapKey",
+  ]
 }
