@@ -40,6 +40,9 @@ export async function setupCreateOidcBridge(ctx: CommandContext): Promise<void> 
   console.log(`   [INFO] Issuer URL: ${issuerUrl}`);
   console.log(`   [INFO] Client ID: ${clientId}`);
   console.log(`   [INFO] Redirect URI: ${redirectUri}`);
+  if (!issuerUrl.startsWith('https://')) {
+    console.log('   [INFO] DC API flow disabled: expectedOrigins require HTTPS');
+  }
   
   // Base DCQL query used for all flows.
   // Matches the working reference config used in production demos:
@@ -111,6 +114,8 @@ export async function setupCreateOidcBridge(ctx: CommandContext): Promise<void> 
     url_config: {},
   };
   
+  const dcApiOriginIsHttps = issuerUrl.startsWith('https://');
+
   // Multi-flow configuration: enables all four presentation flows
   const flows = {
     // QR Code flow: Cross-device presentation (scan QR with mobile wallet)
@@ -121,26 +126,28 @@ export async function setupCreateOidcBridge(ctx: CommandContext): Promise<void> 
     },
     // Digital Credentials API flow: Browser-native credential picker
     dc_api: {
-      enabled: true,
+      enabled: dcApiOriginIsHttps,
       buttonLabel: 'Browser Wallet (Digital Credentials API)',
-      // DC API requires its own verification setup with expectedOrigins
-      verificationSetup: {
-        flow_type: 'dc_api',
-        core: {
-          dcql_query: baseDcqlQuery,
-          // signed_request / encrypted_response stay `false` to match the
-          // working reference config in waltid-identity-enterprise/ory/docs.
-          signed_request: false,
-          encrypted_response: false,
-          policies: {},
-          clientId: 'x509_hash:kZ5SI3MAFaLDPRxza8xguw-o6b8LYfmP2ZvrqVSRWng',
-          key: signingKey,
-          x5c: certificateChain,
-        },
-        // Expected origins for DC API - must match the page origin where credential.get() is called
-        expectedOrigins: [issuerUrl],
-        haip: false,
-      },
+      // DC API requires its own verification setup with HTTPS expectedOrigins.
+      // flow_type `dc_api` was replaced by `dc_api_openid4vp` (OpenID4VP Annex D).
+      ...(dcApiOriginIsHttps
+        ? {
+            verificationSetup: {
+              flow_type: 'dc_api_openid4vp',
+              core_flow: {
+                dcql_query: baseDcqlQuery,
+                signed_request: false,
+                encrypted_response: false,
+                policies: {},
+                clientId: 'x509_hash:kZ5SI3MAFaLDPRxza8xguw-o6b8LYfmP2ZvrqVSRWng',
+                key: signingKey,
+                x5c: certificateChain,
+              },
+              expectedOrigins: [issuerUrl],
+              haip: false,
+            },
+          }
+        : {}),
     },
     // Deep Link flow: Same-device mobile wallet launch (openid4vp://)
     deep_link: {

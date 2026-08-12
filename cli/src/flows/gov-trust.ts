@@ -30,6 +30,9 @@ import {
 
 /** Extract stored wallet credential IDs from a receive response. */
 function extractStoredCredentialIds(receiveResponse: unknown): string[] {
+  if (Array.isArray((receiveResponse as any)?.credentialIds)) {
+    return (receiveResponse as any).credentialIds.filter((id: unknown): id is string => typeof id === 'string');
+  }
   if (!Array.isArray(receiveResponse)) {
     return [];
   }
@@ -73,9 +76,7 @@ async function walletReceiveWithTrust(
   const request = {
     offerUrl,
     keyReference: ctx.ctx.walletKeyRef,
-    didReference: defaultWalletDidReference(ctx.tenantPath),
-    runPolicies: true,
-    useClientAttestation: false,
+    did: defaultWalletDidReference(ctx.tenantPath),
   };
   ctx.saveJson('wallet-receive-trust-request.json', request, step);
 
@@ -86,7 +87,7 @@ async function walletReceiveWithTrust(
     );
     ctx.saveJson('wallet-receive-trust-response.json', response.data, step);
 
-    const receivedCount = Array.isArray(response.data) ? response.data.length : 0;
+    const receivedCount = extractStoredCredentialIds(response.data).length;
     const credentialIds = extractStoredCredentialIds(response.data);
     console.log(`   [OK] Credential received (count: ${receivedCount})`);
     console.log(`        Credential IDs: ${credentialIds.join(', ')}`);
@@ -107,9 +108,7 @@ async function walletReceiveBypassTrust(
   const request = {
     offerUrl,
     keyReference: ctx.ctx.walletKeyRef,
-    didReference: defaultWalletDidReference(ctx.tenantPath),
-    runPolicies: false,
-    useClientAttestation: false,
+    did: defaultWalletDidReference(ctx.tenantPath),
   };
   ctx.saveJson('wallet-receive-no-trust-request.json', request, step);
 
@@ -119,7 +118,7 @@ async function walletReceiveBypassTrust(
   );
   ctx.saveJson('wallet-receive-no-trust-response.json', response.data, step);
 
-  const receivedCount = Array.isArray(response.data) ? response.data.length : 0;
+  const receivedCount = extractStoredCredentialIds(response.data).length;
   const credentialIds = extractStoredCredentialIds(response.data);
   console.log(`   [OK] Credential received (count: ${receivedCount})`);
   console.log(`        Credential IDs: ${credentialIds.join(', ')}`);
@@ -168,7 +167,7 @@ async function createTrustedVerifierSession(ctx: CommandContext): Promise<void> 
   ctx.saveJson('trusted-verifier-session-request.json', request, step);
 
   const response = await ctx.orgClient.post(
-    `/v1/${ctx.tenantPath}.${RESOURCES.verifier2}/verifier2-service-api/verification-session/create`,
+    `/v2/${ctx.tenantPath}.${RESOURCES.verifier2}/verifier-service-api/verification-session/create`,
     request
   );
   ctx.saveJson('trusted-verifier-session-response.json', response.data, step);
@@ -225,7 +224,7 @@ async function createUntrustedVerifierSession(
   ctx.saveJson('untrusted-verifier-session-request.json', request, step);
 
   const response = await ctx.orgClient.post(
-    `/v1/${verifierPath}/verifier2-service-api/verification-session/create`,
+    `/v2/${verifierPath}/verifier-service-api/verification-session/create`,
     request
   );
   ctx.saveJson('untrusted-verifier-session-response.json', response.data, step);

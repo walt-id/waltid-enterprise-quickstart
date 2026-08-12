@@ -7,7 +7,7 @@
  */
 
 import { CommandContext } from '../../context.js';
-import { RESOURCES, KEY_IDS, CERT_IDS, defaultWalletKeyReference, defaultWalletDidReference } from '../../config.js';
+import { RESOURCES, KEY_IDS, CERT_IDS } from '../../config.js';
 import {
   BankTenantConfig,
   buildBankIssuerServiceConfig,
@@ -19,6 +19,7 @@ import {
 import { setupLogin } from './auth.js';
 import {
   setupCreateTenant,
+  setupCreateWallet,
   setupCreateServices,
   setupLinkX509Dependencies,
 } from './tenant.js';
@@ -79,52 +80,14 @@ async function buildMdocX5Chain(
 
 /**
  * Initialize wallet with its own KMS (separate from issuer KMS), DID service/store,
- * credential store, and did:key. Uses init-wallet wizard (wallet-service setup docs).
+ * credential store, and did:key via Wallet2 composable init.
  */
 export async function setupBankCreateWallet(ctx: CommandContext): Promise<void> {
-  const step = ctx.nextStep();
   ctx.log('Initialize bank tenant wallet with dedicated KMS and DID', 'BANK-SETUP');
-
+  await setupCreateWallet(ctx, 'key');
   const walletKmsRef = `${ctx.tenantPath}.${RESOURCES.walletKms}`;
-
-  const { created } = await ctx.tolerantCreate(
-    'Wallet',
-    async () => {
-      const request = {
-        createKms: true,
-        kmsName: RESOURCES.walletKms,
-        createKeyInKms: {
-          keyType: 'secp256r1',
-        },
-        createDidStore: true,
-        didStoreName: RESOURCES.walletDidStore,
-        createDidService: true,
-        didServiceName: RESOURCES.walletDidService,
-        createDidWithDidService: 'key',
-        createCredentialStore: true,
-        credentialStoreName: RESOURCES.walletCredentialStore,
-      };
-      ctx.saveJson('init-bank-wallet-request.json', request, step);
-
-      const response = await ctx.orgClient.post(
-        `/v1/${ctx.tenantPath}/wallet-service-api/init-wallet`,
-        request
-      );
-      ctx.saveJson('init-bank-wallet-response.json', response.data, step);
-      return response;
-    }
-  );
-
-  ctx.ctx.walletKeyRef = defaultWalletKeyReference(ctx.tenantPath);
-  ctx.ctx.walletDid = defaultWalletDidReference(ctx.tenantPath);
-
-  if (created) {
-    console.log(`   [OK] Wallet initialized (KMS: ${walletKmsRef})`);
-    if (ctx.ctx.walletDid) {
-      console.log(`   [OK] Wallet DID: ${ctx.ctx.walletDid}`);
-    }
-  } else if (ctx.ctx.walletDid) {
-    console.log(`   [SKIP] Wallet already exists (DID: ${ctx.ctx.walletDid})`);
+  if (ctx.ctx.walletDid) {
+    console.log(`   [OK] Wallet DID: ${ctx.ctx.walletDid} (KMS: ${walletKmsRef})`);
   }
 }
 

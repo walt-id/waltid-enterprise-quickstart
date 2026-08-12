@@ -82,8 +82,8 @@ export async function linkVerifier2ToTrustRegistry(ctx: CommandContext): Promise
   const verifier2Target = `${ctx.tenantPath}.${RESOURCES.verifier2}`;
 
   try {
-    await ctx.orgClient.postRaw(
-      `/v1/${verifier2Target}/verifier2-service-api/dependencies/add`,
+    await ctx.addServiceDependency(
+      `/v2/${verifier2Target}/verifier-service-api/dependencies/add`,
       trustRegistryTarget
     );
     console.log(`   [OK] Trust registry linked to verifier2: ${trustRegistryTarget}`);

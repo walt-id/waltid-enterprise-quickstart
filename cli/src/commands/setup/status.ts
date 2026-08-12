@@ -43,10 +43,9 @@ export async function setupCreateCredentialStatusService(ctx: CommandContext): P
 
   // Link KMS dependency
   try {
-    await ctx.orgClient.post(
+    await ctx.addServiceDependency(
       `/v1/${ctx.tenantPath}.${RESOURCES.credentialStatus}/credential-status-service-api/dependencies/add`,
-      `${ctx.tenantPath}.${RESOURCES.kms}`,
-      'text/plain'
+      `${ctx.tenantPath}.${RESOURCES.kms}`
     );
     console.log(`   [OK] Linked KMS to credential status service`);
   } catch (error: any) {
@@ -109,10 +108,9 @@ export async function setupLinkIssuerToCredentialStatus(ctx: CommandContext): Pr
   ctx.log('Link credential status service to issuer', 'SETUP');
 
   try {
-    await ctx.orgClient.post(
+    await ctx.addServiceDependency(
       `/v2/${ctx.tenantPath}.${RESOURCES.issuer}/issuer-service-api/dependencies/add`,
-      `${ctx.tenantPath}.${RESOURCES.credentialStatus}`,
-      'text/plain'
+      `${ctx.tenantPath}.${RESOURCES.credentialStatus}`
     );
     console.log(`   [OK] Credential status service linked to issuer`);
   } catch (error: any) {

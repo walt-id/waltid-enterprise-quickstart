@@ -98,7 +98,7 @@ export async function setupCreateClientAttester(ctx: CommandContext): Promise<vo
 
   // Add KMS dependency
   try {
-    await ctx.orgClient.postRaw(
+    await ctx.addServiceDependency(
       `/v1/${ctx.tenantPath}.${RESOURCES.clientAttester}/client-attester-api/dependencies/add`,
       `${ctx.tenantPath}.${RESOURCES.kms}`
     );
@@ -275,8 +275,8 @@ export async function setupLinkWalletToAttester(ctx: CommandContext): Promise<vo
   ctx.log('Attach client attester dependency to wallet', 'SETUP');
 
   try {
-    await ctx.orgClient.postRaw(
-      `/v1/${ctx.tenantPath}.${RESOURCES.wallet}/wallet-service-api/dependencies/add`,
+    await ctx.addServiceDependency(
+      `/v2/${ctx.tenantPath}.${RESOURCES.wallet}/wallet-service-api/dependencies/add`,
       `${ctx.tenantPath}.${RESOURCES.clientAttester}`
     );
     console.log(`   [OK] Client attester linked to wallet`);
@@ -301,7 +301,7 @@ export async function setupObtainWalletAttestation(ctx: CommandContext): Promise
   ctx.saveJson('obtain-attestation-request.json', request, step);
 
   const response = await ctx.orgClient.post(
-    `/v1/${ctx.tenantPath}.${RESOURCES.wallet}/wallet-service-api/client-attestation/obtain`,
+    `/v2/${ctx.tenantPath}.${RESOURCES.wallet}/wallet-service-api/client-attestation/obtain`,
     request
   );
   ctx.saveJson('obtain-attestation-response.json', response.data, step);

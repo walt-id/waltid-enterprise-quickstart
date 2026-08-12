@@ -80,8 +80,6 @@ export async function runWalletReceiveCredential(ctx: CommandContext): Promise<v
   const request = {
     offerUrl: ctx.ctx.offerId,
     keyReference: ctx.ctx.walletKeyRef,
-    runPolicies: false,
-    useClientAttestation: true,
   };
   ctx.saveJson('wallet-receive-request.json', request, step);
 
@@ -91,7 +89,11 @@ export async function runWalletReceiveCredential(ctx: CommandContext): Promise<v
   );
   ctx.saveJson('wallet-receive-response.json', response.data, step);
 
-  const receivedCount = Array.isArray(response.data) ? response.data.length : 0;
+  const receivedCount = Array.isArray(response.data)
+    ? response.data.length
+    : Array.isArray(response.data?.credentialIds)
+      ? response.data.credentialIds.length
+      : 0;
   console.log(`   [OK] Credential received (count: ${receivedCount})`);
 }
 
@@ -164,7 +166,7 @@ export async function runCreateVerificationSession(
   ctx.saveJson('create-verification-session-request.json', request, step);
 
   const response = await ctx.orgClient.post(
-    `/v1/${ctx.tenantPath}.${RESOURCES.verifier2}/verifier2-service-api/verification-session/create`,
+    `/v2/${ctx.tenantPath}.${RESOURCES.verifier2}/verifier-service-api/verification-session/create`,
     request
   );
   ctx.saveJson('create-verification-session-response.json', response.data, step);
@@ -181,29 +183,20 @@ export async function runCreateVerificationSession(
 }
 
 /** Wallet presents credential */
-export async function runWalletPresent(ctx: CommandContext, credentialIds: string[] = []): Promise<void> {
+export async function runWalletPresent(ctx: CommandContext, _credentialIds: string[] = []): Promise<void> {
   const step = ctx.nextStep();
   ctx.log('Wallet presents credential', 'RUN');
 
-  const request: {
-    requestUrl: string;
-    keyReference: string;
-    didReference: string;
-    credentials?: Array<{ credential: string }>;
-  } = {
+  const request = {
     requestUrl: ctx.ctx.requestUrl,
     keyReference: ctx.ctx.walletKeyRef,
-    didReference: ctx.ctx.walletDid || defaultWalletDidReference(ctx.tenantPath),
+    did: ctx.ctx.walletDid || defaultWalletDidReference(ctx.tenantPath),
   };
-
-  if (credentialIds.length > 0) {
-    request.credentials = credentialIds.map(credential => ({ credential }));
-  }
 
   ctx.saveJson('wallet-present-request.json', request, step);
 
   const response = await ctx.orgClient.post(
-    `/v1/${ctx.tenantPath}.${RESOURCES.wallet}/wallet-service-api/credentials/present`,
+    `/v2/${ctx.tenantPath}.${RESOURCES.wallet}/wallet-service-api/credentials/present`,
     request
   );
   ctx.saveJson('wallet-present-response.json', response.data, step);
@@ -221,7 +214,7 @@ export async function runAssertFinalStatus(
   ctx.log('Check verifier2 final session status', 'RUN');
 
   const response = await ctx.orgClient.get(
-    `/v1/${verifierPath}.${ctx.ctx.sessionId}/verifier2-service-api/verification-session/info`
+    `/v2/${verifierPath}.${ctx.ctx.sessionId}/verifier-service-api/verification-session/info`
   );
   ctx.saveJson(fileName, response.data, step);
 
@@ -244,7 +237,7 @@ export async function runAssertFinalStatusFailed(
   ctx.log('Check verifier2 final session status (expecting FAILED)', 'RUN');
 
   const response = await ctx.orgClient.get(
-    `/v1/${verifierPath}.${ctx.ctx.sessionId}/verifier2-service-api/verification-session/info`
+    `/v2/${verifierPath}.${ctx.ctx.sessionId}/verifier-service-api/verification-session/info`
   );
   ctx.saveJson(fileName, response.data, step);
 

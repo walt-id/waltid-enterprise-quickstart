@@ -84,7 +84,9 @@ export async function createSuperadminAccount(ctx: CommandContext): Promise<bool
         'accept': '*/*',
         'Content-Type': 'application/json',
       },
-      body: token,
+      body: JSON.stringify({
+        "token" : token,
+      }),
     });
     
     const text = await response.text();
@@ -128,7 +130,7 @@ export async function initDb(ctx: CommandContext): Promise<void> {
     throw new Error('Could not get superadmin token for database init');
   }
   
-  const initResponse = await fetch(`${adminUrl}/v1/admin/initial-setup`, {
+  const initResponse = await fetch(`${adminUrl}/v1/dev/initial-setup`, {
     method: 'POST',
     headers: { 
       'accept': '*/*',

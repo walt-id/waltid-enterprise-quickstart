@@ -49,7 +49,7 @@ export const KEY_IDS = {
   attesterSigningKey: 'attester-signing-key',
 } as const;
 
-/** Default IDs created by wallet-service init-wallet */
+/** Default IDs created by Wallet2 composable init */
 export const WALLET_DEFAULT_IDS = {
   key: 'wallet_key',
   did: 'wallet_did',
@@ -259,12 +259,12 @@ export function defaultHostAliasTarget(organization: string): string {
   return `${organization}.host-alias`;
 }
 
-/** Default wallet key reference created by init-wallet */
+/** Default wallet key reference created by Wallet2 composable init */
 export function defaultWalletKeyReference(tenantPath: string): string {
   return `${tenantPath}.${RESOURCES.walletKms}.${WALLET_DEFAULT_IDS.key}`;
 }
 
-/** Default wallet DID reference created by init-wallet */
+/** Default wallet DID reference created by Wallet2 composable init */
 export function defaultWalletDidReference(tenantPath: string): string {
   return `${tenantPath}.${RESOURCES.walletDidStore}.${WALLET_DEFAULT_IDS.did}`;
 }

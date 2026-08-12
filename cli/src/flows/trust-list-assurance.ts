@@ -203,6 +203,9 @@ async function testSignedLote(ctx: CommandContext): Promise<void> {
 }
 
 function extractCredentialIds(receiveResponse: any): string[] {
+  if (Array.isArray(receiveResponse?.credentialIds)) {
+    return receiveResponse.credentialIds.filter((id: unknown) => typeof id === 'string');
+  }
   if (!Array.isArray(receiveResponse)) return [];
   return receiveResponse.flatMap(result =>
     Array.isArray(result?.stored)
@@ -254,8 +257,6 @@ async function testVerifierIntegration(
   const receiveRequest = {
     offerUrl,
     keyReference: ctx.ctx.walletKeyRef,
-    runPolicies: false,
-    useClientAttestation: true,
   };
   ctx.saveJson('trust-list-wallet-receive-request.json', receiveRequest, step);
   const receiveResponse = await ctx.orgClient.post(
@@ -297,7 +298,7 @@ async function testVerifierIntegration(
   };
   ctx.saveJson('trust-list-verification-session-request.json', sessionRequest, step);
   const sessionResponse = await ctx.orgClient.post(
-    `/v1/${ctx.tenantPath}.${RESOURCES.verifier2}/verifier2-service-api/verification-session/create`,
+    `/v2/${ctx.tenantPath}.${RESOURCES.verifier2}/verifier-service-api/verification-session/create`,
     sessionRequest
   );
   ctx.saveJson('trust-list-verification-session-response.json', sessionResponse.data, step);
@@ -309,7 +310,7 @@ async function testVerifierIntegration(
 
   step = ctx.nextStep();
   const infoResponse = await ctx.orgClient.get(
-    `/v1/${ctx.tenantPath}.${RESOURCES.verifier2}.${ctx.ctx.sessionId}/verifier2-service-api/verification-session/info`
+    `/v2/${ctx.tenantPath}.${RESOURCES.verifier2}.${ctx.ctx.sessionId}/verifier-service-api/verification-session/info`
   );
   ctx.saveJson('trust-list-final-session-info.json', infoResponse.data, step);
   const session = infoResponse.data.session;
