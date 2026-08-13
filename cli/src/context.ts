@@ -215,6 +215,14 @@ export class CommandContext {
     }
   }
 
+  /**
+   * Attach a service dependency. The API expects JSON `{ dependency: "<target path>" }`,
+   * not a raw text/plain path string.
+   */
+  async addServiceDependency(dependenciesAddPath: string, dependencyPath: string): Promise<void> {
+    await this.orgClient.post(dependenciesAddPath, { dependency: dependencyPath });
+  }
+
   // --------------------------------------------------------------------------
   // Token Management
   // --------------------------------------------------------------------------

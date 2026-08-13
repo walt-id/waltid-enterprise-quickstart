@@ -10,7 +10,7 @@
  */
 
 import { CommandContext } from '../../context.js';
-import { RESOURCES, CERT_IDS, KEY_IDS, defaultWalletKeyReference, defaultWalletDidReference } from '../../config.js';
+import { RESOURCES, CERT_IDS, KEY_IDS } from '../../config.js';
 import {
   GovServicesConfig,
   DepartmentConfig,
@@ -30,6 +30,7 @@ import {
 import { setupLogin } from './auth.js';
 import {
   setupCreateTenant,
+  setupCreateWallet,
   setupCreateServices,
   setupLinkX509Dependencies,
 } from './tenant.js';
@@ -266,10 +267,9 @@ async function linkDidServiceDependencies(ctx: CommandContext): Promise<void> {
 
   // Link KMS to DID service
   try {
-    await ctx.orgClient.post(
+    await ctx.addServiceDependency(
       `/v1/${ctx.tenantPath}.${RESOURCES.didService}/did-service-api/dids/dependencies/add`,
-      `${ctx.tenantPath}.${RESOURCES.kms}`,
-      'text/plain'
+      `${ctx.tenantPath}.${RESOURCES.kms}`
     );
     console.log(`   [OK] Linked KMS to DID service`);
   } catch (error: any) {
@@ -282,10 +282,9 @@ async function linkDidServiceDependencies(ctx: CommandContext): Promise<void> {
 
   // Link DID store to DID service
   try {
-    await ctx.orgClient.post(
+    await ctx.addServiceDependency(
       `/v1/${ctx.tenantPath}.${RESOURCES.didService}/did-service-api/dids/dependencies/add`,
-      `${ctx.tenantPath}.${RESOURCES.didStore}`,
-      'text/plain'
+      `${ctx.tenantPath}.${RESOURCES.didStore}`
     );
     console.log(`   [OK] Linked DID store to DID service`);
   } catch (error: any) {
@@ -309,7 +308,7 @@ async function createDepartmentDid(
   const createResponse = await ctx.orgClient.post(
     `/v1/${ctx.tenantPath}.${RESOURCES.didService}/did-service-api/dids/create/key`,
     {
-      keyId: dept.signingKeyId,
+      keyReference: dept.signingKeyId,
     }
   );
 
@@ -513,8 +512,8 @@ async function linkGovVerifierToTrustRegistry(ctx: CommandContext): Promise<void
   const verifierTarget = `${ctx.tenantPath}.${RESOURCES.verifier2}`;
 
   try {
-    await ctx.orgClient.postRaw(
-      `/v1/${verifierTarget}/verifier2-service-api/dependencies/add`,
+    await ctx.addServiceDependency(
+      `/v2/${verifierTarget}/verifier-service-api/dependencies/add`,
       trustRegistryTarget
     );
     console.log(`   [OK] Trust registry linked to verifier`);
@@ -852,45 +851,8 @@ async function createGovVerifier(
 
 /** Initialize wallet for central government tenant */
 async function createGovWallet(ctx: CommandContext): Promise<void> {
-  const step = ctx.nextStep();
   ctx.log('Initialize central government wallet with holder DID', 'GOV-SETUP');
-
-  const { created } = await ctx.tolerantCreate(
-    'Wallet',
-    async () => {
-      const request = {
-        createKms: true,
-        kmsName: RESOURCES.walletKms,
-        createKeyInKms: {
-          keyType: 'secp256r1',
-        },
-        createDidStore: true,
-        didStoreName: RESOURCES.walletDidStore,
-        createDidService: true,
-        didServiceName: RESOURCES.walletDidService,
-        createDidWithDidService: 'key',
-        createCredentialStore: true,
-        credentialStoreName: RESOURCES.walletCredentialStore,
-      };
-      ctx.saveJson('init-gov-wallet-request.json', request, step);
-
-      const response = await ctx.orgClient.post(
-        `/v1/${ctx.tenantPath}/wallet-service-api/init-wallet`,
-        request
-      );
-      ctx.saveJson('init-gov-wallet-response.json', response.data, step);
-      return response;
-    }
-  );
-
-  ctx.ctx.walletKeyRef = defaultWalletKeyReference(ctx.tenantPath);
-  ctx.ctx.walletDid = defaultWalletDidReference(ctx.tenantPath);
-
-  if (created) {
-    console.log(`   [OK] Wallet initialized`);
-  } else {
-    console.log(`   [SKIP] Wallet already exists (DID reference: ${ctx.ctx.tenantPath})`);
-  }
+  await setupCreateWallet(ctx, 'key');
 }
 
 /**

@@ -9,7 +9,63 @@
  */
 
 import { CommandContext } from '../../context.js';
-import { RESOURCES, defaultWalletKeyReference, defaultWalletDidReference } from '../../config.js';
+import { RESOURCES, WALLET_DEFAULT_IDS, defaultWalletKeyReference, defaultWalletDidReference } from '../../config.js';
+
+/** Wallet DID method used by composable init (`did:jwk` or `did:key`). */
+export type WalletDidType = 'jwk' | 'key' | 'web';
+
+/**
+ * Build the Wallet2 composable-init body that replaced legacy `init-wallet`.
+ * Creates wallet2 + dedicated KMS/key, DID store/service, and credential store.
+ */
+export function buildWalletComposableInitRequest(
+  ctx: CommandContext,
+  didType: WalletDidType = 'jwk'
+): Record<string, unknown> {
+  const tenant = ctx.tenantPath;
+  const walletTarget = `${tenant}.${RESOURCES.wallet}`;
+  const kmsTarget = `${tenant}.${RESOURCES.walletKms}`;
+  const didStoreTarget = `${tenant}.${RESOURCES.walletDidStore}`;
+  const didServiceTarget = `${tenant}.${RESOURCES.walletDidService}`;
+  const credentialStoreTarget = `${tenant}.${RESOURCES.walletCredentialStore}`;
+
+  return {
+    wallet: {
+      createIfNotFound: true,
+      target: walletTarget,
+      kms: {
+        createIfNotFound: true,
+        target: kmsTarget,
+        key: {
+          createIfNotFound: true,
+          target: `${kmsTarget}.${WALLET_DEFAULT_IDS.key}`,
+          config: {
+            backend: 'jwk',
+            keyType: 'secp256r1',
+          },
+        },
+      },
+      didStore: {
+        createIfNotFound: true,
+        target: didStoreTarget,
+      },
+      didService: {
+        createIfNotFound: true,
+        target: didServiceTarget,
+        dependencies: [kmsTarget, didStoreTarget],
+        did: {
+          createIfNotFound: true,
+          target: `${didStoreTarget}.${WALLET_DEFAULT_IDS.did}`,
+          type: didType,
+        },
+      },
+      credentialStore: {
+        createIfNotFound: true,
+        target: credentialStoreTarget,
+      },
+    },
+  };
+}
 
 /** Create tenant */
 export async function setupCreateTenant(ctx: CommandContext): Promise<void> {
@@ -36,28 +92,22 @@ export async function setupCreateTenant(ctx: CommandContext): Promise<void> {
   }
 }
 
-/** Initialize wallet service */
-export async function setupCreateWallet(ctx: CommandContext): Promise<void> {
+/** Initialize Wallet2 service and supporting stores via composable init */
+export async function setupCreateWallet(
+  ctx: CommandContext,
+  didType: WalletDidType = 'jwk'
+): Promise<void> {
   const step = ctx.nextStep();
   ctx.log('Initialize wallet', 'SETUP');
   
   const { created } = await ctx.tolerantCreate(
     'Wallet',
     async () => {
-      const request = {
-        createKeyInKms: {
-          keyType: 'secp256r1',
-        },
-        createDidWithDidService: 'jwk',
-        kmsName: RESOURCES.walletKms,
-        didStoreName: RESOURCES.walletDidStore,
-        didServiceName: RESOURCES.walletDidService,
-        credentialStoreName: RESOURCES.walletCredentialStore,
-      };
+      const request = buildWalletComposableInitRequest(ctx, didType);
       ctx.saveJson('init-wallet-request.json', request, step);
 
       const response = await ctx.orgClient.post(
-        `/v1/${ctx.tenantPath}/wallet-service-api/init-wallet`,
+        `/v1/${ctx.tenantPath}/resource-api/services/init`,
         request
       );
       ctx.saveJson('init-wallet-response.json', response.data, step);
@@ -65,7 +115,6 @@ export async function setupCreateWallet(ctx: CommandContext): Promise<void> {
     }
   );
 
-  // Set wallet key reference
   ctx.ctx.walletKeyRef = defaultWalletKeyReference(ctx.tenantPath);
   ctx.ctx.walletDid = defaultWalletDidReference(ctx.tenantPath);
 
@@ -140,10 +189,9 @@ export async function setupLinkX509Dependencies(ctx: CommandContext): Promise<vo
 
   // Link KMS to x509-service
   try {
-    await ctx.orgClient.post(
+    await ctx.addServiceDependency(
       `/v1/${ctx.tenantPath}.${RESOURCES.x509Service}/x509-service-api/dependencies/add`,
-      `${ctx.tenantPath}.${RESOURCES.kms}`,
-      'text/plain'
+      `${ctx.tenantPath}.${RESOURCES.kms}`
     );
     console.log(`   [OK] Linked KMS to x509-service`);
   } catch (error: any) {
@@ -156,10 +204,9 @@ export async function setupLinkX509Dependencies(ctx: CommandContext): Promise<vo
 
   // Link x509-store to x509-service
   try {
-    await ctx.orgClient.post(
+    await ctx.addServiceDependency(
       `/v1/${ctx.tenantPath}.${RESOURCES.x509Service}/x509-service-api/dependencies/add`,
-      `${ctx.tenantPath}.${RESOURCES.x509Store}`,
-      'text/plain'
+      `${ctx.tenantPath}.${RESOURCES.x509Store}`
     );
     console.log(`   [OK] Linked x509-store to x509-service`);
   } catch (error: any) {

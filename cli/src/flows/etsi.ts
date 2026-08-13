@@ -73,7 +73,7 @@ async function createEtsiVerificationSession(ctx: CommandContext): Promise<void>
   ctx.saveJson('create-etsi-verification-session-request.json', request, step);
   
   const response = await ctx.orgClient.post(
-    `/v1/${ctx.tenantPath}.${RESOURCES.verifier2}/verifier2-service-api/verification-session/create`,
+    `/v2/${ctx.tenantPath}.${RESOURCES.verifier2}/verifier-service-api/verification-session/create`,
     request
   );
   ctx.saveJson('create-etsi-verification-session-response.json', response.data, step);
