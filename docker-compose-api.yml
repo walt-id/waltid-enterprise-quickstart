@@ -108,8 +108,9 @@ services:
 
   waltid-enterprise:
     image: waltid/waltid-enterprise-api:${ENTERPRISE_API_DOCKER_IMAGE_TAG}
-    # environment:
-    #   - LOG_LEVEL=trace
+    environment:
+      LICENSE_STATE_ENCRYPTION_KEY: ${LICENSE_STATE_ENCRYPTION_KEY}
+      # LOG_LEVEL: trace
     ports:
       - "7500:7500"
     volumes:
