@@ -110,6 +110,7 @@ services:
     image: waltid/waltid-enterprise-api:${ENTERPRISE_API_DOCKER_IMAGE_TAG}
     environment:
       LICENSE_STATE_ENCRYPTION_KEY: ${LICENSE_STATE_ENCRYPTION_KEY}
+      LICENSE_SEED_CREDENTIAL: ${LICENSE_SEED_CREDENTIAL}
       # LOG_LEVEL: trace
     ports:
       - "7500:7500"
