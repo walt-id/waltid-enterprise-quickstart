@@ -216,11 +216,19 @@ export class CommandContext {
   }
 
   /**
-   * Attach a service dependency. The API expects JSON `{ dependency: "<target path>" }`,
-   * not a raw text/plain path string.
+   * Attach a service dependency on v2 APIs (body: JSON `{ dependency: "<path>" }`).
    */
   async addServiceDependency(dependenciesAddPath: string, dependencyPath: string): Promise<void> {
     await this.orgClient.post(dependenciesAddPath, { dependency: dependencyPath });
+  }
+
+  /**
+   * Attach a service dependency on v1 APIs (body: plain-text path string).
+   * v1 endpoints (x509-service-api, credential-status-service-api, client-attester-api)
+   * expect the dependency path as a raw text/plain body, not a JSON object.
+   */
+  async addServiceDependencyV1(dependenciesAddPath: string, dependencyPath: string): Promise<void> {
+    await this.orgClient.postRaw(dependenciesAddPath, dependencyPath, 'text/plain');
   }
 
   // --------------------------------------------------------------------------

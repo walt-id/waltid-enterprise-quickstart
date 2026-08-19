@@ -43,7 +43,7 @@ export async function setupCreateCredentialStatusService(ctx: CommandContext): P
 
   // Link KMS dependency
   try {
-    await ctx.addServiceDependency(
+    await ctx.addServiceDependencyV1(
       `/v1/${ctx.tenantPath}.${RESOURCES.credentialStatus}/credential-status-service-api/dependencies/add`,
       `${ctx.tenantPath}.${RESOURCES.kms}`
     );
