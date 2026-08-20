@@ -17,9 +17,9 @@ This repository contains the quickstart CLI and docker-compose files to get you 
 
 Bring up the whole stack using docker-compose and explore the enterprise features via our CLI tool.
 
-⚠️ Please note: You need to be an Enterprise Stack customer & have access to the private enterprise stack images, to use this quickstart.
+⚠️ Please note: You need to be an Enterprise Stack customer, have access to the private enterprise stack images & a valid license to use this quickstart.
 
-## Licensing (required)
+## Licensing
 
 The Enterprise API refuses to start without a valid license, so configure this before bringing the
 stack up. A license is an SD-JWT verifiable credential signed by walt.id and cryptographically bound
@@ -42,55 +42,25 @@ any real deployment:
 Pick one of the two modes. After a successful first activation, the bound credential and installation
 key are stored in MongoDB and later restarts reuse them, so an online offer is never redeemed twice.
 
-**Online** - create a license in License Admin and pass the returned offer:
+**Online** - the stack then renews itself automatically against `https://license.walt.id`.
 
 ```bash
 LICENSE_SEED_CREDENTIAL="openid-credential-offer://..." docker compose up
 ```
 
-The stack then renews itself automatically against `https://license.walt.id`.
-
-**Offline / air-gapped** - the stack never contacts walt.id.
-
-First create an installation request. The keypair is generated inside your database and encrypted at
-rest; the private key is never written to disk. An unlicensed API never starts, so this runs the image
-directly rather than through `docker exec` or `kubectl exec`.
-
-Docker Compose:
+**Offline / air-gapped** - the stack never contacts walt.id. Place both files walt.id issued you into
+`license/` (git-ignored) and point the two variables at them:
 
 ```bash
-docker compose run --rm waltid-enterprise \
-  license request <licenseId> <organizationId> \
-  | sed -n '/^{/,/^}/p' > installation-request.json
+license/offline-license.waltlicense   # the signed license bundle
+license/installation-key.json         # the matching private installation key - keep it internal
 ```
-
-Kubernetes with the Helm chart in `helm/`:
 
 ```bash
-helm upgrade --install <release> ./helm \
-  --set license.installationRequest.enabled=true \
-  --set license.installationRequest.licenseId=<licenseId> \
-  --set license.installationRequest.organizationId=<organizationId>
-
-kubectl logs job/<release>-enterprise-stack-license-request \
-  | sed -n '/^{/,/^}/p' > installation-request.json
+LICENSE_SEED_CREDENTIAL_FILE=/license/offline-license.waltlicense \
+LICENSE_INSTALLATION_KEY_FILE=/license/installation-key.json \
+  docker compose up
 ```
-
-Then disable the Job again with `--set license.installationRequest.enabled=false`. The `sed` step
-extracts the JSON document so the result is correct even if the container logs alongside it.
-
-Send `installation-request.json` to walt.id, which returns a `.waltlicense` bundle. For Compose, place
-it in `license/` (git-ignored) and start the stack:
-
-```bash
-LICENSE_SEED_CREDENTIAL_FILE=/license/offline-license.waltlicense docker compose up
-```
-
-For Kubernetes, add it to the license Secret as `offline-license.waltlicense` and set
-`license.offline: true`.
-
-Because the installation key exists only in your database, **your database backups are what protect
-your license**. Losing the database means walt.id has to reissue the bundle.
 
 Offline licenses have **no grace period**: the stack stops serving the moment the credential expires.
 Request a renewal well before the expiry date shown in the `LICENSE EXPIRY WARNING` startup log line.
