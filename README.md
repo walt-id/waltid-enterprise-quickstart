@@ -19,6 +19,76 @@ Bring up the whole stack using docker-compose and explore the enterprise feature
 
 ⚠️ Please note: You need to be an Enterprise Stack customer & have access to the private enterprise stack images, to use this quickstart.
 
+## Licensing (required)
+
+The Enterprise API refuses to start without a valid license, so configure this before bringing the
+stack up. A license is an SD-JWT verifiable credential signed by walt.id and cryptographically bound
+to your installation. It is configured in `config/license.conf`, which reads the `LICENSE_*`
+environment variables passed through by docker-compose.
+
+### License state encryption key
+
+`LICENSE_STATE_ENCRYPTION_KEY` encrypts the persisted license credential and the installation
+private key in MongoDB. It ships in `.env` with a development default, which is fine locally. For
+any real deployment:
+
+- Use at least 32 characters and supply it from a secret manager.
+- Every replica must use the **same** value.
+- Back it up together with MongoDB. Losing it makes the persisted license state unreadable.
+- A wrong or missing key fails startup closed, and live dual-key rotation is not supported.
+
+### Activation
+
+Pick one of the two modes. After a successful first activation, the bound credential and installation
+key are stored in MongoDB and later restarts reuse them, so an online offer is never redeemed twice.
+
+**Online** - create a license in License Admin and pass the returned offer:
+
+```bash
+LICENSE_SEED_CREDENTIAL="openid-credential-offer://..." docker compose up
+```
+
+The stack then renews itself automatically against `https://license.walt.id`.
+
+**Offline / air-gapped** - the stack never contacts walt.id. Place both files walt.id issued you into
+`license/` (git-ignored) and point the two variables at them:
+
+```bash
+license/offline-license.waltlicense   # the signed license bundle
+license/installation-key.json         # the matching private installation key - keep it internal
+```
+
+```bash
+LICENSE_SEED_CREDENTIAL_FILE=/license/offline-license.waltlicense \
+LICENSE_INSTALLATION_KEY_FILE=/license/installation-key.json \
+  docker compose up
+```
+
+Offline licenses have **no grace period**: the stack stops serving the moment the credential expires.
+Request a renewal well before the expiry date shown in the `LICENSE EXPIRY WARNING` startup log line.
+
+### DEV vs PROD licenses
+
+`config/_features.conf` enables `dev-mode`, which exposes debug endpoints and therefore requires a
+**DEV** license. A PROD license refuses to start while `dev-mode` is enabled, and vice versa. Remove
+`dev-mode` from `enabledFeatures` before using a PROD license.
+
+### Troubleshooting
+
+- Container exits during startup - the license was rejected. `docker compose logs waltid-enterprise`
+  states the reason (expired, not bound to this installation, DEV/PROD mismatch, missing seed).
+- Every endpoint returns `503 Enterprise API is unavailable because the license is not active` - the
+  process started but the license is not active. `GET /livez` still responds in this state.
+- `GET /license/status` (superadmin auth) reports the restriction state, expiry countdown and any
+  warning message.
+
+### Kubernetes / Helm
+
+The Helm chart reads all license material from one pre-provisioned Secret, named by
+`license.secretName` in `helm/values.yaml`. It needs `state-encryption-key`, plus either
+`seed-credential` (online) or `offline-license.waltlicense` and `installation-key.json` with
+`license.offline: true` (offline).
+
 ## 1. Docker-Compose: Run The Enterprise Stack
 
 Use docker-compose to bring up the Enterprise Stack API, UI and a MongoDB database (storage of the Enterprise Stack).

@@ -108,14 +108,22 @@ services:
 
   waltid-enterprise:
     image: waltid/waltid-enterprise-api:${ENTERPRISE_API_DOCKER_IMAGE_TAG}
+    # Pass-through form: an unset variable is omitted from the container entirely instead of being
+    # injected as an empty string. config/license.conf relies on that, because an empty value would
+    # override the file and an empty LICENSE_STATE_ENCRYPTION_KEY fails startup closed.
     environment:
-      LICENSE_STATE_ENCRYPTION_KEY: ${LICENSE_STATE_ENCRYPTION_KEY}
-      LICENSE_SEED_CREDENTIAL: ${LICENSE_SEED_CREDENTIAL}
-      # LOG_LEVEL: trace
+      - LICENSE_STATE_ENCRYPTION_KEY
+      - LICENSE_SEED_CREDENTIAL
+      - LICENSE_SEED_CREDENTIAL_FILE
+      - LICENSE_INSTALLATION_KEY_FILE
+      # - LOG_LEVEL=trace
     ports:
       - "7500:7500"
     volumes:
       - ./config:/config
+      # Offline/air-gapped activation only: holds offline-license.waltlicense and
+      # installation-key.json. Empty and unused for online activation.
+      - ./license:/license
     networks:
       mongodb_network:
         aliases:
