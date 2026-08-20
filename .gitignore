@@ -8,3 +8,8 @@
 .vc_offer
 cli/node_modules/
 cli/walt-log-*/
+
+# License material for offline/air-gapped activation. installation-key.json holds a private key and
+# must never be committed. .gitkeep is tracked so the Docker Compose bind mount source always exists.
+/license/*
+!/license/.gitkeep

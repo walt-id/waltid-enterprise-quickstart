@@ -12,6 +12,7 @@ data:
   enterprise.conf: {{ .Values.enterpriseConf | toYaml | indent 1 }}
   web.conf: {{ .Values.webConfig.webConf | toYaml | indent 1 }}
   resource-access.conf: {{ .Values.resourceAccessConf | toYaml | indent 1 }}
+  license.conf: {{ .Values.licenseConf | toYaml | indent 1 }}
   {{ if .Values.loggingConf }}
   klogging.json: {{ .Values.loggingConf | toYaml | indent 1 }}
   {{ end }}
