@@ -57,6 +57,38 @@ spec:
           - name: KLOGGING_CONFIG_PATH
             value: /config/klogging.json
         {{- end }}
+          - name: LICENSE_STATE_ENCRYPTION_KEY
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.license.secretName }}
+                key: state-encryption-key
+          # Pod identity for license usage reporting. Without POD_UID the stack falls back to the
+          # pod name, which Kubernetes reuses across restarts and blurs pod slot accounting.
+          - name: POD_UID
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.uid
+          - name: POD_NAMESPACE
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.namespace
+          - name: NODE_NAME
+            valueFrom:
+              fieldRef:
+                fieldPath: spec.nodeName
+        {{- if .Values.license.offline }}
+          - name: LICENSE_SEED_CREDENTIAL_FILE
+            value: /license/offline-license.waltlicense
+          - name: LICENSE_INSTALLATION_KEY_FILE
+            value: /license/installation-key.json
+        {{- else }}
+          - name: LICENSE_SEED_CREDENTIAL
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.license.secretName }}
+                key: seed-credential
+                optional: true
+        {{- end }}
         ports:
         - containerPort: 3000
           name: http-api
@@ -64,7 +96,22 @@ spec:
         - name: waltid-enterprise-api-config
           mountPath: /config
           readOnly: true
+        {{- if .Values.license.offline }}
+        - name: waltid-enterprise-api-license
+          mountPath: /license
+          readOnly: true
+        {{- end }}
       volumes:
         - name: waltid-enterprise-api-config
           configMap:
             name: {{ include "enterprise-stack.fullname" . }}-api-config
+        {{- if .Values.license.offline }}
+        - name: waltid-enterprise-api-license
+          secret:
+            secretName: {{ .Values.license.secretName }}
+            items:
+              - key: offline-license.waltlicense
+                path: offline-license.waltlicense
+              - key: installation-key.json
+                path: installation-key.json
+        {{- end }}
