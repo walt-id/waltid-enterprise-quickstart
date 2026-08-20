@@ -106,8 +106,6 @@ spec:
           configMap:
             name: {{ include "enterprise-stack.fullname" . }}-api-config
         {{- if .Values.license.offline }}
-        # Default mode (0644) on purpose: the container runs as uid 10001, so a 0400 root-owned
-        # projection would make the license files unreadable and fail startup closed.
         - name: waltid-enterprise-api-license
           secret:
             secretName: {{ .Values.license.secretName }}
