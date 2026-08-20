@@ -17,9 +17,9 @@ This repository contains the quickstart CLI and docker-compose files to get you 
 
 Bring up the whole stack using docker-compose and explore the enterprise features via our CLI tool.
 
-⚠️ Please note: You need to be an Enterprise Stack customer & have access to the private enterprise stack images, to use this quickstart.
+⚠️ Please note: You need to be an Enterprise Stack customer, have access to the private enterprise stack images & a valid license to use this quickstart.
 
-## Licensing (required)
+## Licensing
 
 The Enterprise API refuses to start without a valid license, so configure this before bringing the
 stack up. A license is an SD-JWT verifiable credential signed by walt.id and cryptographically bound
@@ -42,13 +42,11 @@ any real deployment:
 Pick one of the two modes. After a successful first activation, the bound credential and installation
 key are stored in MongoDB and later restarts reuse them, so an online offer is never redeemed twice.
 
-**Online** - create a license in License Admin and pass the returned offer:
+**Online** - the stack then renews itself automatically against `https://license.walt.id`.
 
 ```bash
 LICENSE_SEED_CREDENTIAL="openid-credential-offer://..." docker compose up
 ```
-
-The stack then renews itself automatically against `https://license.walt.id`.
 
 **Offline / air-gapped** - the stack never contacts walt.id. Place both files walt.id issued you into
 `license/` (git-ignored) and point the two variables at them:
