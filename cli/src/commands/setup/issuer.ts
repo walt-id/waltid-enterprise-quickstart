@@ -98,7 +98,7 @@ export async function setupCreateClientAttester(ctx: CommandContext): Promise<vo
 
   // Add KMS dependency
   try {
-    await ctx.addServiceDependencyV1(
+    await ctx.addServiceDependency(
       `/v1/${ctx.tenantPath}.${RESOURCES.clientAttester}/client-attester-api/dependencies/add`,
       `${ctx.tenantPath}.${RESOURCES.kms}`
     );

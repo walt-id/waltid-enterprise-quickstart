@@ -189,7 +189,7 @@ export async function setupLinkX509Dependencies(ctx: CommandContext): Promise<vo
 
   // Link KMS to x509-service
   try {
-    await ctx.addServiceDependencyV1(
+    await ctx.addServiceDependency(
       `/v1/${ctx.tenantPath}.${RESOURCES.x509Service}/x509-service-api/dependencies/add`,
       `${ctx.tenantPath}.${RESOURCES.kms}`
     );
@@ -204,7 +204,7 @@ export async function setupLinkX509Dependencies(ctx: CommandContext): Promise<vo
 
   // Link x509-store to x509-service
   try {
-    await ctx.addServiceDependencyV1(
+    await ctx.addServiceDependency(
       `/v1/${ctx.tenantPath}.${RESOURCES.x509Service}/x509-service-api/dependencies/add`,
       `${ctx.tenantPath}.${RESOURCES.x509Store}`
     );
