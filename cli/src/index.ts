@@ -24,6 +24,7 @@ import { loadWaltEnv } from './env.js';
 import { loadBankTenantEnv, createBankTenantConfig } from './bank-tenant-config.js';
 import { loadGovServicesEnv, createGovServicesConfig } from './gov-services-config.js';
 import { loadEudiDemoEnv, createEudiDemoConfig } from './eudi-demo-config.js';
+import { loadAcmeTenantEnv, createAcmeTenantConfig } from './acme-tenant-config.js';
 import {
   // System commands
   runSystemInit,
@@ -78,6 +79,7 @@ import {
   runBankTenantSetup,
   runGovServicesSetup,
   runEudiDemoSetup,
+  runAcmeTenantSetup,
 } from './commands/index.js';
 
 import { flowEtsiTrustLists, flowCredentialRevocation, flowGovTrust, flowTrustListAssurance } from './flows/index.js';
@@ -140,6 +142,7 @@ Setup Commands (create resources):
   --setup-bank-tenant     Set up bank-tenant (issuer, wallet, verifier, KMS, X509)
   --setup-gov-services    Set up government services (multi-department issuers, verifier)
   --setup-eudi-demo       Set up EUDI demo (WRP Registry auth, RP certificate, verifier2)
+  --setup-acme-tenant     Set up acme tenant (Photo ID mDoc + Employee SD-JWT issuer, verifier)
 
 Additional Setup Commands:
   --setup-create-trust-registry  Create trust registry service
@@ -209,6 +212,14 @@ EUDI demo (cli/eudi-demo.env — copy from eudi-demo.env.example):
   EUDI_LEGAL_ENTITY_*     Legal entity information for WRP registration
   EUDI_CERTIFICATE_PASSWORD  Password for PKCS#12 certificate
 
+Acme tenant (cli/acme-tenant.env — copy from acme-tenant.env.example):
+  ACME_TENANT                   Tenant ID (default: acme-tenant)
+  ACME_TENANT_BASE_URL          Public base URL for issuer and verifier
+  VCT_BASE_URL                  Base URL for SD-JWT VCT values (defaults to ACME_TENANT_BASE_URL)
+  KEYCLOAK_*                    Keycloak OIDC settings for issuer auth
+  ACME_ISSUER_DISPLAY_*         Issuer display name, locale, and logo
+  ACME_VERIFIER_*               Verifier client name and logo
+
 Examples:
   # Full setup and run (default)
   npx tsx walt.ts
@@ -243,6 +254,9 @@ Examples:
 
   # Set up EUDI demo with WRP Registry (requires cli/eudi-demo.env)
   npx tsx walt.ts --setup-eudi-demo
+
+  # Set up acme tenant with Photo ID + Employee credentials (requires cli/acme-tenant.env)
+  npx tsx walt.ts --setup-acme-tenant
 `);
 }
 
@@ -274,6 +288,7 @@ async function main(): Promise<void> {
     '--setup-bank-tenant',
     '--setup-gov-services',
     '--setup-eudi-demo',
+    '--setup-acme-tenant',
     '--setup-create-trust-registry', '--setup-etsi-trust-registry', '--setup-import-trust-list',
     '--setup-create-superadmin', '--setup-create-organization',
     '--setup-create-admin-role', '--setup-create-admin-account',
@@ -308,6 +323,9 @@ async function main(): Promise<void> {
   if (args.includes('--setup-eudi-demo')) {
     loadEudiDemoEnv(cliDir);
   }
+  if (args.includes('--setup-acme-tenant')) {
+    loadAcmeTenantEnv(cliDir);
+  }
 
   // Create config and context
   const projectRoot = join(cliDir, '..');
@@ -335,6 +353,14 @@ async function main(): Promise<void> {
       ctx.ensureWorkdir();
       const eudiConfig = createEudiDemoConfig();
       await runEudiDemoSetup(ctx, eudiConfig);
+      ctx.saveHttpLog();
+      return;
+    }
+
+    if (args.includes('--setup-acme-tenant')) {
+      ctx.ensureWorkdir();
+      const acmeConfig = createAcmeTenantConfig();
+      await runAcmeTenantSetup(ctx, acmeConfig);
       ctx.saveHttpLog();
       return;
     }
