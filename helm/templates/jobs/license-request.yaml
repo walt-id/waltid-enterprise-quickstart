@@ -1,0 +1,80 @@
+{{- if .Values.license.installationRequest.enabled }}
+{{- /*
+Bootstrap Job for offline (air-gapped) licensing.
+
+An unlicensed Enterprise API refuses to start, so there is no running pod to `kubectl exec` into.
+This Job runs the same image with the same ConfigMap, Secret, and database as the Deployment, creates
+the installation keypair inside the database, and prints the signed public request to its log.
+
+  helm upgrade --install <release> . --set license.installationRequest.enabled=true \
+    --set license.installationRequest.licenseId=<licenseId> \
+    --set license.installationRequest.organizationId=<organizationId>
+
+  kubectl logs job/{{ include "enterprise-stack.fullname" . }}-license-request \
+    | sed -n '/^{/,/^}/p' > installation-request.json
+
+The sed step extracts the JSON document, so it stays correct even if the container ever logs
+alongside it.
+
+Send that file to walt.id, put the returned bundle in the license Secret, then disable this Job again.
+*/ -}}
+{{- if not .Values.license.installationRequest.licenseId }}
+{{- fail "license.installationRequest.licenseId is required when license.installationRequest.enabled=true" }}
+{{- end }}
+{{- if not .Values.license.installationRequest.organizationId }}
+{{- fail "license.installationRequest.organizationId is required when license.installationRequest.enabled=true" }}
+{{- end }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "enterprise-stack.fullname" . }}-license-request
+  labels:
+  {{- include "enterprise-stack.labels" . | nindent 4 }}
+spec:
+  backoffLimit: 0
+  template:
+    metadata:
+      labels:
+        app: waltid-enterprise-license-request
+        {{- include "enterprise-stack.selectorLabels" . | nindent 8 }}
+    spec:
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      imagePullSecrets:
+        - name: {{ .Values.api.image.pullSecrets }}
+      containers:
+        - name: license-request
+          image: {{ .Values.api.image.repository }}:{{ .Values.api.image.tag | default .Chart.AppVersion }}
+          imagePullPolicy: {{ .Values.api.image.imagePullPolicy }}
+          args:
+            - license
+            - request
+            - {{ .Values.license.installationRequest.licenseId | quote }}
+            - {{ .Values.license.installationRequest.organizationId | quote }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+          env:
+            # Suppress klogging's own startup/configuration lines so the log holds just the request.
+            - name: KLOGGING_MIN_LOG_LEVEL
+              value: ERROR
+            - name: LICENSE_STATE_ENCRYPTION_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.license.secretName }}
+                  key: state-encryption-key
+          volumeMounts:
+            - name: waltid-enterprise-api-config
+              mountPath: /config
+              readOnly: true
+      volumes:
+        - name: waltid-enterprise-api-config
+          configMap:
+            name: {{ include "enterprise-stack.fullname" . }}-api-config
+{{- end }}
