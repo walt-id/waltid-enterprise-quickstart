@@ -7,15 +7,15 @@ spec:
     apiVersion: apps/v1
     kind: Deployment
     name: {{ include "enterprise-stack.fullname" . }}-api
-  minReplicas: 1
-  maxReplicas: 5
+  minReplicas: {{ .Values.api.hpa.minReplicas }}
+  maxReplicas: {{ .Values.api.hpa.maxReplicas }}
   metrics:
     - type: Resource
       resource:
         name: cpu
         target:
           type: Utilization
-          averageUtilization: 90
+          averageUtilization: {{ .Values.api.hpa.targetCPUUtilizationPercentage }}
 ---
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
@@ -26,12 +26,12 @@ spec:
     apiVersion: apps/v1
     kind: Deployment
     name: {{ include "enterprise-stack.fullname" . }}-ui
-  minReplicas: 1
-  maxReplicas: 5
+  minReplicas: {{ .Values.web.hpa.minReplicas }}
+  maxReplicas: {{ .Values.web.hpa.maxReplicas }}
   metrics:
     - type: Resource
       resource:
         name: cpu
         target:
           type: Utilization
-          averageUtilization: 90
+          averageUtilization: {{ .Values.web.hpa.targetCPUUtilizationPercentage }}
