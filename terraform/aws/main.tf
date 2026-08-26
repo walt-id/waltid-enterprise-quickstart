@@ -8,12 +8,26 @@ locals {
     var.tags
   )
 
-  use_mongodb    = var.database_backend == "mongodb"
-  use_documentdb = var.database_backend == "documentdb"
+  use_mongodb                 = var.database_backend == "mongodb"
+  mongodb_dedicated_nodes     = local.use_mongodb && var.mongodb_dedicated_node_count > 0
+  mongodb_node_selector_label = { "waltid.io/workload" = "mongodb" }
+  mongodb_pod_placement = local.mongodb_dedicated_nodes ? {
+    nodeSelector = local.mongodb_node_selector_label
+    tolerations = [
+      {
+        key      = "waltid.io/workload"
+        operator = "Equal"
+        value    = "mongodb"
+        effect   = "NoSchedule"
+      }
+    ]
+  } : {}
   mongodb_member_hosts = local.use_mongodb ? [
     for i in range(var.mongodb_members) :
     "mongodb-${i}.mongodb-svc.${var.mongodb_namespace}.svc.cluster.local:27017"
   ] : []
+
+  use_documentdb = var.database_backend == "documentdb"
 
   ingress_lb_hostname = data.kubernetes_service.traefik.status[0].load_balancer[0].ingress[0].hostname
   mongodb_connection_string = local.use_documentdb ? (

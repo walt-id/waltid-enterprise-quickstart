@@ -169,6 +169,29 @@ variable "mongodb_resources" {
   }
 }
 
+variable "mongodb_dedicated_node_count" {
+  description = "EKS worker nodes dedicated to MongoDB. Set to 0 to use shared nodes. Applies only when database_backend = 'mongodb'."
+  type        = number
+  default     = 0
+
+  validation {
+    condition     = var.mongodb_dedicated_node_count >= 0
+    error_message = "MongoDB dedicated node count must be 0 (disabled) or greater."
+  }
+}
+
+variable "mongodb_node_instance_types" {
+  description = "List of instance types for dedicated MongoDB node group"
+  type        = list(string)
+  default     = ["t3.medium"]
+}
+
+variable "mongodb_node_disk_size" {
+  description = "Disk size in GB for dedicated MongoDB nodes"
+  type        = number
+  default     = 20
+}
+
 variable "documentdb_instance_class" {
   description = "Instance class for DocumentDB"
   type        = string

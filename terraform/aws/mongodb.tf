@@ -1,3 +1,71 @@
+resource "aws_launch_template" "mongodb_node" {
+  count       = local.mongodb_dedicated_nodes ? 1 : 0
+  name_prefix = "${var.cluster_name}-mongodb-node-"
+
+  vpc_security_group_ids = [aws_security_group.node.id]
+
+  block_device_mappings {
+    device_name = "/dev/xvda"
+
+    ebs {
+      volume_size           = var.mongodb_node_disk_size
+      volume_type           = "gp3"
+      delete_on_termination = true
+      encrypted             = true
+    }
+  }
+
+  tag_specifications {
+    resource_type = "instance"
+    tags = merge(local.common_tags, {
+      Name = "${var.cluster_name}-mongodb-node"
+    })
+  }
+
+  update_default_version = true
+}
+
+resource "aws_eks_node_group" "mongodb" {
+  count           = local.mongodb_dedicated_nodes ? 1 : 0
+  cluster_name    = aws_eks_cluster.main.name
+  node_group_name = "${var.cluster_name}-mongodb-node-group"
+  node_role_arn   = aws_iam_role.node.arn
+  subnet_ids      = aws_subnet.private[*].id
+
+  instance_types = var.mongodb_node_instance_types
+
+  scaling_config {
+    desired_size = var.mongodb_dedicated_node_count
+    min_size     = var.mongodb_dedicated_node_count
+    max_size     = var.mongodb_dedicated_node_count
+  }
+
+  update_config {
+    max_unavailable = 1
+  }
+
+  labels = local.mongodb_node_selector_label
+
+  taint {
+    key    = "waltid.io/workload"
+    value  = "mongodb"
+    effect = "NO_SCHEDULE"
+  }
+
+  launch_template {
+    id      = aws_launch_template.mongodb_node[0].id
+    version = "$Latest"
+  }
+
+  depends_on = [
+    aws_iam_role_policy_attachment.node_amazon_eks_worker_node_policy,
+    aws_iam_role_policy_attachment.node_amazon_eks_cni_policy,
+    aws_iam_role_policy_attachment.node_amazon_ec2_container_registry_read_only
+  ]
+
+  tags = merge(local.common_tags, { Name = "${var.cluster_name}-mongodb-node-group" })
+}
+
 resource "kubernetes_namespace" "mongodb" {
   count = local.use_mongodb ? 1 : 0
 
@@ -99,7 +167,7 @@ resource "kubectl_manifest" "mongodb_replica_set" {
       statefulSet = {
         spec = {
           template = {
-            spec = {
+            spec = merge({
               topologySpreadConstraints = [
                 {
                   maxSkew           = 1
@@ -121,7 +189,7 @@ resource "kubectl_manifest" "mongodb_replica_set" {
                   resources = var.mongodb_resources
                 },
               ]
-            }
+            }, local.mongodb_pod_placement)
           }
         }
       }
@@ -133,5 +201,6 @@ resource "kubectl_manifest" "mongodb_replica_set" {
   depends_on = [
     helm_release.mongodb_operator,
     kubernetes_storage_class.gp3,
+    aws_eks_node_group.mongodb,
   ]
 }
