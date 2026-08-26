@@ -160,11 +160,11 @@ variable "mongodb_resources" {
   default = {
     requests = {
       cpu    = "500m"
-      memory = "2Gi"
+      memory = "1Gi"
     }
     limits = {
       cpu    = "2000m"
-      memory = "8Gi"
+      memory = "4Gi"
     }
   }
 }
