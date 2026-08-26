@@ -188,6 +188,12 @@ api:
       memory: "2Gi"
     limits:
       memory: "6Gi"
+  # The HPA targets average CPU utilization against resources.requests.cpu above, so lowering
+  # that request makes the API scale out sooner for the same absolute load.
+  hpa:
+    minReplicas: 1
+    maxReplicas: 5
+    targetCPUUtilizationPercentage: 90
 
 web:
   ports:
@@ -201,6 +207,10 @@ web:
     tag: latest
     imagePullPolicy: Always
     pullSecrets: waltid-regcred
+  hpa:
+    minReplicas: 1
+    maxReplicas: 5
+    targetCPUUtilizationPercentage: 90
 
 ingress:
   ingressClassName: nginx # or traefik
