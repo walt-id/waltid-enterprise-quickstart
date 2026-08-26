@@ -21,10 +21,11 @@ This document defines the infrastructure-as-code design for deploying a producti
 - **Security**: Private EKS cluster with restricted public endpoint access via CIDR allow-lists
 - **Scalability**: Managed node groups with Cluster Autoscaler
 - **Observability**: CloudWatch Container Insights enabled by default
-- **Database**: Multi-AZ DocumentDB cluster with MongoDB compatibility
+- **Database**: Flexible backend options—Multi-AZ DocumentDB, in-cluster MongoDB with optional dedicated nodes, or an external database.
 - **Object Storage**: Public read-only S3 bucket, disabled by default
 - **KMS**: Dedicated IAM user for KMS key management, disabled by default
 - **Load Balancing**: Ingress Traefik exposed via internet-facing NLB
+- **DNS**: Optional Route 53 records pointing at the ingress load balancer, disabled by default
 - **Encryption**: AWS managed KMS encryption for EKS secrets
 
 ### File Structure
@@ -36,6 +37,8 @@ terraform/aws/
 ├── main.tf                   # EKS cluster, node groups, add-ons
 ├── vpc.tf                    # VPC, subnets, NAT gateways
 ├── documentdb.tf             # DocumentDB cluster and security
+├── mongodb.tf                # In-cluster MongoDB replica set and dedicated node group
+├── dns.tf                    # Route 53 records for the ingress load balancer
 ├── iam.tf                    # IAM roles and policies
 ├── helm.tf                   # Helm chart deployments
 ├── s3-credential-status.tf   # S3 bucket for credential status publishing
@@ -43,8 +46,7 @@ terraform/aws/
 ├── outputs.tf                # Output values
 └── env/
     ├── dev.tfvars            # Development environment
-    ├── prod.tfvars           # Production environment
-    └── README.md             # Deployment guide
+    └── prod.tfvars           # Production environment
 ```
 
 ---
