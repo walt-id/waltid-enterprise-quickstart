@@ -121,8 +121,9 @@ services:
       - "7500:7500"
     volumes:
       - ./config:/config
-      # Offline/air-gapped activation only: holds offline-license.waltlicense and
-      # installation-key.json. Empty and unused for online activation.
+      # Offline/air-gapped activation: hold the .waltlicense here, plus the public
+      # installation-request.json from `license request`. The fleet private key stays in
+      # MongoDB; do not expect walt.id to return installation-key.json.
       - ./license:/license
     networks:
       mongodb_network:

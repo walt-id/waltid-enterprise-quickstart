@@ -48,18 +48,38 @@ key are stored in MongoDB and later restarts reuse them, so an online offer is n
 LICENSE_SEED_CREDENTIAL="openid-credential-offer://..." docker compose up
 ```
 
-**Offline / air-gapped** - the stack never contacts walt.id. Place both files walt.id issued you into
-`license/` (git-ignored) and point the two variables at them:
+**Offline / air-gapped** - the stack never contacts walt.id. The fleet private key is created
+**inside MongoDB** by `license request`. It is not written to disk, and walt.id never returns it.
+
+1. Create the public installation request. Use the same compose project, Mongo volume, and
+   `LICENSE_STATE_ENCRYPTION_KEY` you will use to run the API. `-o` writes the **request**, not a
+   private key:
+
+   You will receive a command like this from walt.id:
 
 ```bash
-license/offline-license.waltlicense   # the signed license bundle
-license/installation-key.json         # the matching private installation key - keep it internal
+docker compose run --rm waltid-enterprise \
+  license request <licenseId> <organizationId> \
+  -o /license/installation-request.json
 ```
 
+2. Send `license/installation-request.json` to walt.id. You get back a `.waltlicense` bundle only.
+
+3. Place that bundle in `license/` and start. Do **not** set `LICENSE_INSTALLATION_KEY_FILE`:
+
 ```bash
-LICENSE_SEED_CREDENTIAL_FILE=/license/offline-license.waltlicense \
-LICENSE_INSTALLATION_KEY_FILE=/license/installation-key.json \
-  docker compose up
+LICENSE_SEED_CREDENTIAL_FILE=/license/offline-license.waltlicense docker compose up
+```
+
+The API loads the matching private key from Mongo. Paths are **inside the container** (`/license/...`),
+because compose mounts `./license` at `/license`.
+
+Do not point `LICENSE_INSTALLATION_KEY_FILE` at `installation-request.json`. That file is a public
+request (`version` / `request` / `proof`) and startup fails with `KeyTypeMissingException`.
+`LICENSE_INSTALLATION_KEY_FILE` is only for rare pre-provision of a serialized walt.id key:
+
+```json
+{ "type": "jwk", "jwk": { "kty": "EC", "crv": "P-256", "d": "...", "x": "...", "y": "..." } }
 ```
 
 Offline licenses have **no grace period**: the stack stops serving the moment the credential expires.
@@ -74,18 +94,23 @@ Request a renewal well before the expiry date shown in the `LICENSE EXPIRY WARNI
 ### Troubleshooting
 
 - Container exits during startup - the license was rejected. `docker compose logs waltid-enterprise`
-  states the reason (expired, not bound to this installation, DEV/PROD mismatch, missing seed).
+  states the reason (expired, not bound to this installation, DEV/PROD mismatch, missing seed,
+  `KeyTypeMissingException` from pointing `LICENSE_INSTALLATION_KEY_FILE` at the request file,
+  or `License fleet state integrity verification failed` from a different
+  `LICENSE_STATE_ENCRYPTION_KEY` or leftover `license_state` than the `license request` run).
 - Every endpoint returns `503 Enterprise API is unavailable because the license is not active` - the
   process started but the license is not active. `GET /livez` still responds in this state.
 - `GET /license/status` (superadmin auth) reports the restriction state, expiry countdown and any
   warning message.
+- Only set the relevant environment variables for the license activation mode you are using. All of them are provided as examples in the docker compose file.
 
 ### Kubernetes / Helm
 
-The Helm chart reads all license material from one pre-provisioned Secret, named by
-`license.secretName` in `helm/values.yaml`. It needs `state-encryption-key`, plus either
-`seed-credential` (online) or `offline-license.waltlicense` and `installation-key.json` with
-`license.offline: true` (offline).
+The Helm chart reads license material from one pre-provisioned Secret, named by
+`license.secretName` in `helm/values.yaml`. It always needs `state-encryption-key`, plus either
+`seed-credential` (online) or `offline-license.waltlicense` with `license.offline: true` (offline).
+The fleet private key is created in Mongo by the `license.installationRequest` Job. walt.id does
+not issue `installation-key.json`.
 
 ## 1. Docker-Compose: Run The Enterprise Stack
 
