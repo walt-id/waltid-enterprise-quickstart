@@ -1,11 +1,11 @@
 output "mongodb_connection_string" {
-  description = "Connection string for MongoDB"
-  value       = "mongodb://waltid:${random_password.docdb.result}@${aws_docdb_cluster.main.endpoint}:${aws_docdb_cluster.main.port}?replicaSet=rs0&readPreference=secondaryPreferred&retryWrites=false"
+  description = "Connection string for the provisioned database. Empty when database_backend = external"
+  value       = local.mongodb_connection_string
   sensitive   = true
 }
 
-output "ingress_nginx_lb" {
-  value = data.kubernetes_service.ingress_nginx.status[0].load_balancer[0].ingress[0]
+output "ingress_lb_hostname" {
+  value = local.ingress_lb_hostname
 }
 
 output "credential_status_bucket_name" {

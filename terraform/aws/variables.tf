@@ -94,6 +94,81 @@ variable "node_disk_size" {
   default     = 20
 }
 
+variable "gp3_storage_class_reclaim_policy" {
+  description = "gp3 storage class reclaim policy"
+  type        = string
+  default     = "Delete"
+
+  validation {
+    condition     = contains(["Delete", "Retain"], var.gp3_storage_class_reclaim_policy)
+    error_message = "gp3 storage class reclaim policy must either be 'Delete' or 'Retain'."
+  }
+}
+
+variable "database_backend" {
+  description = "Database backend for the Enterprise API"
+  type        = string
+  default     = "documentdb"
+
+  validation {
+    condition     = contains(["documentdb", "mongodb", "external"], var.database_backend)
+    error_message = "Database backend must be either 'documentdb', 'mongodb', or 'external'."
+  }
+}
+
+variable "mongodb_namespace" {
+  description = "Cluster namespace for MongoDB replica set and its operator"
+  type        = string
+  default     = "mongodb"
+}
+
+variable "mongodb_version" {
+  description = "MongoDB version deployed by operator"
+  type        = string
+  default     = "8.3.8"
+}
+
+variable "mongodb_members" {
+  description = "Number of replica set members"
+  type        = number
+  default     = 3
+
+  validation {
+    condition     = var.mongodb_members >= 1 && var.mongodb_members % 2 == 1
+    error_message = "MongoDB member count must be a positive odd number so the replica set can elect a primary."
+  }
+}
+
+variable "mongodb_username" {
+  description = "Username for MongoDB authentication"
+  type        = string
+  default     = "waltid"
+}
+
+variable "mongodb_resources" {
+  description = "Kubernetes resource requests and limits for mongod and mongodb-agent pods"
+  type = object({
+    requests = object({
+      cpu    = string
+      memory = string
+    })
+    limits = object({
+      cpu    = string
+      memory = string
+    })
+  })
+  default = {
+    requests = {
+      cpu    = "500m"
+      memory = "2Gi"
+    }
+    limits = {
+      cpu    = "2000m"
+      memory = "8Gi"
+    }
+  }
+}
+
 variable "documentdb_instance_class" {
   description = "Instance class for DocumentDB"
   type        = string
@@ -219,4 +294,16 @@ variable "tags" {
   description = "Additional tags to apply to all resources"
   type        = map(string)
   default     = {}
+}
+
+variable "route53_zone_name" {
+  description = "Route 53 hosted zone name. Leave blank to skip DNS management."
+  type        = string
+  default     = ""
+}
+
+variable "dns_subdomain" {
+  description = "Subdomain to point to ingress load balancer in Route 53 zone. Leave blank to use the zone root"
+  type        = string
+  default     = ""
 }

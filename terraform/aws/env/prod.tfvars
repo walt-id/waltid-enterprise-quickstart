@@ -15,6 +15,8 @@ node_min_size       = 3
 node_max_size       = 15
 node_disk_size      = 50
 
+gp3_storage_class_reclaim_policy = "Retain"
+
 documentdb_instance_class          = "db.r5.large"
 documentdb_instance_count          = 3
 documentdb_backup_retention_period = 30

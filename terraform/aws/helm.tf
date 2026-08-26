@@ -1,28 +1,28 @@
-resource "helm_release" "ingress_nginx" {
-  name             = "ingress-nginx"
-  repository       = "https://kubernetes.github.io/ingress-nginx"
-  chart            = "ingress-nginx"
-  namespace        = "ingress-nginx"
+resource "helm_release" "traefik" {
+  name             = "traefik"
+  repository       = "https://traefik.github.io/charts"
+  chart            = "traefik"
+  namespace        = "traefik"
   create_namespace = true
-  version          = "4.15.1"
+  version          = "41.3.0"
 
   set {
-    name  = "controller.service.type"
+    name  = "service.type"
     value = "LoadBalancer"
   }
 
   set {
-    name  = "controller.service.externalTrafficPolicy"
+    name  = "service.spec.externalTrafficPolicy"
     value = "Local"
   }
 
   set {
-    name  = "controller.service.annotations.service\\.beta\\.kubernetes\\.io/aws-load-balancer-type"
+    name  = "service.annotations.service\\.beta\\.kubernetes\\.io/aws-load-balancer-type"
     value = "nlb"
   }
 
   set {
-    name  = "controller.service.annotations.service\\.beta\\.kubernetes\\.io/aws-load-balancer-scheme"
+    name  = "service.annotations.service\\.beta\\.kubernetes\\.io/aws-load-balancer-scheme"
     value = "internet-facing"
   }
 
@@ -33,13 +33,13 @@ resource "helm_release" "ingress_nginx" {
   ]
 }
 
-data "kubernetes_service" "ingress_nginx" {
+data "kubernetes_service" "traefik" {
   metadata {
-    name      = "ingress-nginx-controller"
-    namespace = "ingress-nginx"
+    name      = "traefik"
+    namespace = "traefik"
   }
 
-  depends_on = [helm_release.ingress_nginx]
+  depends_on = [helm_release.traefik]
 }
 
 resource "helm_release" "metrics_server" {
@@ -145,11 +145,33 @@ resource "kubectl_manifest" "letsencrypt_cluster_issuer" {
         solvers:
           - http01:
               ingress:
-                ingressClassName: nginx
+                ingressClassName: traefik
   YAML
 
   depends_on = [
     helm_release.cert_manager,
-    helm_release.ingress_nginx
+    helm_release.traefik
   ]
+}
+
+resource "kubernetes_storage_class" "gp3" {
+  metadata {
+    name = "gp3"
+
+    annotations = {
+      "storageclass.kubernetes.io/is-default-class" = "true"
+    }
+  }
+
+  storage_provisioner    = "ebs.csi.aws.com"
+  reclaim_policy         = var.gp3_storage_class_reclaim_policy
+  volume_binding_mode    = "WaitForFirstConsumer"
+  allow_volume_expansion = true
+
+  parameters = {
+    type      = "gp3"
+    encrypted = "true"
+  }
+
+  depends_on = [aws_eks_addon.ebs_csi]
 }
