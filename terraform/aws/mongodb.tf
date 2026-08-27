@@ -189,7 +189,7 @@ resource "kubectl_manifest" "mongodb_replica_set" {
                   resources = var.mongodb_resources
                 },
               ]
-            }, local.mongodb_pod_placement)
+            }, local.mongodb_pod_placement...)
           }
         }
       }
