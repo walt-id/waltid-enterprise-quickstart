@@ -260,6 +260,17 @@ variable "enable_cluster_autoscaler" {
   default     = true
 }
 
+variable "traefik_replicas" {
+  description = "Number of Traefik ingress controller replicas"
+  type        = number
+  default     = 1
+
+  validation {
+    condition     = var.traefik_replicas >= 1
+    error_message = "Traefik replica count must be at least 1."
+  }
+}
+
 variable "letsencrypt_server" {
   description = "Let's Encrypt ACME directory URL"
   type        = string

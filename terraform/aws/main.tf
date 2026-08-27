@@ -11,7 +11,7 @@ locals {
   use_mongodb                 = var.database_backend == "mongodb"
   mongodb_dedicated_nodes     = local.use_mongodb && var.mongodb_dedicated_node_count > 0
   mongodb_node_selector_label = { "waltid.io/workload" = "mongodb" }
-  mongodb_pod_placement = local.mongodb_dedicated_nodes ? {
+  mongodb_pod_placement = local.mongodb_dedicated_nodes ? [{
     nodeSelector = local.mongodb_node_selector_label
     tolerations = [
       {
@@ -21,7 +21,7 @@ locals {
         effect   = "NoSchedule"
       }
     ]
-  } : {}
+  }] : []
   mongodb_member_hosts = local.use_mongodb ? [
     for i in range(var.mongodb_members) :
     "mongodb-${i}.mongodb-svc.${var.mongodb_namespace}.svc.cluster.local:27017"

@@ -7,6 +7,11 @@ resource "helm_release" "traefik" {
   version          = "41.3.0"
 
   set {
+    name  = "deployment.replicas"
+    value = var.traefik_replicas
+  }
+
+  set {
     name  = "service.type"
     value = "LoadBalancer"
   }
