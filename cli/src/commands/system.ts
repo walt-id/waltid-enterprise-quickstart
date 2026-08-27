@@ -96,6 +96,21 @@ export async function createSuperadminAccount(ctx: CommandContext): Promise<bool
         console.log(`   [SKIP] Superadmin account already exists`);
         return true;
       }
+      // The bootstrap endpoint is rate limited per source IP (see config/rate-limit.conf).
+      // Repeated setup runs can trip it, so say so instead of dumping the raw body.
+      if (response.status === 429) {
+        const retryAfter = response.headers.get('retry-after');
+        const wait = retryAfter ? `${retryAfter}s` : 'about a minute';
+        console.log(`   [WARN] Superadmin creation is rate limited. Retry in ${wait}.`);
+        return false;
+      }
+      // devModeOnly defaults to protected: a token is only usable outside dev-mode when it
+      // explicitly sets devModeOnly = false.
+      if (text.includes('dev-mode')) {
+        console.log(`   [WARN] Superadmin token requires dev-mode. Enable dev-mode in config/_features.conf,`);
+        console.log(`          or set devModeOnly = false on a secret token in config/superadmin-registration.conf`);
+        return false;
+      }
       console.log(`   [WARN] Superadmin account creation returned: ${text}`);
       return false;
     }
