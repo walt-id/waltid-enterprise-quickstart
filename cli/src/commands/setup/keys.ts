@@ -8,7 +8,7 @@
  */
 
 import { CommandContext } from '../../context.js';
-import { RESOURCES, KEY_IDS, CERT_IDS, MDL_DOC_TYPE } from '../../config.js';
+import { RESOURCES, KEY_IDS, CERT_IDS, MDL_DOC_TYPE, PID_DOC_TYPE } from '../../config.js';
 
 /** Import cryptographic keys */
 export async function setupImportKeys(ctx: CommandContext): Promise<void> {
@@ -75,7 +75,9 @@ export async function setupCreateIacaCertificate(ctx: CommandContext): Promise<v
       keyIdPath: `${ctx.tenantPath}.${RESOURCES.kms}.${KEY_IDS.vicalIacaKey}`,
     },
     vicalEntryComplementaryMetadata: {
-      docType: [MDL_DOC_TYPE],
+      // Both doctypes, since this IACA is shared by the mDL and PID flows (CREDENTIAL_TYPE)
+      // and the vical verification policy filters trust anchors by the presented doctype.
+      docType: [MDL_DOC_TYPE, PID_DOC_TYPE],
     },
   };
   ctx.saveJson('create-iaca-cert-request.json', request, step);

@@ -16,7 +16,7 @@ npm install
 npx tsx walt.ts
 ```
 
-This will run the full setup and primary use case (issue and verify mDL credential) to ensure the setup succeeded
+This will run the full setup and primary use case (issue and verify a PID credential, by default) to ensure the setup succeeded. Set `CREDENTIAL_TYPE=mdl` to run the mDL flow instead, e.g. `CREDENTIAL_TYPE=mdl npx tsx walt.ts`.
 
 At any point, you can recreate this initial setup by running
 
