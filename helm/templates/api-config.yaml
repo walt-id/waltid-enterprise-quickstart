@@ -13,6 +13,9 @@ data:
   web.conf: {{ .Values.webConfig.webConf | toYaml | indent 1 }}
   resource-access.conf: {{ .Values.resourceAccessConf | toYaml | indent 1 }}
   license.conf: {{ .Values.licenseConf | toYaml | indent 1 }}
+  {{ if .Values.rateLimitConf }}
+  rate-limit.conf: {{ .Values.rateLimitConf | toYaml | indent 1 }}
+  {{ end }}
   {{ if .Values.loggingConf }}
   klogging.json: {{ .Values.loggingConf | toYaml | indent 1 }}
   {{ end }}
