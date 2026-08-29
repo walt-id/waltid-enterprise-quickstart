@@ -61,6 +61,7 @@ resource "aws_eks_node_group" "mongodb" {
     aws_iam_role_policy_attachment.node_amazon_eks_worker_node_policy,
     aws_iam_role_policy_attachment.node_amazon_eks_cni_policy,
     aws_iam_role_policy_attachment.node_amazon_ec2_container_registry_read_only,
+    aws_security_group_rule.cluster_ingress_nodes,
     aws_route_table_association.private,
     aws_route_table_association.public
   ]
