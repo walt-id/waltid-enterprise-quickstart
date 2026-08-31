@@ -213,5 +213,5 @@ web:
     targetCPUUtilizationPercentage: 90
 
 ingress:
-  ingressClassName: nginx # or traefik
+  ingressClassName: traefik
   host: enterprise.test.waltid.cloud
