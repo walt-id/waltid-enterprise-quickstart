@@ -29,13 +29,23 @@ environment variables passed through by docker-compose.
 ### License state encryption key
 
 `LICENSE_STATE_ENCRYPTION_KEY` encrypts the persisted license credential and the installation
-private key in MongoDB. It ships in `.env` with a development default, which is fine locally. For
-any real deployment:
+private key in MongoDB.
+
+It is unset in `.env`. The Enterprise API then generates a random secret on first start and shares it
+between replicas through MongoDB, so the quickstart needs no configuration. That secret is stored in
+the database, wrapped with a key compiled into the image, so a copy of the database plus the image is
+enough to read it.
+
+Set it for any deployment where that matters. The secret then lives outside the database and a
+database copy on its own cannot be used:
 
 - Use at least 32 characters and supply it from a secret manager.
 - Every replica must use the **same** value.
 - Back it up together with MongoDB. Losing it makes the persisted license state unreadable.
-- A wrong or missing key fails startup closed, and live dual-key rotation is not supported.
+- A wrong value fails startup closed, and live dual-key rotation is not supported.
+
+Never commit a shared value here, and do not copy one between deployments. A secret that appears in a
+repository or a published example protects nothing.
 
 ### Activation
 
