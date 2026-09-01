@@ -13,6 +13,73 @@
 import { CommandContext } from '../context.js';
 import { RESOURCES, STATUS_CONFIG_IDS, MDL_DOC_TYPE, defaultWalletDidReference } from '../config.js';
 
+/** Present can return before verifier policy evaluation finishes. */
+const IN_PROGRESS_SESSION_STATUSES = new Set(['IN_USE']);
+const DEFAULT_SESSION_POLL_TIMEOUT_MS = 30_000;
+const DEFAULT_SESSION_POLL_INTERVAL_MS = 250;
+
+function positiveIntEnv(name: string, fallback: number): number {
+  const parsed = Number(process.env[name]);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+/**
+ * Poll verification-session/info until the session leaves an in-progress status.
+ * `IN_USE` means the authorization request was fetched, not that verification finished.
+ */
+export async function waitForSessionInfo(
+  ctx: CommandContext,
+  verifierPath = `${ctx.tenantPath}.${RESOURCES.verifier2}`,
+  persist?: { fileName: string; step: string }
+): Promise<any> {
+  if (!ctx.ctx.sessionId) {
+    throw new Error('No verification session ID available');
+  }
+
+  const timeoutMs = positiveIntEnv('VERIFICATION_SESSION_POLL_TIMEOUT_MS', DEFAULT_SESSION_POLL_TIMEOUT_MS);
+  const intervalMs = positiveIntEnv('VERIFICATION_SESSION_POLL_INTERVAL_MS', DEFAULT_SESSION_POLL_INTERVAL_MS);
+  const deadline = Date.now() + timeoutMs;
+  let lastData: any;
+  let lastStatus: string | undefined;
+  let loggedWait = false;
+
+  const persistLast = () => {
+    if (persist && lastData !== undefined) {
+      ctx.saveJson(persist.fileName, lastData, persist.step);
+    }
+  };
+
+  while (true) {
+    const response = await ctx.orgClient.get(
+      `/v2/${verifierPath}.${ctx.ctx.sessionId}/verifier-service-api/verification-session/info`
+    );
+    lastData = response.data;
+    lastStatus = lastData?.session?.status;
+
+    if (lastStatus && !IN_PROGRESS_SESSION_STATUSES.has(lastStatus)) {
+      persistLast();
+      return lastData;
+    }
+
+    if (Date.now() >= deadline) {
+      persistLast();
+      throw new Error(
+        `Timed out after ${timeoutMs}ms waiting for verification session to leave ${lastStatus || 'IN_USE'}`
+      );
+    }
+
+    if (!loggedWait) {
+      console.log(`   [INFO] Session still ${lastStatus || 'unknown'}; waiting for a terminal status`);
+      loggedWait = true;
+    }
+    await sleep(intervalMs);
+  }
+}
+
 // ============================================================================
 // Credential Issuance
 // ============================================================================
@@ -212,12 +279,8 @@ export async function runAssertFinalStatus(
   const step = ctx.nextStep();
   ctx.log('Check verifier2 final session status', 'RUN');
 
-  const response = await ctx.orgClient.get(
-    `/v2/${verifierPath}.${ctx.ctx.sessionId}/verifier-service-api/verification-session/info`
-  );
-  ctx.saveJson(fileName, response.data, step);
-
-  const finalStatus = response.data.session?.status;
+  const sessionInfo = await waitForSessionInfo(ctx, verifierPath, { fileName, step });
+  const finalStatus = sessionInfo.session?.status;
 
   if (finalStatus !== 'SUCCESSFUL') {
     throw new Error(`Expected SUCCESSFUL but got: ${finalStatus || '<empty>'}`);
@@ -235,12 +298,8 @@ export async function runAssertFinalStatusFailed(
   const step = ctx.nextStep();
   ctx.log('Check verifier2 final session status (expecting FAILED)', 'RUN');
 
-  const response = await ctx.orgClient.get(
-    `/v2/${verifierPath}.${ctx.ctx.sessionId}/verifier-service-api/verification-session/info`
-  );
-  ctx.saveJson(fileName, response.data, step);
-
-  const finalStatus = response.data.session?.status;
+  const sessionInfo = await waitForSessionInfo(ctx, verifierPath, { fileName, step });
+  const finalStatus = sessionInfo.session?.status;
 
   if (finalStatus !== 'FAILED') {
     throw new Error(`Expected FAILED but got: ${finalStatus || '<empty>'}`);

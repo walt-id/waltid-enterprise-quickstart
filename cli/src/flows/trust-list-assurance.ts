@@ -10,7 +10,7 @@ import {
   RESOURCES,
 } from '../config.js';
 import { setupLogin, linkVerifier2ToTrustRegistry } from '../commands/setup/index.js';
-import { clearWalletCredentials, runWalletPresent } from '../commands/run.js';
+import { clearWalletCredentials, runWalletPresent, waitForSessionInfo } from '../commands/run.js';
 import {
   listTrustRegistrySources,
   loadTrustSource,
@@ -309,11 +309,12 @@ async function testVerifierIntegration(
   await runWalletPresent(ctx, credentialIds);
 
   step = ctx.nextStep();
-  const infoResponse = await ctx.orgClient.get(
-    `/v2/${ctx.tenantPath}.${RESOURCES.verifier2}.${ctx.ctx.sessionId}/verifier-service-api/verification-session/info`
+  const sessionInfo = await waitForSessionInfo(
+    ctx,
+    `${ctx.tenantPath}.${RESOURCES.verifier2}`,
+    { fileName: 'trust-list-final-session-info.json', step }
   );
-  ctx.saveJson('trust-list-final-session-info.json', infoResponse.data, step);
-  const session = infoResponse.data.session;
+  const session = sessionInfo.session;
   if (session?.status !== 'SUCCESSFUL') {
     throw new Error(`Expected trust-list session SUCCESSFUL, got ${session?.status || '<empty>'}`);
   }
