@@ -65,12 +65,17 @@ license:
   #   seed-credential       - the openid-credential-offer:// URI from License Admin.
   # Offline/air-gapped activation (offline: true) additionally needs:
   #   offline-license.waltlicense - the bundle issued by walt.id.
-  #   installation-key.json       - the matching private installation key. Never send it to walt.id.
+  # The fleet private key is created in Mongo by the installation-request Job below. walt.id
+  # does not return installation-key.json. That Secret key is only for rare pre-provision of
+  # a serialized walt.id key ({"type":"jwk","jwk":{...}}).
   #
   # Note that featConf above enables dev-mode, which requires a DEV license. A PROD license refuses
   # to start while dev-mode is enabled.
   secretName: waltid-enterprise-license
   offline: false
+  # Mount Secret key installation-key.json and set LICENSE_INSTALLATION_KEY_FILE. Leave false:
+  # the installation-request Job already stored the fleet key in Mongo.
+  provisionInstallationKeyFile: false
   # One-off bootstrap Job that creates this installation's keypair in the database and prints the
   # signed public installation request to its log. Only needed once, for offline activation, because
   # an unlicensed API never starts and so cannot be reached with kubectl exec.
@@ -183,6 +188,12 @@ api:
       memory: "2Gi"
     limits:
       memory: "6Gi"
+  # The HPA targets average CPU utilization against resources.requests.cpu above, so lowering
+  # that request makes the API scale out sooner for the same absolute load.
+  hpa:
+    minReplicas: 1
+    maxReplicas: 5
+    targetCPUUtilizationPercentage: 90
 
 web:
   ports:
@@ -196,7 +207,11 @@ web:
     tag: latest
     imagePullPolicy: Always
     pullSecrets: waltid-regcred
+  hpa:
+    minReplicas: 1
+    maxReplicas: 5
+    targetCPUUtilizationPercentage: 90
 
 ingress:
-  ingressClassName: nginx # or traefik
+  ingressClassName: traefik
   host: enterprise.test.waltid.cloud

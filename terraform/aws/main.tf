@@ -7,6 +7,34 @@ locals {
     },
     var.tags
   )
+
+  use_mongodb                 = var.database_backend == "mongodb"
+  mongodb_dedicated_nodes     = local.use_mongodb && var.mongodb_dedicated_node_count > 0
+  mongodb_node_selector_label = { "waltid.io/workload" = "mongodb" }
+  mongodb_pod_placement = local.mongodb_dedicated_nodes ? [{
+    nodeSelector = local.mongodb_node_selector_label
+    tolerations = [
+      {
+        key      = "waltid.io/workload"
+        operator = "Equal"
+        value    = "mongodb"
+        effect   = "NoSchedule"
+      }
+    ]
+  }] : []
+  mongodb_member_hosts = local.use_mongodb ? [
+    for i in range(var.mongodb_members) :
+    "mongodb-${i}.mongodb-svc.${var.mongodb_namespace}.svc.cluster.local:27017"
+  ] : []
+
+  use_documentdb = var.database_backend == "documentdb"
+
+  ingress_lb_hostname = data.kubernetes_service.traefik.status[0].load_balancer[0].ingress[0].hostname
+  mongodb_connection_string = local.use_documentdb ? (
+    "mongodb://waltid:${random_password.docdb[0].result}@${aws_docdb_cluster.main[0].endpoint}:${aws_docdb_cluster.main[0].port}?replicaSet=rs0&readPreference=secondaryPreferred&retryWrites=false"
+    ) : local.use_mongodb ? (
+    "mongodb://${var.mongodb_username}:${random_password.mongodb[0].result}@${join(",", local.mongodb_member_hosts)}/?replicaSet=mongodb&authSource=admin&readPreference=secondaryPreferred&retryWrites=false&ssl=false"
+  ) : ""
 }
 
 resource "aws_cloudwatch_log_group" "eks" {
@@ -158,7 +186,9 @@ resource "aws_eks_node_group" "main" {
   depends_on = [
     aws_iam_role_policy_attachment.node_amazon_eks_worker_node_policy,
     aws_iam_role_policy_attachment.node_amazon_eks_cni_policy,
-    aws_iam_role_policy_attachment.node_amazon_ec2_container_registry_read_only
+    aws_iam_role_policy_attachment.node_amazon_ec2_container_registry_read_only,
+    aws_route_table_association.private,
+    aws_route_table_association.public
   ]
 
   tags = merge(local.common_tags, { Name = "${var.cluster_name}-node-group" })

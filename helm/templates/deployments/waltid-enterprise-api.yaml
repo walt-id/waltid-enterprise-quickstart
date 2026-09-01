@@ -79,8 +79,10 @@ spec:
         {{- if .Values.license.offline }}
           - name: LICENSE_SEED_CREDENTIAL_FILE
             value: /license/offline-license.waltlicense
+          {{- if .Values.license.provisionInstallationKeyFile }}
           - name: LICENSE_INSTALLATION_KEY_FILE
             value: /license/installation-key.json
+          {{- end }}
         {{- else }}
           - name: LICENSE_SEED_CREDENTIAL
             valueFrom:
@@ -112,6 +114,8 @@ spec:
             items:
               - key: offline-license.waltlicense
                 path: offline-license.waltlicense
+              {{- if .Values.license.provisionInstallationKeyFile }}
               - key: installation-key.json
                 path: installation-key.json
+              {{- end }}
         {{- end }}

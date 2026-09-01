@@ -1,4 +1,5 @@
 resource "aws_security_group" "documentdb" {
+  count       = local.use_documentdb ? 1 : 0
   name        = "${var.cluster_name}-documentdb-sg"
   description = "Security group for DocumentDB"
   vpc_id      = aws_vpc.main.id
@@ -14,6 +15,7 @@ resource "aws_security_group" "documentdb" {
 }
 
 resource "aws_docdb_subnet_group" "main" {
+  count      = local.use_documentdb ? 1 : 0
   name       = "${var.cluster_name}-documentdb-subnet-group"
   subnet_ids = aws_subnet.private[*].id
 
@@ -21,6 +23,7 @@ resource "aws_docdb_subnet_group" "main" {
 }
 
 resource "aws_docdb_cluster_parameter_group" "main" {
+  count       = local.use_documentdb ? 1 : 0
   family      = var.documentdb_parameter_group_family
   name        = "${var.cluster_name}-docdb-params"
   description = "DocumentDB parameter group"
@@ -34,23 +37,25 @@ resource "aws_docdb_cluster_parameter_group" "main" {
 }
 
 resource "random_password" "docdb" {
+  count   = local.use_documentdb ? 1 : 0
   length  = 24
   special = false
 }
 
 resource "aws_docdb_cluster" "main" {
+  count                           = local.use_documentdb ? 1 : 0
   cluster_identifier              = "${var.cluster_name}-docdb"
   engine                          = "docdb"
   engine_version                  = var.documentdb_parameter_group_family == "docdb8.0" ? "8.0.0" : "5.0.0"
   master_username                 = "waltid"
-  master_password                 = random_password.docdb.result
+  master_password                 = random_password.docdb[0].result
   backup_retention_period         = var.documentdb_backup_retention_period
   preferred_backup_window         = "03:00-05:00"
   skip_final_snapshot             = var.skip_final_snapshot
   final_snapshot_identifier       = var.skip_final_snapshot ? null : "${var.cluster_name}-docdb-final"
-  db_subnet_group_name            = aws_docdb_subnet_group.main.name
-  db_cluster_parameter_group_name = aws_docdb_cluster_parameter_group.main.name
-  vpc_security_group_ids          = [aws_security_group.documentdb.id]
+  db_subnet_group_name            = aws_docdb_subnet_group.main[0].name
+  db_cluster_parameter_group_name = aws_docdb_cluster_parameter_group.main[0].name
+  vpc_security_group_ids          = [aws_security_group.documentdb[0].id]
   enabled_cloudwatch_logs_exports = ["audit", "profiler"]
   storage_encrypted               = true
   apply_immediately               = true
@@ -60,9 +65,9 @@ resource "aws_docdb_cluster" "main" {
 }
 
 resource "aws_docdb_cluster_instance" "main" {
-  count              = var.documentdb_instance_count
+  count              = local.use_documentdb ? var.documentdb_instance_count : 0
   identifier         = "${var.cluster_name}-docdb-${count.index + 1}"
-  cluster_identifier = aws_docdb_cluster.main.id
+  cluster_identifier = aws_docdb_cluster.main[0].id
   instance_class     = var.documentdb_instance_class
 
   tags = merge(local.common_tags, { Name = "${var.cluster_name}-docdb-${count.index + 1}" })

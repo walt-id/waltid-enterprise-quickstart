@@ -61,3 +61,6 @@ export { runGovServicesSetup } from './gov-services.js';
 export { setupCreateOidcBridge } from './oidc-bridge.js';
 // EUDI demo (WRP Registry)
 export { runEudiDemoSetup } from './eudi-demo.js';
+
+// Acme tenant
+export { runAcmeTenantSetup } from './acme-tenant.js';

@@ -124,8 +124,9 @@ services:
       - "7500:7500"
     volumes:
       - ./config:/config
-      # Offline/air-gapped activation only: holds offline-license.waltlicense and
-      # installation-key.json. Empty and unused for online activation.
+      # Offline/air-gapped activation: hold the .waltlicense here, plus the public
+      # installation-request.json from `license request`. The fleet private key stays in
+      # MongoDB; do not expect walt.id to return installation-key.json.
       - ./license:/license
     # No enterprise.localhost aliases here: Caddy owns them. Declaring them on this service too
     # makes the embedded DNS return both containers, so callbacks to enterprise.localhost round-robin
