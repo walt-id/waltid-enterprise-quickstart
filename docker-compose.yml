@@ -128,13 +128,14 @@ services:
       # installation-request.json from `license request`. The fleet private key stays in
       # MongoDB; do not expect walt.id to return installation-key.json.
       - ./license:/license
+    # No enterprise.localhost aliases here: Caddy owns them. Declaring them on this service too
+    # makes the embedded DNS return both containers, so callbacks to enterprise.localhost round-robin
+    # onto this container's port 80 - where nothing listens - and fail with "Connection refused".
     networks:
-      mongodb_network:
-        aliases:
-          - enterprise.localhost
-          - waltid.enterprise.localhost
+      - mongodb_network
     depends_on:
-      - mongodb
+      mongodb:
+        condition: service_healthy
 
   waltid-enterprise-ui:
     image: waltid/waltid-enterprise-ui:${ENTERPRISE_API_DOCKER_IMAGE_TAG}
