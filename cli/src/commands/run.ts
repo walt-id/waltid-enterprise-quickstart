@@ -125,7 +125,6 @@ export async function runCreateVerificationSession(
       policy: 'vical',
       vicalUrl: vicalUrl,
       enableDocumentTypeValidation: true,
-      enableTrustedChainRoot: true,
     });
   }
   

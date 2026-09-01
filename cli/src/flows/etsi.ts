@@ -36,7 +36,6 @@ async function createEtsiVerificationSession(ctx: CommandContext): Promise<void>
       policy: 'vical',
       vicalUrl: vicalUrl,
       enableDocumentTypeValidation: true,
-      enableTrustedChainRoot: true,
     },
     {
       policy: 'etsi-trust-list',
