@@ -62,6 +62,10 @@ spec:
               secretKeyRef:
                 name: {{ .Values.license.secretName }}
                 key: state-encryption-key
+                # Optional: an absent key leaves the variable unset and the API generates its own
+                # secret, shared between replicas through MongoDB. Without this flag a missing key
+                # stops the pod with CreateContainerConfigError.
+                optional: true
           # Pod identity for license usage reporting. Without POD_UID the stack falls back to the
           # pod name, which Kubernetes reuses across restarts and blurs pod slot accounting.
           - name: POD_UID
