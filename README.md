@@ -117,10 +117,11 @@ Request a renewal well before the expiry date shown in the `LICENSE EXPIRY WARNI
 ### Kubernetes / Helm
 
 The Helm chart reads license material from one pre-provisioned Secret, named by
-`license.secretName` in `helm/values.yaml`. It always needs `state-encryption-key`, plus either
-`seed-credential` (online) or `offline-license.waltlicense` with `license.offline: true` (offline).
-The fleet private key is created in Mongo by the `license.installationRequest` Job. walt.id does
-not issue `installation-key.json`.
+`license.secretName` in `helm/values.yaml`. It needs either `seed-credential` (online) or
+`offline-license.waltlicense` with `license.offline: true` (offline). `state-encryption-key` is
+optional: when the key is absent the API generates its own secret and shares it between replicas
+through MongoDB. The fleet private key is created in Mongo by the `license.installationRequest` Job.
+walt.id does not issue `installation-key.json`.
 
 ## 1. Docker-Compose: Run The Enterprise Stack
 
