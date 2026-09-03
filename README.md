@@ -29,13 +29,45 @@ environment variables passed through by docker-compose.
 ### License state encryption key
 
 `LICENSE_STATE_ENCRYPTION_KEY` encrypts the persisted license credential and the installation
-private key in MongoDB. It ships in `.env` with a development default, which is fine locally. For
-any real deployment:
+private key in MongoDB.
+
+It is unset in `.env`. The Enterprise API then generates a random secret on first start and shares it
+between replicas through MongoDB, so the quickstart needs no configuration. That secret is stored in
+the database, wrapped with a key compiled into the image, so a copy of the database plus the image is
+enough to read it.
+
+Set it for any deployment where that matters. The secret then lives outside the database and a
+database copy on its own cannot be used:
 
 - Use at least 32 characters and supply it from a secret manager.
 - Every replica must use the **same** value.
 - Back it up together with MongoDB. Losing it makes the persisted license state unreadable.
-- A wrong or missing key fails startup closed, and live dual-key rotation is not supported.
+- A wrong value fails startup closed, and live dual-key rotation is not supported.
+
+Never commit a shared value here, and do not copy one between deployments. A secret that appears in a
+repository or a published example protects nothing.
+
+#### Upgrading from a quickstart that shipped an example key
+
+Earlier revisions of this repository shipped `LICENSE_STATE_ENCRYPTION_KEY` pre-filled with a shared
+example value. That value has been removed, because a key published in a repository protects nothing.
+
+If your stack was activated while that value was in `.env`, the API now derives a different key and
+refuses to start:
+
+```
+License fleet state integrity verification failed: the stored license state was written with a
+different LICENSE_STATE_ENCRYPTION_KEY than this process derives.
+```
+
+The stored state is intact, only the key changed. Pick one of these:
+
+- **Keep the existing state.** Put the previous value back in `.env`. If you no longer have it, it was
+  `waltid-enterprise-quickstart-license-state-key`. Treat that as a value to migrate away from, not one
+  to keep: set your own secret afterwards on a fresh activation.
+- **Start clean.** Run `license reset --include-installation-key --confirm`, ask walt.id to unbind the
+  installation, then activate again with a fresh credential offer. This discards the installation key,
+  which is why walt.id has to unbind before the license can be used again.
 
 ### Activation
 
@@ -107,10 +139,11 @@ Request a renewal well before the expiry date shown in the `LICENSE EXPIRY WARNI
 ### Kubernetes / Helm
 
 The Helm chart reads license material from one pre-provisioned Secret, named by
-`license.secretName` in `helm/values.yaml`. It always needs `state-encryption-key`, plus either
-`seed-credential` (online) or `offline-license.waltlicense` with `license.offline: true` (offline).
-The fleet private key is created in Mongo by the `license.installationRequest` Job. walt.id does
-not issue `installation-key.json`.
+`license.secretName` in `helm/values.yaml`. It needs either `seed-credential` (online) or
+`offline-license.waltlicense` with `license.offline: true` (offline). `state-encryption-key` is
+optional: when the key is absent the API generates its own secret and shares it between replicas
+through MongoDB. The fleet private key is created in Mongo by the `license.installationRequest` Job.
+walt.id does not issue `installation-key.json`.
 
 ## 1. Docker-Compose: Run The Enterprise Stack
 

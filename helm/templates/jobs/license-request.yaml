@@ -69,6 +69,9 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.license.secretName }}
                   key: state-encryption-key
+                  # Must match the API deployment. When the key is absent both leave the variable
+                  # unset, and the API reads the secret this Job generated in MongoDB.
+                  optional: true
           volumeMounts:
             - name: waltid-enterprise-api-config
               mountPath: /config
