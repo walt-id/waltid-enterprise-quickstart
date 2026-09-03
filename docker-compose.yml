@@ -1,7 +1,6 @@
 services:
   init-keyfile:
     image: mongo:latest
-    container_name: init_keyfile
     hostname: mongo
     command: >
       sh -c "
@@ -19,7 +18,6 @@ services:
     restart: "no"
 
   mongodb:
-    container_name: mongo
     image: mongo:latest
     hostname: mongo
     ports:
@@ -74,7 +72,6 @@ services:
 
   mongo-express:
     image: mongo-express:latest
-    container_name: mongo-express
     restart: always
     environment:
       ME_CONFIG_MONGODB_ADMINUSERNAME: ${MONGO_INITDB_ROOT_USERNAME}
@@ -92,7 +89,6 @@ services:
 
   caddy:
     image: caddy:2-alpine
-    container_name: caddy
     restart: unless-stopped
     ports:
       - "80:80"
@@ -156,12 +152,12 @@ volumes:
   mongo-keyfile-vol:
   mongodb-data:
     driver: local
-    name: mongo-data
+    name: ${MONGO_DATA_VOLUME:-mongo-data}
   mongodb-log:
     driver: local
-    name: mongo-log
+    name: ${MONGO_LOG_VOLUME:-mongo-log}
 
 networks:
   mongodb_network:
     driver: bridge
-    name: mongo-network
+    name: ${MONGO_NETWORK:-mongo-network}
