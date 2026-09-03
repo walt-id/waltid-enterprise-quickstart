@@ -47,6 +47,28 @@ database copy on its own cannot be used:
 Never commit a shared value here, and do not copy one between deployments. A secret that appears in a
 repository or a published example protects nothing.
 
+#### Upgrading from a quickstart that shipped an example key
+
+Earlier revisions of this repository shipped `LICENSE_STATE_ENCRYPTION_KEY` pre-filled with a shared
+example value. That value has been removed, because a key published in a repository protects nothing.
+
+If your stack was activated while that value was in `.env`, the API now derives a different key and
+refuses to start:
+
+```
+License fleet state integrity verification failed: the stored license state was written with a
+different LICENSE_STATE_ENCRYPTION_KEY than this process derives.
+```
+
+The stored state is intact, only the key changed. Pick one of these:
+
+- **Keep the existing state.** Put the previous value back in `.env`. If you no longer have it, it was
+  `waltid-enterprise-quickstart-license-state-key`. Treat that as a value to migrate away from, not one
+  to keep: set your own secret afterwards on a fresh activation.
+- **Start clean.** Run `license reset --include-installation-key --confirm`, ask walt.id to unbind the
+  installation, then activate again with a fresh credential offer. This discards the installation key,
+  which is why walt.id has to unbind before the license can be used again.
+
 ### Activation
 
 Pick one of the two modes. After a successful first activation, the bound credential and installation
