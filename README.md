@@ -117,6 +117,26 @@ request (`version` / `request` / `proof`) and startup fails with `KeyTypeMissing
 Offline licenses have **no grace period**: the stack stops serving the moment the credential expires.
 Request a renewal well before the expiry date shown in the `LICENSE EXPIRY WARNING` startup log line.
 
+### Resetting license state
+
+The container CLI has two license subcommands: `license request` (above) and `license reset`, which
+discards what is stored in MongoDB.
+
+| Command | Effect | Needs walt.id |
+|---------|--------|---------------|
+| `license reset --confirm` | Removes the stored credential. Your installation key is kept. | No. Ask for a fresh credential offer, start with it, and the existing key rebinds. |
+| `license reset --include-installation-key --confirm` | Also discards the installation key. | **Yes.** walt.id has to unbind the installation. |
+
+```bash
+docker compose run --rm waltid-enterprise license reset --confirm
+```
+
+Prefer the first form. walt.id binds an installation key to a license permanently, so once you discard
+yours the license still points at it and activation keeps failing until walt.id unbinds it. Use
+`--include-installation-key` only when you are discarding the environment, or when the stored state can
+no longer be decrypted because `LICENSE_STATE_ENCRYPTION_KEY` was lost - in that case the installation
+key is encrypted with the same secret and cannot be kept anyway.
+
 ### DEV vs PROD licenses
 
 `config/_features.conf` enables `dev-mode`, which exposes debug endpoints and therefore requires a
@@ -132,6 +152,11 @@ Request a renewal well before the expiry date shown in the `LICENSE EXPIRY WARNI
   `LICENSE_STATE_ENCRYPTION_KEY` or leftover `license_state` than the `license request` run).
 - Every endpoint returns `503 Enterprise API is unavailable because the license is not active` - the
   process started but the license is not active. `GET /livez` still responds in this state.
+- `Heartbeat failed: ... 403 Forbidden: License '<id>' has no installation binding` - the license is
+  not bound to your installation. Either the installation key was discarded with
+  `license reset --include-installation-key` and walt.id has not unbound the license, or the license is
+  bound to a different installation. Ask walt.id to unbind it, then start with a fresh credential offer.
+  A license can only be bound to one installation at a time, so two stacks cannot share one license.
 - `GET /license/status` (superadmin auth) reports the restriction state, expiry countdown and any
   warning message.
 - Only set the relevant environment variables for the license activation mode you are using. All of them are provided as examples in the docker compose file.
