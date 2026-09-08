@@ -1,7 +1,6 @@
 services:
   init-keyfile:
     image: mongo:latest
-    container_name: init_keyfile
     hostname: mongo
     command: >
       sh -c "
@@ -19,13 +18,15 @@ services:
     restart: "no"
 
   mongodb:
-    container_name: mongo
     image: mongo:latest
     hostname: mongo
     ports:
-      - "27017:27017"
+      - "${MONGO_PORT:-27017}:27017"
     depends_on:
-      - init-keyfile
+      # One-shot container: it generates the keyfile and exits. Without this condition
+      # `docker compose up --wait` treats its clean exit as a failure.
+      init-keyfile:
+        condition: service_completed_successfully
     volumes:
       - mongo-keyfile-vol:/etc/mongodb/pki
       - mongodb-data:/data/db/
@@ -72,7 +73,6 @@ services:
 
   mongo-express:
     image: mongo-express:latest
-    container_name: mongo-express
     restart: always
     environment:
       ME_CONFIG_MONGODB_ADMINUSERNAME: ${MONGO_INITDB_ROOT_USERNAME}
@@ -82,7 +82,7 @@ services:
       ME_CONFIG_BASICAUTH_USERNAME: ${MONGO_EXPRESS_USERNAME}
       ME_CONFIG_BASICAUTH_PASSWORD: ${MONGO_EXPRESS_PASSWORD}
     ports:
-      - 8081:8081
+      - "${MONGO_EXPRESS_PORT:-8081}:8081"
     networks:
       - mongodb_network
     depends_on:
@@ -91,7 +91,6 @@ services:
 
   caddy:
     image: caddy:2-alpine
-    container_name: caddy
     restart: unless-stopped
     ports:
       - "80:80"
@@ -108,14 +107,18 @@ services:
 
   waltid-enterprise:
     image: waltid/waltid-enterprise-api:${ENTERPRISE_API_DOCKER_IMAGE_TAG}
-    # Pass-through form: an unset variable is omitted from the container entirely instead of being
-    # injected as an empty string. config/license.conf relies on that, because an empty value would
-    # override the file and an empty LICENSE_STATE_ENCRYPTION_KEY fails startup closed.
+    # Pass-through form: a variable that is not defined anywhere is omitted from the container, so the
+    # optional HOCON substitutions in config/license.conf leave the configured values untouched.
+    # LICENSE_STATE_ENCRYPTION_KEY is the exception, because .env declares it empty, so it arrives as
+    # an empty string. The API treats a blank value as unset and generates its own secret.
     environment:
       - LICENSE_STATE_ENCRYPTION_KEY
       - LICENSE_SEED_CREDENTIAL
       - LICENSE_SEED_CREDENTIAL_FILE
       - LICENSE_INSTALLATION_KEY_FILE
+      # Points the stack at a different license server, for example a walt.id test environment.
+      # Unset leaves the licenseServerUrl configured in config/license.conf untouched.
+      - LICENSE_SERVER_URL
       # - LOG_LEVEL=trace
     ports:
       - "7500:7500"
@@ -136,12 +139,12 @@ volumes:
   mongo-keyfile-vol:
   mongodb-data:
     driver: local
-    name: mongo-data
+    name: ${MONGO_DATA_VOLUME:-mongo-data}
   mongodb-log:
     driver: local
-    name: mongo-log
+    name: ${MONGO_LOG_VOLUME:-mongo-log}
 
 networks:
   mongodb_network:
     driver: bridge
-    name: mongo-network
+    name: ${MONGO_NETWORK:-mongo-network}
