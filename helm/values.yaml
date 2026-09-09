@@ -31,6 +31,9 @@ superadminRegConf: |
   tokens = {
     "1234567890-my-token": {
       expiration = "2029-01-01T00:00:00Z", # Token has to be used by this expiration date
+      # Well-known demo token: usable only while dev-mode is enabled (see featConf above).
+      # A real deployment needs a secret, per-deployment token with devModeOnly = false.
+      devModeOnly = true
       account = {
         type = "email"
         identifier = { email = "superadmin@walt.id" }
@@ -56,11 +59,14 @@ licenseConf: |
   installationKeyFile = ${?LICENSE_INSTALLATION_KEY_FILE}
 
 license:
-  # Pre-provisioned Secret holding all license material. Required key:
+  # Pre-provisioned Secret holding all license material. Optional key:
   #   state-encryption-key  - at least 32 characters. Encrypts the persisted license credential and
-  #                           the fleet installation private key in MongoDB. Every replica must use
-  #                           the same value (relevant with hpa.yaml enabled), it must be backed up
-  #                           together with MongoDB, and live dual-key rotation is not supported.
+  #                           the fleet installation private key in MongoDB. Leave the key out and the
+  #                           API generates its own secret, shared between replicas through MongoDB.
+  #                           Supply it to keep the secret outside the database, so a database copy on
+  #                           its own cannot be read. Then every replica must use the same value
+  #                           (relevant with hpa.yaml enabled), it must be backed up together with
+  #                           MongoDB, and live dual-key rotation is not supported.
   # Online activation (offline: false) additionally needs:
   #   seed-credential       - the openid-credential-offer:// URI from License Admin.
   # Offline/air-gapped activation (offline: true) additionally needs:

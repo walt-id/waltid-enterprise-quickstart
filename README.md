@@ -11,13 +11,16 @@
   </a>
 </div>
 
-This repository contains the quickstart CLI and docker-compose files to get you up and running with the walt.id Enterprise Stack for local development. It also contains useful resources to help you with the Enterprise Stack such as configuration files, migration scripts, deployment files and more.
+This repository contains the quickstart CLI and docker-compose files to get you up and running with
+the walt.id Enterprise Stack for local development. It also contains useful resources to help you
+with the Enterprise Stack such as configuration files, migration scripts, deployment files and more.
 
 # Get Started
 
 Bring up the whole stack using docker-compose and explore the enterprise features via our CLI tool.
 
-⚠️ Please note: You need to be an Enterprise Stack customer, have access to the private enterprise stack images & a valid license to use this quickstart.
+⚠️ Please note: You need to be an Enterprise Stack customer, have access to the private enterprise
+stack images & a valid license to use this quickstart.
 
 ## Licensing
 
@@ -29,17 +32,58 @@ environment variables passed through by docker-compose.
 ### License state encryption key
 
 `LICENSE_STATE_ENCRYPTION_KEY` encrypts the persisted license credential and the installation
-private key in MongoDB. It ships in `.env` with a development default, which is fine locally. For
-any real deployment:
+private key in MongoDB.
+
+It is unset in `.env`. The Enterprise API then generates a random secret on first start and shares
+it
+between replicas through MongoDB, so the quickstart needs no configuration. That secret is stored in
+the database, wrapped with a key compiled into the image, so a copy of the database plus the image
+is
+enough to read it.
+
+Set it for any deployment where that matters. The secret then lives outside the database and a
+database copy on its own cannot be used:
 
 - Use at least 32 characters and supply it from a secret manager.
 - Every replica must use the **same** value.
 - Back it up together with MongoDB. Losing it makes the persisted license state unreadable.
-- A wrong or missing key fails startup closed, and live dual-key rotation is not supported.
+- A wrong value fails startup closed, and live dual-key rotation is not supported.
+
+Never commit a shared value here, and do not copy one between deployments. A secret that appears in
+a
+repository or a published example protects nothing.
+
+#### Upgrading from a quickstart that shipped an example key
+
+Earlier revisions of this repository shipped `LICENSE_STATE_ENCRYPTION_KEY` pre-filled with a shared
+example value. That value has been removed, because a key published in a repository protects
+nothing.
+
+If your stack was activated while that value was in `.env`, the API now derives a different key and
+refuses to start:
+
+```
+License fleet state integrity verification failed: the stored license state was written with a
+different LICENSE_STATE_ENCRYPTION_KEY than this process derives.
+```
+
+The stored state is intact, only the key changed. Pick one of these:
+
+- **Keep the existing state.** Put the previous value back in `.env`. If you no longer have it, it
+  was
+  `waltid-enterprise-quickstart-license-state-key`. Treat that as a value to migrate away from, not
+  one
+  to keep: set your own secret afterwards on a fresh activation.
+- **Start clean.** Run `license reset --include-installation-key --confirm`, ask walt.id to unbind
+  the
+  installation, then activate again with a fresh credential offer. This discards the installation
+  key,
+  which is why walt.id has to unbind before the license can be used again.
 
 ### Activation
 
-Pick one of the two modes. After a successful first activation, the bound credential and installation
+Pick one of the two modes. After a successful first activation, the bound credential and
+installation
 key are stored in MongoDB and later restarts reuse them, so an online offer is never redeemed twice.
 
 **Online** - the stack then renews itself automatically against `https://license.walt.id`.
@@ -71,7 +115,8 @@ docker compose run --rm waltid-enterprise \
 LICENSE_SEED_CREDENTIAL_FILE=/license/offline-license.waltlicense docker compose up
 ```
 
-The API loads the matching private key from Mongo. Paths are **inside the container** (`/license/...`),
+The API loads the matching private key from Mongo. Paths are **inside the container**
+(`/license/...`),
 because compose mounts `./license` at `/license`.
 
 Do not point `LICENSE_INSTALLATION_KEY_FILE` at `installation-request.json`. That file is a public
@@ -79,11 +124,45 @@ request (`version` / `request` / `proof`) and startup fails with `KeyTypeMissing
 `LICENSE_INSTALLATION_KEY_FILE` is only for rare pre-provision of a serialized walt.id key:
 
 ```json
-{ "type": "jwk", "jwk": { "kty": "EC", "crv": "P-256", "d": "...", "x": "...", "y": "..." } }
+{
+  "type": "jwk",
+  "jwk": {
+    "kty": "EC",
+    "crv": "P-256",
+    "d": "...",
+    "x": "...",
+    "y": "..."
+  }
+}
 ```
 
-Offline licenses have **no grace period**: the stack stops serving the moment the credential expires.
-Request a renewal well before the expiry date shown in the `LICENSE EXPIRY WARNING` startup log line.
+Offline licenses have **no grace period**: the stack stops serving the moment the credential
+expires.
+Request a renewal well before the expiry date shown in the `LICENSE EXPIRY WARNING` startup log
+line.
+
+### Resetting license state
+
+The container CLI has two license subcommands: `license request` (above) and `license reset`, which
+discards what is stored in MongoDB.
+
+| Command                                              | Effect                                                        | Needs walt.id                                                                      |
+|------------------------------------------------------|---------------------------------------------------------------|------------------------------------------------------------------------------------|
+| `license reset --confirm`                            | Removes the stored credential. Your installation key is kept. | No. Ask for a fresh credential offer, start with it, and the existing key rebinds. |
+| `license reset --include-installation-key --confirm` | Also discards the installation key.                           | **Yes.** walt.id has to unbind the installation.                                   |
+
+```bash
+docker compose run --rm waltid-enterprise license reset --confirm
+```
+
+Prefer the first form. walt.id binds an installation key to a license permanently, so once you
+discard
+yours the license still points at it and activation keeps failing until walt.id unbinds it. Use
+`--include-installation-key` only when you are discarding the environment, or when the stored state
+can
+no longer be decrypted because `LICENSE_STATE_ENCRYPTION_KEY` was lost - in that case the
+installation
+key is encrypted with the same secret and cannot be kept anyway.
 
 ### DEV vs PROD licenses
 
@@ -100,21 +179,31 @@ Request a renewal well before the expiry date shown in the `LICENSE EXPIRY WARNI
   `LICENSE_STATE_ENCRYPTION_KEY` or leftover `license_state` than the `license request` run).
 - Every endpoint returns `503 Enterprise API is unavailable because the license is not active` - the
   process started but the license is not active. `GET /livez` still responds in this state.
+- `Heartbeat failed: ... 403 Forbidden: License '<id>' has no installation binding` - the license is
+  not bound to your installation. Either the installation key was discarded with
+  `license reset --include-installation-key` and walt.id has not unbound the license, or the license
+  is
+  bound to a different installation. Ask walt.id to unbind it, then start with a fresh credential
+  offer.
+  A license can only be bound to one installation at a time, so two stacks cannot share one license.
 - `GET /license/status` (superadmin auth) reports the restriction state, expiry countdown and any
   warning message.
-- Only set the relevant environment variables for the license activation mode you are using. All of them are provided as examples in the docker compose file.
+- Only set the relevant environment variables for the license activation mode you are using. All of
+  them are provided as examples in the docker compose file.
 
 ### Kubernetes / Helm
 
 The Helm chart reads license material from one pre-provisioned Secret, named by
-`license.secretName` in `helm/values.yaml`. It always needs `state-encryption-key`, plus either
-`seed-credential` (online) or `offline-license.waltlicense` with `license.offline: true` (offline).
-The fleet private key is created in Mongo by the `license.installationRequest` Job. walt.id does
-not issue `installation-key.json`.
+`license.secretName` in `helm/values.yaml`. It needs either `seed-credential` (online) or
+`offline-license.waltlicense` with `license.offline: true` (offline). `state-encryption-key` is
+optional: when the key is absent the API generates its own secret and shares it between replicas
+through MongoDB. The fleet private key is created in Mongo by the `license.installationRequest` Job.
+walt.id does not issue `installation-key.json`.
 
 ## 1. Docker-Compose: Run The Enterprise Stack
 
-Use docker-compose to bring up the Enterprise Stack API, UI and a MongoDB database (storage of the Enterprise Stack).
+Use docker-compose to bring up the Enterprise Stack API, UI and a MongoDB database (storage of the
+Enterprise Stack).
 
 You can update the version of the enterprise stack via the `.env` file.
 
@@ -127,27 +216,34 @@ git clone https://github.com/walt-id/waltid-enterprise-quickstart.git
 ```
 
 **Change Working Directory**
+
 ```bash
 cd waltid-enterprise-quickstart
 ```
 
 **Run The Stack**
+
 ```bash
 docker compose pull 
 docker compose up
 ```
+
 In case you want to only run the API, run:
+
 ```bash
 docker compose -f docker-compose-api.yml up
 ```
 
-Once the docker-compose is running, you can visit [enterprise.localhost/swagger](http://enterprise.localhost/swagger) to access the Enterprise Stack APIs.
+Once the docker-compose is running, you can
+visit [enterprise.localhost/swagger](http://enterprise.localhost/swagger) to access the Enterprise
+Stack APIs.
 
 The UI is running at [http://enterprise.localhost/login](http://enterprise.localhost/login)
 
 ### Using custom organisation names
 
-The caddy setup is configured only for the "waltid" organisation. If you want to use a custom organisation name, you can update the Caddyfile to add your own organisation domains.
+The caddy setup is configured only for the "waltid" organisation. If you want to use a custom
+organisation name, you can update the Caddyfile to add your own organisation domains.
 
 ```yaml
   caddy:
@@ -169,7 +265,6 @@ The caddy setup is configured only for the "waltid" organisation. If you want to
       - waltid-enterprise
       - waltid-enterprise-ui
 ```
-
 
 ## 2. Enterprise CLI
 
@@ -200,13 +295,13 @@ CREDENTIAL_TYPE=mdl npx tsx walt.ts --recreate
 
 ### Common Commands
 
-| Command | Description |
-|---------|-------------|
-| `npx tsx walt.ts` | Full setup + primary use case (default) |
-| `npx tsx walt.ts --recreate` | Recreate database and run full setup |
-| `npx tsx walt.ts --setup-all` | Run all setup commands |
-| `npx tsx walt.ts --run-all` | Run primary use case only |
-| `npx tsx walt.ts --help` | Show all available commands |
+| Command                                   | Description                                      |
+|--------------------------------------------|---------------------------------------------------|
+| `npx tsx walt.ts`                         | Full setup + primary use case (default)          |
+| `npx tsx walt.ts --recreate`              | Recreate database and run full setup             |
+| `npx tsx walt.ts --setup-all`             | Run all setup commands                           |
+| `npx tsx walt.ts --run-all`               | Run primary use case only                        |
+| `npx tsx walt.ts --help`                  | Show all available commands                      |
 | `CREDENTIAL_TYPE=mdl npx tsx walt.ts ...` | Run the mDL flow instead of the default PID flow |
 
 ### Configuration
@@ -217,15 +312,20 @@ For detailed documentation, see **[cli/README.md](cli/README.md)**.
 
 ## Next Steps
 
-Visit [our docs](https://docs.walt.id/enterprise-stack/home) to learn more about features and configurations of the enterprise stack.
+Visit [our docs](https://docs.walt.id/enterprise-stack/home) to learn more about features and
+configurations of the enterprise stack.
 
-Interested to see what releases are available? Checkout our [changelogs](https://docs.walt.id/enterprise-stack/release-notes/overview) to see the latest releases and pre-releases of the Enterprise Stack.
+Interested to see what releases are available? Checkout
+our [changelogs](https://docs.walt.id/enterprise-stack/release-notes/overview) to see the latest
+releases and pre-releases of the Enterprise Stack.
 
-Need Support? As an Enterprise customer you should also have a support contract with us. Please raise any issues via the , or reach out to the team over email if you need to be given access.
+Need Support? As an Enterprise customer you should also have a support contract with us. Please
+raise any issues via the , or reach out to the team over email if you need to be given access.
 
 ## Join the community
 
-* Connect and get the latest updates: [Discord](https://discord.gg/AW8AgqJthZ) | [Newsletter](https://walt.id/newsletter) | [YouTube](https://www.youtube.com/channel/UCXfOzrv3PIvmur_CmwwmdLA) | [LinkedIn](https://www.linkedin.com/company/walt-id/)
+* Connect and get the latest
+  updates: [Discord](https://discord.gg/AW8AgqJthZ) | [Newsletter](https://walt.id/newsletter) | [YouTube](https://www.youtube.com/channel/UCXfOzrv3PIvmur_CmwwmdLA) | [LinkedIn](https://www.linkedin.com/company/walt-id/)
 * Get help, request features and report bugs: [Support Portal](https://support.walt.id)
 * Find more indepth documentation on our [docs site](https://docs.walt.id/enterprise-stack/home)
 
