@@ -52,6 +52,15 @@ spec:
           httpGet:
             path: /livez
             port: http-api
+        # Held back until the license is active, so a pod added by the autoscaler is not sent traffic that
+        # the license gate would refuse with a 503. Readiness latches once the pod has served, so a license
+        # that lapses later leaves the recovery routes reachable instead of emptying the service.
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: http-api
+          periodSeconds: 2
+          failureThreshold: 3
         env:
         {{- if .Values.loggingConf }}
           - name: KLOGGING_CONFIG_PATH
