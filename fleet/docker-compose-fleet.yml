@@ -1,0 +1,56 @@
+# Local stand-in for the load-test cluster: several CPU-capped API containers sharing one database and one
+# license, behind a round-robin proxy - the shape that exposed faults a single container cannot.
+#
+# The remote load test runs 9 pods of 1 CPU on 3 c5a.2xlarge nodes, 24 vCPU in total, which is what this box
+# has, so the fleet is a fair facsimile of it apart from the database being local rather than DocumentDB.
+# It exists because a remote run costs about an hour, most of it provisioning, and a licensing fault that
+# only appears with several pods needs more iterations than that allows.
+#
+# Uses the database, license and configuration of the running quickstart, so start that first:
+#   docker compose -f docker-compose-api.yml up -d mongodb
+#   docker compose -f fleet/docker-compose-fleet.yml up -d
+#   <load test> --host waltid.enterprise.localhost --port 7600
+#
+# Reads the fleet's refusals with:
+#   docker compose -f fleet/docker-compose-fleet.yml logs | grep "Refusing requests"
+
+x-api: &api
+  image: waltid/waltid-enterprise-api:${FLEET_IMAGE_TAG:-fleet-20260910}
+  command: [ "--log-level=error" ]
+  environment:
+    LICENSE_SERVER_URL: ${LICENSE_SERVER_URL:-https://license-test.walt.id}
+  volumes:
+    - ../config:/config
+    - ../license:/license
+  # One CPU per container, as the chart requests per pod, so the fleet contends for cores the way the
+  # cluster does rather than each container helping itself to the whole box.
+  cpus: 1.0
+  extra_hosts:
+    - "waltid.enterprise.localhost:127.0.0.1"
+  restart: unless-stopped
+
+services:
+  api1:
+    <<: *api
+  api2:
+    <<: *api
+  api3:
+    <<: *api
+  api4:
+    <<: *api
+  api5:
+    <<: *api
+
+  fleet-proxy:
+    image: nginx:1-alpine
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    ports:
+      - "7600:7600"
+    depends_on: [ api1, api2, api3, api4, api5 ]
+    restart: unless-stopped
+
+networks:
+  default:
+    name: mongo-network
+    external: true
