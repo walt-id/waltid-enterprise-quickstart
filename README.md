@@ -279,22 +279,33 @@ cd waltid-enterprise-quickstart
 cd cli
 npm install
 
-# Run full setup + primary use case (mDL issuance & verification)
+# Run full setup + primary use case (PID issuance & verification, by default)
 npx tsx walt.ts --recreate
 
 # Subsequence calls don't need to recreate the DB:
 npx tsx walt.ts
 ```
 
+The primary use case issues and verifies a **PID** (mdoc, `eu.europa.ec.eudi.pid.1`) credential by
+default. Set `CREDENTIAL_TYPE=mdl` to run the **mDL** (`org.iso.18013.5.1.mDL`) flow instead:
+
+```bash
+CREDENTIAL_TYPE=mdl npx tsx walt.ts --recreate
+```
+
+The issuer is only configured for one credential type at a time, so pair `CREDENTIAL_TYPE` with
+`--recreate` when switching — see [cli/README.md](cli/README.md) for details.
+
 ### Common Commands
 
-| Command                       | Description                             |
-|-------------------------------|-----------------------------------------|
-| `npx tsx walt.ts`             | Full setup + primary use case (default) |
-| `npx tsx walt.ts --recreate`  | Recreate database and run full setup    |
-| `npx tsx walt.ts --setup-all` | Run all setup commands                  |
-| `npx tsx walt.ts --run-all`   | Run primary use case only               |
-| `npx tsx walt.ts --help`      | Show all available commands             |
+| Command                                   | Description                                      |
+|--------------------------------------------|--------------------------------------------------|
+| `npx tsx walt.ts`                         | Full setup + primary use case (default)          |
+| `npx tsx walt.ts --recreate`              | Recreate database and run full setup             |
+| `npx tsx walt.ts --setup-all`             | Run all setup commands                           |
+| `npx tsx walt.ts --run-all`               | Run primary use case only                        |
+| `npx tsx walt.ts --help`                  | Show all available commands                      |
+| `CREDENTIAL_TYPE=mdl npx tsx walt.ts ...` | Run the mDL flow instead of the default PID flow |
 
 ### Configuration
 
@@ -312,7 +323,8 @@ our [changelogs](https://docs.walt.id/enterprise-stack/release-notes/overview) t
 releases and pre-releases of the Enterprise Stack.
 
 Need Support? As an Enterprise customer you should also have a support contract with us. Please
-raise any issues via the , or reach out to the team over email if you need to be given access.
+raise any issues via the [Support Portal](https://support.walt.id), or reach out to the team over
+email if you need to be given access.
 
 ## Join the community
 

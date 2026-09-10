@@ -10,7 +10,7 @@
  */
 
 import { CommandContext } from '../../context.js';
-import { RESOURCES, KEY_IDS, CERT_IDS, MDL_DOC_TYPE } from '../../config.js';
+import { RESOURCES, KEY_IDS, CERT_IDS, CREDENTIAL_TYPES, getCredentialType } from '../../config.js';
 
 /** Create VICAL service */
 export async function setupCreateVicalService(ctx: CommandContext): Promise<void> {
@@ -118,6 +118,7 @@ export async function setupCreateIssuer2(ctx: CommandContext): Promise<void> {
   const { created } = await ctx.tolerantCreate(
     'Issuer2 service',
     async () => {
+      const credType = CREDENTIAL_TYPES[getCredentialType()];
 
       let request: any = {
         type: 'issuer2',
@@ -125,10 +126,10 @@ export async function setupCreateIssuer2(ctx: CommandContext): Promise<void> {
         tokenKeyId: `${ctx.tenantPath}.${RESOURCES.kms}.${KEY_IDS.issuerSigningKey}`,
         kms: `${ctx.tenantPath}.${RESOURCES.kms}`,
         credentialConfigurations: {
-          [MDL_DOC_TYPE]: {
+          [credType.docType]: {
             format: 'mso_mdoc',
-            doctype: MDL_DOC_TYPE,
-            scope: MDL_DOC_TYPE,
+            doctype: credType.docType,
+            scope: credType.docType,
             credential_signing_alg_values_supported: [-7, -9],
             cryptographic_binding_methods_supported: ['cose_key'],
             proof_types_supported: {
@@ -194,8 +195,8 @@ export async function setupCreateIssuerProfile(ctx: CommandContext): Promise<voi
   const { created } = await ctx.tolerantCreate(
     'Issuer profile',
     async () => {
-      const ISO_NAMESPACE = 'org.iso.18013.5.1';
-      
+      const credType = CREDENTIAL_TYPES[getCredentialType()];
+
       // Ensure we have certificates
       if (!ctx.ctx.docSignerPem) {
         try {
@@ -236,21 +237,11 @@ export async function setupCreateIssuerProfile(ctx: CommandContext): Promise<voi
 
       const request = {
         name: RESOURCES.issuerProfile,
-        credentialConfigurationId: MDL_DOC_TYPE,
+        credentialConfigurationId: credType.docType,
         issuerKeyId: `${ctx.tenantPath}.${RESOURCES.kms}.${KEY_IDS.issuerSigningKey}`,
         x5Chain,
         credentialData: {
-          [ISO_NAMESPACE]: {
-            family_name: 'Doe',
-            given_name: 'John',
-            birth_date: '1990-01-01',
-            issue_date: '2024-01-01',
-            expiry_date: '2029-01-01',
-            issuing_country: 'US',
-            issuing_authority: 'Test DMV',
-            document_number: 'DL123456789',
-            un_distinguishing_sign: 'USA',
-          },
+          [credType.namespace]: credType.credentialData,
         },
       };
       ctx.saveJson('create-issuer-profile-request.json', request, step);

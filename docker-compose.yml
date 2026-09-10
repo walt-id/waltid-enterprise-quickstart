@@ -33,7 +33,9 @@ services:
       - mongodb-log:/var/log/mongodb/
     command: |
       bash -c '
-      mongod --replSet rs0 --bind_ip_all --port 27017 & MONGO_PID=$$!
+      rm -f /tmp/mongod-ready
+
+      mongod --replSet rs0 --bind_ip_all --port 27017 --logpath /var/log/mongodb/mongod.log --logappend & MONGO_PID=$$!
       until mongosh --port 27017 --eval "db.runCommand({ ping: 1 })" >/dev/null 2>&1; do
         sleep 2
       done
@@ -53,7 +55,12 @@ services:
       kill $$MONGO_PID
       wait $$MONGO_PID
 
-      exec mongod --replSet rs0 --bind_ip_all --port 27017 --keyFile /etc/mongodb/pki/keyfile
+      # Only after the temporary, unauthenticated bootstrap instance is gone do we mark the
+      # container ready. The healthcheck below waits for this file so depends_on: service_healthy
+      # cannot pass while the bootstrap mongod (which also answers pings) is still what is running.
+      touch /tmp/mongod-ready
+
+      exec mongod --replSet rs0 --bind_ip_all --port 27017 --keyFile /etc/mongodb/pki/keyfile --logpath /var/log/mongodb/mongod.log --logappend
       '
     env_file:
       - .env
@@ -64,7 +71,7 @@ services:
     networks:
       - mongodb_network
     healthcheck:
-      test: ["CMD", "mongosh", "--port", "27017", "--eval", "db.adminCommand('ping')"]
+      test: ["CMD-SHELL", "test -f /tmp/mongod-ready && mongosh --port 27017 --eval \"db.adminCommand('ping')\""]
       interval: 30s
       timeout: 10s
       retries: 5
