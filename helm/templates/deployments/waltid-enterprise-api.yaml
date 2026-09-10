@@ -61,6 +61,13 @@ spec:
             port: http-api
           periodSeconds: 2
           failureThreshold: 3
+        # Kubernetes removes a terminating pod from the service and runs this at the same time, so sleeping
+        # here lets the ingress stop routing before the process begins shutting down. Without it the pod is
+        # still sent requests while it tears down, and those requests fail.
+        lifecycle:
+          preStop:
+            exec:
+              command: [ "sleep", "{{ .Values.api.preStopDrainSeconds | default 5 }}" ]
         env:
         {{- if .Values.loggingConf }}
           - name: KLOGGING_CONFIG_PATH
