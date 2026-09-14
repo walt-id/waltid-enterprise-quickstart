@@ -141,10 +141,9 @@ export async function setupCreateDocumentSignerCertificate(ctx: CommandContext):
       commonName: 'Walt CLI Document Signer',
       crlDistributionPointUri: 'https://walt-cli.example/crl',
       // ISO 18013-5 Annex B requires a document signer to carry an Issuer Alternative Name, and the
-      // iso-document-signer profile enforces it, so omitting this fails certificate creation outright.
-      issuerAlternativeNameConf: {
-        uri: 'https://walt-cli.example',
-      },
+      // iso-document-signer profile enforces it. The document signer request takes it as a flat field,
+      // unlike the IACA request above, and the value identifies the issuing IACA - so it is that URI.
+      issuerAltNameUri: 'https://walt-cli.example/iaca',
     },
     dsKeyDescriptor: {
       type: 'kms-hosted-key-descriptor',
