@@ -33,6 +33,9 @@ services:
       - mongodb-log:/var/log/mongodb/
     command: |
       bash -c '
+      # Cleared first, not just written at the end: a restarted container keeps its filesystem, so a
+      # sentinel left from the previous run would mark the unauthenticated phase below as ready.
+      rm -f /tmp/mongodb-bootstrapped
       mongod --replSet rs0 --bind_ip_all --port 27017 & MONGO_PID=$$!
       until mongosh --port 27017 --eval "db.runCommand({ ping: 1 })" >/dev/null 2>&1; do
         sleep 2
@@ -53,6 +56,7 @@ services:
       kill $$MONGO_PID
       wait $$MONGO_PID
 
+      touch /tmp/mongodb-bootstrapped
       exec mongod --replSet rs0 --bind_ip_all --port 27017 --keyFile /etc/mongodb/pki/keyfile
       '
     env_file:
@@ -64,10 +68,20 @@ services:
     networks:
       - mongodb_network
     healthcheck:
-      test: ["CMD", "mongosh", "--port", "27017", "--eval", "db.adminCommand('ping')"]
-      interval: 30s
+      # `ping` alone is not enough. It answers during the unauthenticated bootstrap phase above, so
+      # dependents were let in before the final mongod started - and a client that connects then caches a
+      # cluster time signed with key id 0, which the keyFile-enabled server rejects afterwards with
+      # "KeyNotFound: No keys found for HMAC that is valid for time ... with id: 0". The sentinel is what
+      # distinguishes the phases; ping still confirms the final mongod is actually answering.
+      test:
+        - "CMD-SHELL"
+        - "test -f /tmp/mongodb-bootstrapped && mongosh --port 27017 --quiet --eval 'db.adminCommand({ping: 1}).ok' | grep -q 1"
+      interval: 5s
       timeout: 10s
-      retries: 5
+      retries: 12
+      # Bootstrap takes tens of seconds and legitimately reports unhealthy throughout, which would
+      # otherwise burn the retry budget before the first real attempt.
+      start_period: 90s
     restart: unless-stopped
 
   mongo-express:
@@ -107,6 +121,9 @@ services:
 
   waltid-enterprise:
     image: waltid/waltid-enterprise-api:${ENTERPRISE_API_DOCKER_IMAGE_TAG}
+    # Every other service in this file restarts; this one did not, so any failure during startup - a
+    # database still coming up being the usual one - left the stack with no API and no indication why.
+    restart: unless-stopped
     # Pass-through form: a variable that is not defined anywhere is omitted from the container, so the
     # optional HOCON substitutions in config/license.conf leave the configured values untouched.
     # LICENSE_STATE_ENCRYPTION_KEY is the exception, because .env declares it empty, so it arrives as
