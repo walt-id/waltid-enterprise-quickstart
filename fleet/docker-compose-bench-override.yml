@@ -1,0 +1,17 @@
+# Benchmarking overlay: point the wallet leg straight at the API, bypassing Caddy.
+#
+# The load test drives both the verifier and the wallet side from inside the stack, and the wallet leg
+# calls the verifier by its organisation hostname. Left alone that goes through Caddy, which costs about
+# 20% of measured throughput and is not what is being measured. Mapping the hostname to the container's
+# own loopback keeps the organisation subdomain in the Host header - the tenant is resolved from it -
+# while skipping the proxy.
+#
+# Deliberately separate from docker-compose-api.yml: the default stack must keep resolving that hostname
+# to Caddy, which is what a real deployment does and what the aliases in that file are careful to arrange.
+#
+# Usage:
+#   docker compose -f docker-compose-api.yml -f fleet/docker-compose-bench-override.yml up -d
+services:
+  waltid-enterprise:
+    extra_hosts:
+      - "waltid.enterprise.localhost:127.0.0.1"
