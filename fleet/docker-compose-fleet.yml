@@ -25,9 +25,10 @@ x-api: &api
   # One CPU per container, as the chart requests per pod, so the fleet contends for cores the way the
   # cluster does rather than each container helping itself to the whole box.
   cpus: 1.0
+  # No restart policy on purpose. A fleet left stopped between experiments would otherwise be resurrected by
+  # the next Docker daemon start - five idle JVMs, one CPU each, on someone's machine.
   extra_hosts:
     - "waltid.enterprise.localhost:127.0.0.1"
-  restart: unless-stopped
 
 services:
   api1:
@@ -48,7 +49,6 @@ services:
     ports:
       - "7600:7600"
     depends_on: [ api1, api2, api3, api4, api5 ]
-    restart: unless-stopped
 
 networks:
   default:
