@@ -67,6 +67,27 @@ export const CERT_IDS = {
   vicalSignerCert: 'vical-signer-cert',
 } as const;
 
+/** X.509 certificate profiles accepted by POST/PUT `/x509-service-api/certificates` */
+export const CERT_PROFILES = {
+  isoIacaRoot: 'iso-iaca-root',
+  isoDocumentSigner: 'iso-document-signer',
+} as const;
+
+/**
+ * Validity windows for generated certificates.
+ * IACA max is 20 years; document-signer max is 457 days (ISO 18013-5).
+ */
+export const CERT_VALIDITY_DAYS = {
+  iaca: 3650,
+  documentSigner: 365,
+} as const;
+
+/** Issuer Alternative Name URI used by the default CLI IACA and document signer */
+export const CLI_IACA_IAN_URI = 'https://walt-cli.example/iaca';
+
+/** CRL distribution point used by the default CLI document signer */
+export const CLI_DS_CRL_URI = 'https://walt-cli.example/crl';
+
 /** mDL document type */
 export const MDL_DOC_TYPE = 'org.iso.18013.5.1.mDL';
 
