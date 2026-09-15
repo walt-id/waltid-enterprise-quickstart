@@ -112,6 +112,7 @@ services:
     # LICENSE_STATE_ENCRYPTION_KEY is the exception, because .env declares it empty, so it arrives as
     # an empty string. The API treats a blank value as unset and generates its own secret.
     environment:
+      - JAVA_TOOL_OPTIONS
       - LICENSE_STATE_ENCRYPTION_KEY
       - LICENSE_SEED_CREDENTIAL
       - LICENSE_SEED_CREDENTIAL_FILE
@@ -133,7 +134,7 @@ services:
     depends_on:
       mongodb:
         condition: service_healthy
-    command: "--log-level=trace"
+    command: "--log-level=error"
 
 volumes:
   mongo-keyfile-vol:

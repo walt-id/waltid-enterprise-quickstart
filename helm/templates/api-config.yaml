@@ -16,6 +16,9 @@ data:
   {{ if .Values.rateLimitConf }}
   rate-limit.conf: {{ .Values.rateLimitConf | toYaml | indent 1 }}
   {{ end }}
+  {{ if .Values.serviceResolutionConf }}
+  service-resolution.conf: {{ .Values.serviceResolutionConf | toYaml | indent 1 }}
+  {{ end }}
   {{ if .Values.loggingConf }}
   klogging.json: {{ .Values.loggingConf | toYaml | indent 1 }}
   {{ end }}
