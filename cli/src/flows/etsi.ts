@@ -1,20 +1,31 @@
 /**
  * ETSI Trust Lists Flow
- * 
+ *
  * Demonstrates trust list verification using the Enterprise Trust Registry Service.
  * This flow assumes the primary setup has been run (tenant, wallet, credentials exist).
- * 
+ *
+ * Unsigned Verifier2 services omit `clientId` so sessions bind as `redirect_uri`.
+ * This flow additionally uses a signed Request Object and encrypted VP response:
+ * Wallet2 authenticates the JAR against relying-party identities from its linked
+ * Trust Registry.
+ *
  * Steps:
  * 1. Clear existing credentials from wallet
  * 2. Issue a fresh credential for this flow
- * 3. Create verification session with ETSI trust list policy
- * 4. Present credential and verify against trust registry
+ * 3. Create a signed, encrypted verification session with ETSI trust list policy
+ * 4. Present credential using the compact JAR URL and verify against trust registry
  */
 
 import { mkdirSync } from 'fs';
 import { CommandContext } from '../context.js';
-import { RESOURCES, MDL_DOC_TYPE, defaultWalletKeyReference } from '../config.js';
-import { setupLogin } from '../commands/setup/index.js';
+import { CERT_IDS, KEY_IDS, RESOURCES, MDL_DOC_TYPE, defaultWalletKeyReference } from '../config.js';
+import {
+  getStoredCertificatePem,
+  kmsKeyRef,
+  setupLogin,
+  x509HashClientId,
+  certificatePemToDerBase64,
+} from '../commands/setup/index.js';
 import {
   runCreateCredentialOffer,
   runWalletReceiveCredential,
@@ -23,13 +34,22 @@ import {
   clearWalletCredentials,
 } from '../commands/run.js';
 
-/** Create verification session with ETSI Trust List policy */
+/** Create a signed + encrypted verification session with ETSI Trust List policy */
 async function createEtsiVerificationSession(ctx: CommandContext): Promise<void> {
   const step = ctx.nextStep();
-  ctx.log('Create verification session with ETSI Trust List policy', 'FLOW');
-  
+  ctx.log('Create signed verification session with ETSI Trust List policy', 'FLOW');
+
+  const leafPem = await getStoredCertificatePem(ctx, CERT_IDS.verifierRequestSigningCert);
+  if (!leafPem) {
+    throw new Error(
+      'Verifier request-signing certificate not found. Run --setup-etsi-trust-registry first.'
+    );
+  }
+
   const vicalUrl = `${ctx.orgBaseUrl}/v1/${ctx.tenantPath}.${RESOURCES.vical}/vical-service-api/latest`;
-  
+  const clientId = x509HashClientId(leafPem);
+  const keyReference = kmsKeyRef(ctx, KEY_IDS.verifierRequestSigningKey);
+
   const vcPolicies = [
     { policy: 'signature' },
     {
@@ -44,9 +64,10 @@ async function createEtsiVerificationSession(ctx: CommandContext): Promise<void>
       requireAuthenticated: false,
     },
   ];
-  
+
   const request = {
     flow_type: 'cross_device',
+    keyReference,
     core_flow: {
       dcql_query: {
         credentials: [
@@ -67,30 +88,36 @@ async function createEtsiVerificationSession(ctx: CommandContext): Promise<void>
       policies: {
         vc_policies: vcPolicies,
       },
+      signed_request: true,
+      encrypted_response: true,
+      clientId,
+      x5c: [certificatePemToDerBase64(leafPem)],
     },
   };
   ctx.saveJson('create-etsi-verification-session-request.json', request, step);
-  
+
   const response = await ctx.orgClient.post(
     `/v2/${ctx.tenantPath}.${RESOURCES.verifier2}/verifier-service-api/verification-session/create`,
     request
   );
   ctx.saveJson('create-etsi-verification-session-response.json', response.data, step);
-  
+
   ctx.ctx.sessionId = response.data.sessionId;
-  ctx.ctx.requestUrl = response.data.bootstrapAuthorizationRequestUrl;
-  
+  ctx.ctx.requestUrl = response.data.fullAuthorizationRequestUrl;
+
   if (!ctx.ctx.sessionId || !ctx.ctx.requestUrl) {
-    throw new Error('Could not extract sessionId or bootstrapAuthorizationRequestUrl');
+    throw new Error('Could not extract sessionId or fullAuthorizationRequestUrl');
   }
-  
+
   console.log(`   [OK] Verification session created (ID: ${ctx.ctx.sessionId})`);
+  console.log(`        Client ID: ${clientId}`);
   console.log(`        Policies: signature, vical, etsi-trust-list`);
+  console.log(`        Request: signed JAR, encrypted response`);
 }
 
 /**
  * Run the ETSI Trust Lists flow.
- * 
+ *
  * Prerequisites:
  * - Primary setup must be completed
  * - ETSI trust registry must be set up (--setup-etsi-trust-registry)
@@ -123,11 +150,11 @@ export async function flowEtsiTrustLists(ctx: CommandContext): Promise<void> {
     await runCreateCredentialOffer(ctx, false);
     await runWalletReceiveCredential(ctx);
 
-    // Step 3: Create verification session with etsi-trust-list policy
-    console.log('\n--- Step 3: Create Verification Session with ETSI Trust List Policy ---');
+    // Step 3: Create signed verification session with etsi-trust-list policy
+    console.log('\n--- Step 3: Create Signed Verification Session with ETSI Trust List Policy ---');
     await createEtsiVerificationSession(ctx);
 
-    // Step 4: Wallet presents credential
+    // Step 4: Wallet presents credential against the compact JAR
     console.log('\n--- Step 4: Present Credential ---');
     await runWalletPresent(ctx);
 

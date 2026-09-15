@@ -134,7 +134,6 @@ export async function setupCreateVerifier2(ctx: CommandContext): Promise<void> {
       const request = {
         type: 'verifier2',
         baseUrl: ctx.orgBaseUrl,
-        clientId: 'verifier2-client',
       };
       ctx.saveJson('create-verifier2-request.json', request, step);
 

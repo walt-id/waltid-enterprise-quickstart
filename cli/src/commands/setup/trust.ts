@@ -11,7 +11,17 @@ import { readFileSync, existsSync } from 'fs';
 import { basename } from 'path';
 import { CommandContext } from '../../context.js';
 import { RESOURCES, CERT_IDS } from '../../config.js';
-import { buildCertificateAnchorLote, MDL_ISSUER_SERVICE_TYPE } from '../../trust-registry/index.js';
+import {
+  getStoredCertificatePem,
+  setupCreateVerifierRequestSigningCertificate,
+  setupGenerateVerifierRequestSigningKey,
+} from './keys.js';
+import {
+  buildCertificateAnchorLote,
+  LOTE_TYPE_EU_WRP_RC_PROVIDERS,
+  MDL_ISSUER_SERVICE_TYPE,
+  RELYING_PARTY_SERVICE_TYPE,
+} from '../../trust-registry/index.js';
 
 /** Create trust registry service */
 export async function setupCreateTrustRegistry(ctx: CommandContext): Promise<void> {
@@ -90,6 +100,29 @@ export async function linkVerifier2ToTrustRegistry(ctx: CommandContext): Promise
   } catch (error: any) {
     if (error.status === 409 || error.message?.includes('already')) {
       console.log(`   [SKIP] Trust registry already linked to verifier2`);
+    } else {
+      throw error;
+    }
+  }
+}
+
+/** Link Wallet2 to Trust Registry so signed Request Objects can use relying-party identities. */
+export async function linkWallet2ToTrustRegistry(ctx: CommandContext): Promise<void> {
+  const step = ctx.nextStep();
+  ctx.log('Link Wallet2 to Trust Registry (via service dependency)', 'FLOW');
+
+  const trustRegistryTarget = `${ctx.tenantPath}.${RESOURCES.trustRegistry}`;
+  const walletTarget = `${ctx.tenantPath}.${RESOURCES.wallet}`;
+
+  try {
+    await ctx.addServiceDependency(
+      `/v2/${walletTarget}/wallet-service-api/dependencies/add`,
+      trustRegistryTarget
+    );
+    console.log(`   [OK] Trust registry linked to wallet: ${trustRegistryTarget}`);
+  } catch (error: any) {
+    if (error.status === 409 || error.message?.includes('already')) {
+      console.log(`   [SKIP] Trust registry already linked to wallet`);
     } else {
       throw error;
     }
@@ -236,6 +269,73 @@ export async function loadIacaIntoTrustRegistry(ctx: CommandContext): Promise<vo
   }
 }
 
+/** Load the IACA as a relying-party LoTE so Wallet2 can PKIX-verify signed Request Objects. */
+export async function loadRelyingPartyIntoTrustRegistry(ctx: CommandContext): Promise<void> {
+  const step = ctx.nextStep();
+  ctx.log('Load relying-party identities into trust registry', 'FLOW');
+
+  let iacaPem = ctx.ctx.iacaPem;
+  if (!iacaPem) {
+    iacaPem = (await getStoredCertificatePem(ctx, CERT_IDS.vicalIacaCert)) || '';
+    ctx.ctx.iacaPem = iacaPem;
+  }
+  if (!iacaPem) {
+    throw new Error('IACA certificate PEM is empty');
+  }
+
+  const sourceId = 'journey-rp-local';
+  const loteSource = buildCertificateAnchorLote(
+    sourceId,
+    'US',
+    [{
+      id: 'journey-test-rp',
+      legalName: 'Walt CLI Journey Test Relying Party',
+      country: 'US',
+      serviceName: 'OpenID4VP relying party',
+      serviceType: RELYING_PARTY_SERVICE_TYPE,
+      certificatePem: iacaPem,
+    }],
+    LOTE_TYPE_EU_WRP_RC_PROVIDERS
+  );
+
+  ctx.saveJson('journey-rp-lote-source.json', loteSource, step);
+
+  const request = {
+    sourceId,
+    content: JSON.stringify(loteSource),
+    sourceUrl: 'local://journey-rp',
+    acceptancePolicy: 'ALLOW_UNSIGNED',
+  };
+  ctx.saveJson('load-journey-rp-request.json', request, step);
+
+  try {
+    const response = await ctx.orgClient.post(
+      `/v1/${ctx.tenantPath}.${RESOURCES.trustRegistry}/trust-registry-api/sources/load`,
+      request
+    );
+    ctx.saveJson('load-journey-rp-response.json', response.data, step);
+
+    if (!response.data.success) {
+      throw new Error(`Failed to load relying-party trust source: ${response.data.error}`);
+    }
+
+    console.log(`   [OK] Journey relying-party trust source loaded: ${sourceId}`);
+    console.log(`        Entities: ${response.data.entitiesLoaded || 0}`);
+    console.log(`        Services: ${response.data.servicesLoaded || 0}`);
+    console.log(`        Identities: ${response.data.identitiesLoaded || 0}`);
+  } catch (error: any) {
+    const errMsg = error.message || error.response?.data?.message || '';
+    if (error.status === 409 ||
+        errMsg.includes('Duplicate target') ||
+        errMsg.includes('already exists') ||
+        errMsg.includes('Overwriting targets')) {
+      console.log(`   [SKIP] Journey relying-party trust source already exists: ${sourceId}`);
+    } else {
+      throw new Error(`Failed to load relying-party trust source: ${errMsg}`);
+    }
+  }
+}
+
 /** List all trust sources */
 export async function listTrustSources(ctx: CommandContext): Promise<void> {
   const step = ctx.nextStep();
@@ -293,7 +393,17 @@ export async function setupEtsiTrustRegistry(ctx: CommandContext): Promise<void>
   console.log('\n--- Step 4: Load Local IACA Certificate ---');
   await loadIacaIntoTrustRegistry(ctx);
 
-  console.log('\n--- Step 5: List Trust Sources ---');
+  console.log('\n--- Step 5: Create Verifier Request-Signing Key and Certificate ---');
+  await setupGenerateVerifierRequestSigningKey(ctx);
+  await setupCreateVerifierRequestSigningCertificate(ctx);
+
+  console.log('\n--- Step 6: Load Relying-Party Identities ---');
+  await loadRelyingPartyIntoTrustRegistry(ctx);
+
+  console.log('\n--- Step 7: Link Wallet2 to Trust Registry ---');
+  await linkWallet2ToTrustRegistry(ctx);
+
+  console.log('\n--- Step 8: List Trust Sources ---');
   await listTrustSources(ctx);
 
   console.log('\n[SETUP] ETSI Trust Registry setup complete');

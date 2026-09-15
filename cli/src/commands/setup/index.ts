@@ -20,6 +20,12 @@ export {
   setupCreateIacaCertificate,
   setupCreateDocumentSignerCertificate,
   setupStoreVicalSignerCertificate,
+  setupGenerateVerifierRequestSigningKey,
+  setupCreateVerifierRequestSigningCertificate,
+  getStoredCertificatePem,
+  kmsKeyRef,
+  x509HashClientId,
+  certificatePemToDerBase64,
 } from './keys.js';
 
 // Issuer
@@ -45,8 +51,10 @@ export {
   setupCreateTrustRegistry,
   setupImportTrustList,
   linkVerifier2ToTrustRegistry,
+  linkWallet2ToTrustRegistry,
   importPublicTrustLists,
   loadIacaIntoTrustRegistry,
+  loadRelyingPartyIntoTrustRegistry,
   listTrustSources,
   setupEtsiTrustRegistry,
 } from './trust.js';
