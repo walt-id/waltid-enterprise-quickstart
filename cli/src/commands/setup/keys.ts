@@ -3,10 +3,11 @@
  *
  * Handles:
  * - Key imports (IACA, issuer, attester, VICAL signing)
- * - Certificate creation (IACA, document signer) via the unified X.509 service
+ * - Certificate creation (IACA, document signer, verifier request-signing) via the unified X.509 service
  * - Certificate storage (VICAL signer)
  */
 
+import { createHash } from 'crypto';
 import { CommandContext } from '../../context.js';
 import {
   RESOURCES,
@@ -16,6 +17,7 @@ import {
   CERT_VALIDITY_DAYS,
   CLI_IACA_IAN_URI,
   CLI_DS_CRL_URI,
+  CLIENT_AUTH_EKU_OID,
   MDL_DOC_TYPE,
 } from '../../config.js';
 
@@ -38,6 +40,9 @@ export interface UpsertGeneratedCertificateRequest {
   subjectDn?: string;
   validFrom: string;
   validTo: string;
+  keyUsage?: string[];
+  extendedKeyUsageOids?: string[];
+  basicConstraintsCa?: boolean;
   issuerAlternativeNames?: X509GeneralName[];
   crlDistributionPointUri?: string;
   metadata?: Record<string, unknown>;
@@ -77,6 +82,17 @@ export function kmsKeyRef(ctx: CommandContext, keyId: string): string {
 
 export function x509StoreCertificateRef(ctx: CommandContext, certId: string): string {
   return `${ctx.tenantPath}.${RESOURCES.x509Store}.${certId}`;
+}
+
+/** Strip PEM armor so the remaining value is DER encoded as standard Base64. */
+export function certificatePemToDerBase64(pem: string): string {
+  return pem.replace(/-----BEGIN CERTIFICATE-----|-----END CERTIFICATE-----|\s/g, '');
+}
+
+/** OpenID4VP `x509_hash` client_id for a leaf certificate (SHA-256 of DER, base64url). */
+export function x509HashClientId(pem: string): string {
+  const der = Buffer.from(certificatePemToDerBase64(pem), 'base64');
+  return `x509_hash:${createHash('sha256').update(der).digest('base64url')}`;
 }
 
 function x509StoreCertificatePath(ctx: CommandContext, certId: string): string {
@@ -271,4 +287,70 @@ export async function setupStoreVicalSignerCertificate(ctx: CommandContext): Pro
   if (created) {
     console.log(`   [OK] VICAL signer certificate stored`);
   }
+}
+
+/** Generate the secp256r1 key used to sign OpenID4VP Request Objects. */
+export async function setupGenerateVerifierRequestSigningKey(ctx: CommandContext): Promise<void> {
+  const step = ctx.nextStep();
+  ctx.log('Generate verifier request-signing key', 'SETUP');
+
+  const { created } = await ctx.tolerantCreate(
+    'Verifier request-signing key',
+    async () => {
+      const request = { backend: 'jwk', keyType: 'secp256r1' };
+      ctx.saveJson('generate-verifier-request-signing-key-request.json', request, step);
+      const response = await ctx.orgClient.post(
+        `/v1/${ctx.tenantPath}.${RESOURCES.kms}.${KEY_IDS.verifierRequestSigningKey}/kms-service-api/keys/generate`,
+        request
+      );
+      ctx.saveJson('generate-verifier-request-signing-key-response.json', response.data, step);
+      return response;
+    }
+  );
+
+  if (created) {
+    console.log('   [OK] Verifier request-signing key generated');
+  }
+}
+
+/**
+ * Create an IACA-issued leaf with digitalSignature + clientAuth so Wallet2 can
+ * authenticate signed Request Objects as `x509_hash`.
+ */
+export async function setupCreateVerifierRequestSigningCertificate(ctx: CommandContext): Promise<string> {
+  const step = ctx.nextStep();
+  ctx.log('Create verifier request-signing certificate', 'SETUP');
+
+  const existingPem = await getStoredCertificatePem(ctx, CERT_IDS.verifierRequestSigningCert);
+  if (existingPem) {
+    console.log('   [SKIP] Verifier request-signing certificate already exists');
+    return existingPem;
+  }
+
+  if (!ctx.ctx.iacaPem) {
+    ctx.ctx.iacaPem = (await getStoredCertificatePem(ctx, CERT_IDS.vicalIacaCert)) || '';
+    if (!ctx.ctx.iacaPem) {
+      throw new Error('IACA certificate not found. Run setup-create-iaca-certificate first.');
+    }
+  }
+
+  const pem = await createGeneratedCertificate(
+    ctx,
+    CERT_IDS.verifierRequestSigningCert,
+    {
+      issuerCertificateRef: x509StoreCertificateRef(ctx, CERT_IDS.vicalIacaCert),
+      issuerKeyRef: kmsKeyRef(ctx, KEY_IDS.vicalIacaKey),
+      subjectKeyRef: kmsKeyRef(ctx, KEY_IDS.verifierRequestSigningKey),
+      subjectDn: isoSubjectDn({ country: 'US', commonName: 'Walt CLI Verifier Request Signer' }),
+      ...certificateValidityWindow(CERT_VALIDITY_DAYS.verifierRequestSigning),
+      basicConstraintsCa: false,
+      keyUsage: ['digitalSignature'],
+      extendedKeyUsageOids: [CLIENT_AUTH_EKU_OID],
+    },
+    'verifier-request-signing-cert',
+    step
+  );
+
+  console.log('   [OK] Verifier request-signing certificate created');
+  return pem;
 }

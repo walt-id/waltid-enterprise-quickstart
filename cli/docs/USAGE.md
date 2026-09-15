@@ -82,7 +82,7 @@ These commands create resources in the enterprise stack. Run them in order, or u
 | Command | Description |
 |---------|-------------|
 | `--setup-create-trust-registry` | Create trust registry service |
-| `--setup-etsi-trust-registry` | Complete ETSI trust registry setup (create, link, import lists) |
+| `--setup-etsi-trust-registry` | Complete ETSI trust registry setup (create, link Verifier2 + Wallet2, import lists, RP identities, request-signing cert) |
 | `--setup-import-trust-list <file>` | Import trust list from file (TSL XML, LoTE JSON) |
 | `--clear-wallet-credentials` | Clear all credentials from wallet (useful between flows) |
 
@@ -123,16 +123,18 @@ These commands manage credential status and revocation.
 
 #### ETSI Trust Lists Flow (`--flow-etsi-trust-lists`)
 
-Demonstrates trust list verification using the Enterprise Trust Registry Service. **This flow is self-contained** - it clears existing credentials and issues its own credential.
+Demonstrates trust list verification using the Enterprise Trust Registry Service. **This flow is self-contained** - it clears existing credentials and issues its own credential. Presentation uses a signed OpenID4VP Request Object and an encrypted response; Wallet2 authenticates the JAR against relying-party identities from its linked Trust Registry.
+
+Unsigned Verifier2 services omit `clientId` so ordinary sessions bind as `redirect_uri:<response_uri>`. This flow sets an explicit `x509_hash` client id on the signed session.
 
 **Prerequisites:**
-Run `--setup-etsi-trust-registry` once to set up the trust registry, import trust lists, and configure the verifier.
+Run `--setup-etsi-trust-registry` once to set up the trust registry, import trust lists, issue the verifier request-signing certificate, and link Wallet2.
 
 **Flow Steps:**
 1. Clear existing credentials from wallet
 2. **Issue a fresh credential** for this flow
-3. Create verification session with policies: `signature`, `vical`, `etsi-trust-list`
-4. Present credential
+3. Create a signed, encrypted verification session with policies: `signature`, `vical`, `etsi-trust-list`
+4. Present credential using `fullAuthorizationRequestUrl` (compact JAR)
 5. Verify result
 
 **Trust Registry Setup (one-time):**
@@ -140,8 +142,10 @@ The `--setup-etsi-trust-registry` command performs:
 - Create trust registry service
 - Link Verifier2 to Trust Registry
 - Import the Austrian and Italian national TSLs and the EU LoTL
-- Import public trust lists (EWC Pilot, Austrian TSL)
-- Load local IACA certificate into trust registry
+- Load local IACA certificate into trust registry (PID providers list)
+- Generate a verifier request-signing key and IACA-issued leaf with `clientAuth`
+- Load the IACA as a relying-party LoTE (`EUWRPRCProvidersList`) for JAR PKIX
+- Link Wallet2 to Trust Registry
 - List trust sources with authenticity states
 
 **Authenticity States:**

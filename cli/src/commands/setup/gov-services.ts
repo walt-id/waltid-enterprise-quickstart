@@ -756,7 +756,6 @@ async function createUntrustedDepartment(
       const verifierRequest = {
         type: 'verifier2',
         baseUrl: gov.serviceBaseUrl,
-        clientId: 'untrusted-verifier',
         clientMetadata: buildVerifierClientMetadata(
           ['GOV_UNTRUSTED_VERIFIER', 'GOV_VERIFIER'],
           'Untrusted Department Verifier',
@@ -789,7 +788,6 @@ async function createGovVerifier(
       const request = {
         type: 'verifier2',
         baseUrl: gov.serviceBaseUrl,
-        clientId: 'gov-verifier',
         clientMetadata: buildVerifierClientMetadata(
           ['GOV_CENTRAL_VERIFIER', 'GOV_VERIFIER'],
           'Government Services Verifier',
