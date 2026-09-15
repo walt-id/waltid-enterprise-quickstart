@@ -10,7 +10,14 @@
  */
 
 import { CommandContext } from '../../context.js';
-import { RESOURCES, CERT_IDS, KEY_IDS } from '../../config.js';
+import {
+  RESOURCES,
+  CERT_IDS,
+  KEY_IDS,
+  CERT_PROFILES,
+  CERT_VALIDITY_DAYS,
+  CLI_IACA_IAN_URI,
+} from '../../config.js';
 import {
   GovServicesConfig,
   DepartmentConfig,
@@ -37,6 +44,11 @@ import {
 import {
   setupImportKeys,
   setupCreateIacaCertificate,
+  createGeneratedCertificate,
+  getStoredCertificatePem,
+  isoSubjectDn,
+  certificateValidityWindow,
+  x509StoreCertificateRef,
 } from './keys.js';
 import { buildCertificateAnchorLote, MDL_ISSUER_SERVICE_TYPE, type LoteEntityInput } from '../../trust-registry/index.js';
 
@@ -93,80 +105,47 @@ async function createDepartmentDsc(
   ctx: CommandContext,
   deptKey: string,
   dept: DepartmentConfig,
-  iaca?: { pem: string; keyIdPath: string }
+  iaca?: { pem: string; keyIdPath: string; certId?: string; ianUri?: string }
 ): Promise<string> {
   const dscCertId = `${deptKey}-dsc`;
   ctx.log(`Create DSC for ${dept.name}`, 'GOV-SETUP');
 
-  // Check if certificate already exists
-  try {
-    const existing = await ctx.orgClient.get(
-      `/v1/${ctx.tenantPath}.${RESOURCES.x509Store}.${dscCertId}/x509-store-api/certificates`
-    );
-    if (existing.data) {
-      const existingPem = existing.data.data?.pem || existing.data.certificatePem || existing.data.pem;
-      departmentDscPems.set(deptKey, existingPem);
-      console.log(`   [SKIP] DSC for ${dept.name} already exists`);
-      return existingPem;
-    }
-  } catch {
-    // Certificate doesn't exist, create it
+  const existingPem = await getStoredCertificatePem(ctx, dscCertId);
+  if (existingPem) {
+    departmentDscPems.set(deptKey, existingPem);
+    console.log(`   [SKIP] DSC for ${dept.name} already exists`);
+    return existingPem;
   }
 
-  let iacaPem = iaca?.pem || ctx.ctx.iacaPem;
+  const iacaCertId = iaca?.certId || CERT_IDS.vicalIacaCert;
   const iacaKeyIdPath = iaca?.keyIdPath || `${ctx.tenantPath}.${RESOURCES.kms}.${KEY_IDS.vicalIacaKey}`;
+  const iacaIanUri = iaca?.ianUri || CLI_IACA_IAN_URI;
 
-  // Ensure we have IACA PEM
+  const iacaPem = iaca?.pem || ctx.ctx.iacaPem || (await getStoredCertificatePem(ctx, iacaCertId));
   if (!iacaPem) {
-    try {
-      const certResponse = await ctx.orgClient.get(
-        `/v1/${ctx.tenantPath}.${RESOURCES.x509Store}.${CERT_IDS.vicalIacaCert}/x509-store-api/certificates`
-      );
-      iacaPem = certResponse.data.data?.pem || certResponse.data.certificatePem || certResponse.data.pem;
-      ctx.ctx.iacaPem = iacaPem;
-    } catch {
-      throw new Error('IACA certificate not found. Ensure IACA is created before department DSCs.');
-    }
+    throw new Error('IACA certificate not found. Ensure IACA is created before department DSCs.');
   }
+  ctx.ctx.iacaPem = iacaPem;
 
-  const request = {
-    storedCertificateId: dscCertId,
-    iacaSigner: {
-      type: 'iaca-pem-cert-descriptor',
-      iacaPemEncodedCertificate: iacaPem,
-      iacaKeyDesc: {
-        type: 'kms-hosted-key-descriptor',
-        keyIdPath: iacaKeyIdPath,
-      },
-    },
-    certificateData: {
-      country: 'US',
-      commonName: `${dept.name} Document Signer`,
+  const dscPem = await createGeneratedCertificate(
+    ctx,
+    dscCertId,
+    {
+      certificateProfile: CERT_PROFILES.isoDocumentSigner,
+      issuerCertificateRef: x509StoreCertificateRef(ctx, iacaCertId),
+      issuerKeyRef: iacaKeyIdPath,
+      subjectKeyRef: dept.signingKeyId,
+      subjectDn: isoSubjectDn({ country: 'US', commonName: `${dept.name} Document Signer` }),
+      ...certificateValidityWindow(CERT_VALIDITY_DAYS.documentSigner),
+      issuerAlternativeNames: [{ type: 'uri', name: iacaIanUri }],
       crlDistributionPointUri: 'https://gov.example/crl',
     },
-    dsKeyDescriptor: {
-      type: 'kms-hosted-key-descriptor',
-      keyIdPath: dept.signingKeyId,
-    },
-  };
-
-  ctx.saveJson(`create-dsc-${deptKey}-request.json`, request);
-
-  const response = await ctx.orgClient.post(
-    `/v1/${ctx.tenantPath}.${RESOURCES.x509Service}/x509-service-api/iso/document-signers`,
-    request
+    `dsc-${deptKey}`
   );
-  ctx.saveJson(`create-dsc-${deptKey}-response.json`, response.data);
 
-  // Retrieve PEM
-  const certResp = await ctx.orgClient.get(
-    `/v1/${ctx.tenantPath}.${RESOURCES.x509Store}.${dscCertId}/x509-store-api/certificates`
-  );
-  const dscPem = certResp.data.data?.pem || certResp.data.certificatePem || certResp.data.pem;
-  
   departmentDscPems.set(deptKey, dscPem);
   console.log(`   [OK] DSC created for ${dept.name}`);
-  
+
   return dscPem;
 }
 
@@ -179,47 +158,29 @@ async function createIacaCertificateForKey(
 ): Promise<string> {
   ctx.log(`Create IACA certificate: ${commonName}`, 'GOV-SETUP');
 
-  try {
-    const existing = await ctx.orgClient.get(
-      `/v1/${ctx.tenantPath}.${RESOURCES.x509Store}.${certId}/x509-store-api/certificates`
-    );
-    if (existing.data) {
-      const pem = existing.data.data?.pem || existing.data.certificatePem || existing.data.pem;
-      console.log(`   [SKIP] IACA certificate already exists: ${certId}`);
-      return pem;
-    }
-  } catch {
-    // Certificate doesn't exist, create it
+  const existingPem = await getStoredCertificatePem(ctx, certId);
+  if (existingPem) {
+    console.log(`   [SKIP] IACA certificate already exists: ${certId}`);
+    return existingPem;
   }
 
-  const request = {
-    storedCertificateId: certId,
-    certificateData: {
-      country: 'US',
-      commonName,
-      issuerAlternativeNameConf: {
-        uri: `https://gov.example/${certId}`,
+  const pem = await createGeneratedCertificate(
+    ctx,
+    certId,
+    {
+      selfSigned: true,
+      certificateProfile: CERT_PROFILES.isoIacaRoot,
+      subjectKeyRef: keyIdPath,
+      subjectDn: isoSubjectDn({ country: 'US', commonName }),
+      ...certificateValidityWindow(CERT_VALIDITY_DAYS.iaca),
+      issuerAlternativeNames: [{ type: 'uri', name: `https://gov.example/${certId}` }],
+      metadata: {
+        vicalDocType: [PHOTO_ID_DOCTYPE],
       },
     },
-    iacaKeyDesc: {
-      type: 'kms-hosted-key-descriptor',
-      keyIdPath,
-    },
-    vicalEntryComplementaryMetadata: {
-      docType: [PHOTO_ID_DOCTYPE],
-    },
-  };
-  ctx.saveJson(`create-iaca-${certId}-request.json`, request);
-
-  await ctx.orgClient.post(
-    `/v1/${ctx.tenantPath}.${RESOURCES.x509Service}/x509-service-api/iso/iacas`,
-    request
+    `iaca-${certId}`
   );
 
-  const certResp = await ctx.orgClient.get(
-    `/v1/${ctx.tenantPath}.${RESOURCES.x509Store}.${certId}/x509-store-api/certificates`
-  );
-  const pem = certResp.data.data?.pem || certResp.data.certificatePem || certResp.data.pem;
   console.log(`   [OK] IACA certificate created: ${certId}`);
   return pem;
 }
@@ -696,6 +657,8 @@ async function createUntrustedDepartment(
   const untrustedDscPem = await createDepartmentDsc(ctx, 'untrusted', untrustedDeptForDsc, {
     pem: untrustedIacaPem,
     keyIdPath: untrustedIacaKeyId,
+    certId: 'untrusted-iaca-cert',
+    ianUri: 'https://gov.example/untrusted-iaca-cert',
   });
   if (!untrustedDscPem) {
     throw new Error('Untrusted issuer DSC required for Photo ID profile');
