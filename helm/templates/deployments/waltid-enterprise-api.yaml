@@ -52,6 +52,22 @@ spec:
           httpGet:
             path: /livez
             port: http-api
+        # Held back until the license is active, so a pod added by the autoscaler is not sent traffic that
+        # the license gate would refuse with a 503. Readiness latches once the pod has served, so a license
+        # that lapses later leaves the recovery routes reachable instead of emptying the service.
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: http-api
+          periodSeconds: 2
+          failureThreshold: 3
+        # Kubernetes removes a terminating pod from the service and runs this at the same time, so sleeping
+        # here lets the ingress stop routing before the process begins shutting down. Without it the pod is
+        # still sent requests while it tears down, and those requests fail.
+        lifecycle:
+          preStop:
+            exec:
+              command: [ "sleep", "{{ .Values.api.preStopDrainSeconds | default 5 }}" ]
         env:
         {{- if .Values.loggingConf }}
           - name: KLOGGING_CONFIG_PATH
