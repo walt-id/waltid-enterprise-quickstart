@@ -178,6 +178,7 @@ Other Options:
   --help, -h              Show this help message
 
 Environment Variables:
+  CREDENTIAL_TYPE         Primary use case credential type: 'pid' or 'mdl' (default: pid)
   BASE_URL                Enterprise stack base URL (default: enterprise.localhost)
   PORT                    Port number (default: none, uses protocol default)
   ORGANIZATION            Organization ID (default: waltid)

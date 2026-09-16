@@ -17,6 +17,7 @@ import {
   CLI_IACA_IAN_URI,
   CLI_DS_CRL_URI,
   MDL_DOC_TYPE,
+  PID_DOC_TYPE,
 } from '../../config.js';
 
 /** GeneralName entry used by subject/issuer alternative names */
@@ -195,7 +196,9 @@ export async function setupCreateIacaCertificate(ctx: CommandContext): Promise<v
       ...certificateValidityWindow(CERT_VALIDITY_DAYS.iaca),
       issuerAlternativeNames: [{ type: 'uri', name: CLI_IACA_IAN_URI }],
       metadata: {
-        vicalDocType: [MDL_DOC_TYPE],
+        // Both doctypes, since this IACA is shared by the mDL and PID flows (CREDENTIAL_TYPE)
+        // and the vical verification policy filters trust anchors by the presented doctype.
+        vicalDocType: [MDL_DOC_TYPE, PID_DOC_TYPE],
       },
     },
     'iaca-cert',
