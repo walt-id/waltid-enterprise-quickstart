@@ -282,6 +282,25 @@ variable "traefik_replicas" {
   }
 }
 
+variable "traefik_max_concurrent_streams" {
+  description = <<-EOT
+    HTTP/2 SETTINGS_MAX_CONCURRENT_STREAMS for the websecure entrypoint.
+
+    Traefik's own default is 250. That is low for this deployment shape: a client that
+    multiplexes many requests over one connection - a load generator, an API gateway, a
+    server-side integration - is refused above the limit with a 408 while every pod looks
+    healthy, which is very hard to diagnose from the symptom. Raised here on purpose; the cost
+    is a little memory per open stream.
+  EOT
+  type        = number
+  default     = 1000
+
+  validation {
+    condition     = var.traefik_max_concurrent_streams >= 1
+    error_message = "Traefik max concurrent streams must be at least 1."
+  }
+}
+
 variable "letsencrypt_server" {
   description = "Let's Encrypt ACME directory URL"
   type        = string
