@@ -168,6 +168,10 @@ resource "aws_eks_node_group" "main" {
 
   instance_types = var.node_instance_types
 
+  # Left to the AWS default (ON_DEMAND) unless asked for: spot instances can be reclaimed mid-run, which shows
+  # up as nodes disappearing from a load test rather than as an obvious infrastructure event.
+  capacity_type = var.node_capacity_type
+
   scaling_config {
     desired_size = var.node_desired_size
     min_size     = var.node_min_size
