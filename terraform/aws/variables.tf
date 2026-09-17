@@ -70,6 +70,17 @@ variable "node_instance_types" {
   default     = ["t3.medium"]
 }
 
+variable "node_capacity_type" {
+  description = "Billing model for the EKS node group: ON_DEMAND or SPOT. Spot draws on a separate EC2 vCPU quota, which is what makes larger clusters reachable when the on-demand quota is the binding limit."
+  type        = string
+  default     = "ON_DEMAND"
+
+  validation {
+    condition     = contains(["ON_DEMAND", "SPOT"], var.node_capacity_type)
+    error_message = "node_capacity_type must be ON_DEMAND or SPOT."
+  }
+}
+
 variable "node_desired_size" {
   description = "Desired number of worker nodes"
   type        = number
