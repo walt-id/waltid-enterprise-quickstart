@@ -31,6 +31,13 @@ resource "helm_release" "traefik" {
     value = "internet-facing"
   }
 
+  # The chart exposes no key for this, so it goes in as a static CLI argument. Only websecure is
+  # set: it is the entrypoint the ingress serves, and `web` only redirects to it.
+  set {
+    name  = "additionalArguments[0]"
+    value = "--entrypoints.websecure.http2.maxconcurrentstreams=${var.traefik_max_concurrent_streams}"
+  }
+
   depends_on = [
     aws_eks_addon.vpc_cni,
     aws_eks_addon.coredns,
