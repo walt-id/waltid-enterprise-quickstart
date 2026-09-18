@@ -270,18 +270,20 @@ export async function loadIacaIntoTrustRegistry(ctx: CommandContext): Promise<vo
   }
 }
 
-/** Load the IACA as a relying-party LoTE so Wallet2 can PKIX-verify signed Request Objects. */
+/**
+ * Load the verifier request-signing leaf as a relying-party LoTE.
+ * The IACA stays a PID/mDL issuer identity; reusing it here makes
+ * `etsi-trust-list` report MULTIPLE_MATCHES on the issuer chain.
+ */
 export async function loadRelyingPartyIntoTrustRegistry(ctx: CommandContext): Promise<void> {
   const step = ctx.nextStep();
   ctx.log('Load relying-party identities into trust registry', 'FLOW');
 
-  let iacaPem = ctx.ctx.iacaPem;
-  if (!iacaPem) {
-    iacaPem = (await getStoredCertificatePem(ctx, CERT_IDS.vicalIacaCert)) || '';
-    ctx.ctx.iacaPem = iacaPem;
-  }
-  if (!iacaPem) {
-    throw new Error('IACA certificate PEM is empty');
+  const leafPem = await getStoredCertificatePem(ctx, CERT_IDS.verifierRequestSigningCert);
+  if (!leafPem) {
+    throw new Error(
+      'Verifier request-signing certificate not found. Run setup-create-verifier-request-signing-certificate first.'
+    );
   }
 
   const sourceId = 'journey-rp-local';
@@ -294,7 +296,7 @@ export async function loadRelyingPartyIntoTrustRegistry(ctx: CommandContext): Pr
       country: 'US',
       serviceName: 'OpenID4VP relying party',
       serviceType: RELYING_PARTY_SERVICE_TYPE,
-      certificatePem: iacaPem,
+      certificatePem: leafPem,
     }],
     LOTE_TYPE_EU_WRP_RC_PROVIDERS
   );

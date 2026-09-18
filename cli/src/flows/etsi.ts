@@ -19,6 +19,7 @@
 import { mkdirSync } from 'fs';
 import { CommandContext } from '../context.js';
 import { CERT_IDS, KEY_IDS, RESOURCES, MDL_DOC_TYPE, defaultWalletKeyReference } from '../config.js';
+import { MDL_ISSUER_SERVICE_TYPE } from '../trust-registry/index.js';
 import {
   getStoredCertificatePem,
   kmsKeyRef,
@@ -60,6 +61,7 @@ async function createEtsiVerificationSession(ctx: CommandContext): Promise<void>
     {
       policy: 'etsi-trust-list',
       expectedEntityType: 'PID_PROVIDER',
+      expectedServiceType: MDL_ISSUER_SERVICE_TYPE,
       allowStaleSource: true,
       requireAuthenticated: false,
     },
