@@ -16,6 +16,7 @@ import {
   setupCreateVerifierRequestSigningCertificate,
   setupGenerateVerifierRequestSigningKey,
 } from './keys.js';
+import { linkVerifier2ToKms } from './tenant.js';
 import {
   buildCertificateAnchorLote,
   LOTE_TYPE_EU_WRP_RC_PROVIDERS,
@@ -396,6 +397,7 @@ export async function setupEtsiTrustRegistry(ctx: CommandContext): Promise<void>
   console.log('\n--- Step 5: Create Verifier Request-Signing Key and Certificate ---');
   await setupGenerateVerifierRequestSigningKey(ctx);
   await setupCreateVerifierRequestSigningCertificate(ctx);
+  await linkVerifier2ToKms(ctx);
 
   console.log('\n--- Step 6: Load Relying-Party Identities ---');
   await loadRelyingPartyIntoTrustRegistry(ctx);

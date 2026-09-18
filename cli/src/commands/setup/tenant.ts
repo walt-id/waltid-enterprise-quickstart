@@ -181,6 +181,26 @@ export async function setupCreateServices(ctx: CommandContext): Promise<void> {
   }
 }
 
+/** Link tenant KMS to Verifier2 so signed sessions can resolve `keyReference`. */
+export async function linkVerifier2ToKms(ctx: CommandContext): Promise<void> {
+  const step = ctx.nextStep();
+  ctx.log('Link Verifier2 to KMS (via service dependency)', 'SETUP');
+
+  try {
+    await ctx.addServiceDependency(
+      `/v2/${ctx.tenantPath}.${RESOURCES.verifier2}/verifier-service-api/dependencies/add`,
+      `${ctx.tenantPath}.${RESOURCES.kms}`
+    );
+    console.log(`   [OK] KMS linked to verifier2`);
+  } catch (error: any) {
+    if (error.status === 409 || error.message?.includes('already')) {
+      console.log(`   [SKIP] KMS already linked to verifier2`);
+    } else {
+      throw error;
+    }
+  }
+}
+
 /** Link X509 service dependencies */
 export async function setupLinkX509Dependencies(ctx: CommandContext): Promise<void> {
   const step = ctx.nextStep();

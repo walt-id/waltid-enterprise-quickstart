@@ -11,6 +11,7 @@ export {
   setupCreateWallet,
   setupCreateVerifier2,
   setupCreateServices,
+  linkVerifier2ToKms,
   setupLinkX509Dependencies,
 } from './tenant.js';
 
