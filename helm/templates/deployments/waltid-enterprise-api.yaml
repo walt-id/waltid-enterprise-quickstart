@@ -69,6 +69,12 @@ spec:
             exec:
               command: [ "sleep", "{{ .Values.api.preStopDrainSeconds | default 5 }}" ]
         env:
+          # Without this the JVM applies its default MaxRAMPercentage of 25, so a pod granted a 6Gi limit
+          # runs a 1.5Gi heap and exhausts it with `Java heap space` while three quarters of its memory sits
+          # unused. Only JVM flags belong in this variable: the CloudWatch Observability addon appends its
+          # `-javaagent` to JAVA_TOOL_OPTIONS on admission, and a second copy crash-loops the JVM.
+          - name: JAVA_TOOL_OPTIONS
+            value: "-XX:MaxRAMPercentage={{ .Values.api.maxRamPercentage | default 50 }} -XX:+ExitOnOutOfMemoryError"
         {{- if .Values.loggingConf }}
           - name: KLOGGING_CONFIG_PATH
             value: /config/klogging.json
