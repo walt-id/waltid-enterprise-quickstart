@@ -31,7 +31,7 @@ We currently have the following flows:
 
 ### ETSI Trust Lists Flow
 
-This flow demonstrates trust list verification using the Enterprise Trust Registry Service. It will use the previously created trust registry and trust lists from the initial setup and show how to issue, accept, share and verify credentials all following key trust principles.
+This flow demonstrates trust list verification using the Enterprise Trust Registry Service. It issues and presents an mDL against `etsi-trust-list`, using a signed OpenID4VP Request Object and encrypted response. Wallet2 authenticates the JAR with relying-party identities from its linked Trust Registry. Unsigned Verifier2 services omit `clientId` so they bind as `redirect_uri`.
 
 ```bash
 npx tsx walt.ts --flow-etsi-trust-lists
