@@ -84,6 +84,7 @@ spec:
             name: '{{ include "enterprise-stack.fullname" . }}-api-service'
             port:
               name: http
+      {{- if .Values.web.enabled }}
       - path: /
         pathType: Prefix
         backend:
@@ -91,6 +92,7 @@ spec:
             name: '{{ include "enterprise-stack.fullname" . }}-ui-service'
             port:
               name: http
+      {{- end }}
   - host: {{ quote (printf "*.%s" .Values.ingress.host) }}
     http:
       paths:
@@ -157,6 +159,7 @@ spec:
             name: '{{ include "enterprise-stack.fullname" . }}-api-service'
             port:
               name: http
+      {{- if .Values.web.enabled }}
       - path: /
         pathType: Prefix
         backend:
@@ -164,3 +167,4 @@ spec:
             name: '{{ include "enterprise-stack.fullname" . }}-ui-service'
             port:
               name: http
+      {{- end }}
