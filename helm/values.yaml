@@ -206,6 +206,9 @@ api:
     targetCPUUtilizationPercentage: 90
 
 web:
+  # The UI is not needed for API-only or load-test deployments, and its image is amd64-only, so a
+  # Graviton node group cannot run it - `helm --wait` then fails on a component nothing depends on.
+  enabled: true
   ports:
   - name: http
     port: 80
