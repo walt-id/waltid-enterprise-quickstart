@@ -1,3 +1,4 @@
+{{- if .Values.web.enabled }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -40,3 +41,4 @@ spec:
           ports:
             - containerPort: 3000
               name: http-api
+{{- end }}

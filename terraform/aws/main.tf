@@ -168,6 +168,15 @@ resource "aws_eks_node_group" "main" {
 
   instance_types = var.node_instance_types
 
+  # EKS defaults the AMI to x86 when this is unset, so an arm64 instance type would receive an x86 image and the
+  # node would never join the cluster. Derived from the requested instance types rather than exposed as another
+  # variable: Graviton families carry a "g" after the generation digit (c7g, c8g, m7g), which is unambiguous.
+  ami_type = length([for t in var.node_instance_types : t if can(regex("^[a-z]+[0-9]+g[a-z]*\\.", t))]) > 0 ? "AL2023_ARM_64_STANDARD" : "AL2023_x86_64_STANDARD"
+
+  # Left to the AWS default (ON_DEMAND) unless asked for: spot instances can be reclaimed mid-run, which shows
+  # up as nodes disappearing from a load test rather than as an obvious infrastructure event.
+  capacity_type = var.node_capacity_type
+
   scaling_config {
     desired_size = var.node_desired_size
     min_size     = var.node_min_size
