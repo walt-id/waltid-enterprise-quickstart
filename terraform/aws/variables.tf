@@ -290,10 +290,11 @@ variable "traefik_max_concurrent_streams" {
     multiplexes many requests over one connection - a load generator, an API gateway, a
     server-side integration - is refused above the limit with a 408 while every pod looks
     healthy, which is very hard to diagnose from the symptom. Raised here on purpose; the cost
-    is a little memory per open stream.
+    is a little memory per open stream. 1000 was not enough either: a load-test arm at 1188 concurrent streams
+    failed the same way, so the default is now well clear of any concurrency we drive.
   EOT
   type        = number
-  default     = 1000
+  default     = 4000
 
   validation {
     condition     = var.traefik_max_concurrent_streams >= 1
