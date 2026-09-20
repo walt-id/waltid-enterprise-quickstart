@@ -372,3 +372,40 @@ variable "dns_subdomain" {
   type        = string
   default     = ""
 }
+
+variable "loadgen_node_count" {
+  description = <<-EOT
+    Worker nodes for a dedicated load-generation node group. Zero means none, which is the default and leaves
+    the cluster exactly as before.
+
+    It exists because the load generator, not the service, turned out to set the measured ceiling: at 2174
+    sessions/s the generator process was pinned at 100% CPU while the API nodes sat at 46% and the database at
+    14%. Running the generator on its own nodes makes client capacity a dial rather than a property of whichever
+    CI runner picked up the job. The group is tainted, so nothing else schedules onto it and the generator never
+    competes with the service it is measuring.
+  EOT
+  type        = number
+  default     = 0
+
+  validation {
+    condition     = var.loadgen_node_count >= 0
+    error_message = "Load generator node count cannot be negative."
+  }
+}
+
+variable "loadgen_instance_types" {
+  description = "Instance types for the load-generation node group. The generator is CPU-bound, so prefer compute-optimised sizes."
+  type        = list(string)
+  default     = ["c7a.8xlarge"]
+}
+
+variable "loadgen_capacity_type" {
+  description = "Billing model for the load-generation nodes (ON_DEMAND or SPOT)."
+  type        = string
+  default     = "SPOT"
+
+  validation {
+    condition     = contains(["ON_DEMAND", "SPOT"], var.loadgen_capacity_type)
+    error_message = "Capacity type must be ON_DEMAND or SPOT."
+  }
+}
