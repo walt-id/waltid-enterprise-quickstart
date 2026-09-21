@@ -275,6 +275,29 @@ export async function loadIacaIntoTrustRegistry(ctx: CommandContext): Promise<vo
  * The IACA stays a PID/mDL issuer identity; reusing it here makes
  * `etsi-trust-list` report MULTIPLE_MATCHES on the issuer chain.
  */
+type TrustSourceSummary = {
+  sourceId: string;
+  assurance?: {
+    authenticityState?: string;
+    accepted?: boolean;
+  };
+};
+
+async function getTrustSource(
+  ctx: CommandContext,
+  sourceId: string,
+): Promise<TrustSourceSummary | undefined> {
+  const response = await ctx.orgClient.get(
+    `/v1/${ctx.tenantPath}.${RESOURCES.trustRegistry}/trust-registry-api/sources`
+  );
+  const sources = (response.data ?? []) as TrustSourceSummary[];
+  return sources.find((source) => source.sourceId === sourceId);
+}
+
+function isAcceptedTrustSource(source?: TrustSourceSummary): boolean {
+  return source?.assurance?.accepted === true;
+}
+
 export async function loadRelyingPartyIntoTrustRegistry(ctx: CommandContext): Promise<void> {
   const step = ctx.nextStep();
   ctx.log('Load relying-party identities into trust registry', 'FLOW');
@@ -287,6 +310,12 @@ export async function loadRelyingPartyIntoTrustRegistry(ctx: CommandContext): Pr
   }
 
   const sourceId = 'journey-rp-local';
+  const existing = await getTrustSource(ctx, sourceId);
+  if (isAcceptedTrustSource(existing)) {
+    console.log(`   [SKIP] Journey relying-party trust source already loaded and accepted: ${sourceId}`);
+    return;
+  }
+
   const loteSource = buildCertificateAnchorLote(
     sourceId,
     'US',
@@ -318,8 +347,10 @@ export async function loadRelyingPartyIntoTrustRegistry(ctx: CommandContext): Pr
     );
     ctx.saveJson('load-journey-rp-response.json', response.data, step);
 
-    if (!response.data.success) {
-      throw new Error(`Failed to load relying-party trust source: ${response.data.error}`);
+    if (!response.data.success || response.data.assurance?.accepted === false) {
+      throw new Error(
+        `Failed to load relying-party trust source: ${response.data.error || 'source was not accepted'}`
+      );
     }
 
     console.log(`   [OK] Journey relying-party trust source loaded: ${sourceId}`);
@@ -328,14 +359,21 @@ export async function loadRelyingPartyIntoTrustRegistry(ctx: CommandContext): Pr
     console.log(`        Identities: ${response.data.identitiesLoaded || 0}`);
   } catch (error: any) {
     const errMsg = error.message || error.response?.data?.message || '';
-    if (error.status === 409 ||
+    const isDuplicate = error.status === 409 ||
         errMsg.includes('Duplicate target') ||
         errMsg.includes('already exists') ||
-        errMsg.includes('Overwriting targets')) {
-      console.log(`   [SKIP] Journey relying-party trust source already exists: ${sourceId}`);
-    } else {
-      throw new Error(`Failed to load relying-party trust source: ${errMsg}`);
+        errMsg.includes('Overwriting targets');
+    if (isDuplicate) {
+      const after = await getTrustSource(ctx, sourceId);
+      if (isAcceptedTrustSource(after)) {
+        console.log(`   [SKIP] Journey relying-party trust source already exists and is accepted: ${sourceId}`);
+        return;
+      }
+      throw new Error(
+        `Relying-party trust source ${sourceId} exists but is not accepted; refusing to treat a failed import as success`
+      );
     }
+    throw new Error(`Failed to load relying-party trust source: ${errMsg}`);
   }
 }
 
