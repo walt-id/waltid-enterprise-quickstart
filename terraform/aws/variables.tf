@@ -203,6 +203,25 @@ variable "mongodb_node_disk_size" {
   default     = 20
 }
 
+variable "mongodb_data_volume_size" {
+  description = <<-EOT
+    Size of the MongoDB data volume.
+
+    Without this the MongoDB Community Operator applies its own default of 16Gi, which is easy to outgrow: a load
+    test of 500,000 verification sessions filled it, and mongod then failed to start with
+    "28: No space left on device" while opening its WiredTiger spill instance, restarting eleven times. The
+    storage class allows volume expansion, so this can be raised on an existing deployment, but not lowered.
+  EOT
+  type        = string
+  default     = "16Gi"
+}
+
+variable "mongodb_logs_volume_size" {
+  description = "Size of the MongoDB logs volume. The operator's own default is 2Gi."
+  type        = string
+  default     = "2Gi"
+}
+
 variable "documentdb_instance_class" {
   description = "Instance class for DocumentDB"
   type        = string
