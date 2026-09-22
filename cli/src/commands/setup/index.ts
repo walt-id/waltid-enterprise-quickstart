@@ -55,6 +55,7 @@ export {
   linkWallet2ToTrustRegistry,
   importPublicTrustLists,
   loadIacaIntoTrustRegistry,
+  pinWallet2RequestObjectTrustAnchor,
   loadRelyingPartyIntoTrustRegistry,
   listTrustSources,
   setupEtsiTrustRegistry,

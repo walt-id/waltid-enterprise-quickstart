@@ -6,8 +6,9 @@
  *
  * Unsigned Verifier2 services omit `clientId` so sessions bind as `redirect_uri`.
  * This flow additionally uses a signed Request Object and encrypted VP response:
- * Wallet2 authenticates the JAR against relying-party identities from its linked
- * Trust Registry.
+ * Wallet2 authenticates the JAR by chaining the request-signing leaf to the IACA
+ * pinned on Wallet2 (`requestObjectX509Trust`). The RP LoTE still lists that leaf
+ * as a relying party; the IACA stays a PID/mDL issuer for `etsi-trust-list`.
  *
  * Steps:
  * 1. Clear existing credentials from wallet
@@ -41,10 +42,14 @@ async function createEtsiVerificationSession(ctx: CommandContext): Promise<void>
   ctx.log('Create signed verification session with ETSI Trust List policy', 'FLOW');
 
   const leafPem = await getStoredCertificatePem(ctx, CERT_IDS.verifierRequestSigningCert);
+  const iacaPem = await getStoredCertificatePem(ctx, CERT_IDS.vicalIacaCert);
   if (!leafPem) {
     throw new Error(
       'Verifier request-signing certificate not found. Run --setup-etsi-trust-registry first.'
     );
+  }
+  if (!iacaPem) {
+    throw new Error('IACA certificate not found. Run --setup-etsi-trust-registry first.');
   }
 
   const vicalUrl = `${ctx.orgBaseUrl}/v1/${ctx.tenantPath}.${RESOURCES.vical}/vical-service-api/latest`;
@@ -93,7 +98,10 @@ async function createEtsiVerificationSession(ctx: CommandContext): Promise<void>
       signed_request: true,
       encrypted_response: true,
       clientId,
-      x5c: [certificatePemToDerBase64(leafPem)],
+      x5c: [
+        certificatePemToDerBase64(leafPem),
+        certificatePemToDerBase64(iacaPem),
+      ],
     },
   };
   ctx.saveJson('create-etsi-verification-session-request.json', request, step);
@@ -114,7 +122,7 @@ async function createEtsiVerificationSession(ctx: CommandContext): Promise<void>
   console.log(`   [OK] Verification session created (ID: ${ctx.ctx.sessionId})`);
   console.log(`        Client ID: ${clientId}`);
   console.log(`        Policies: signature, vical, etsi-trust-list`);
-  console.log(`        Request: signed JAR, encrypted response`);
+  console.log(`        Request: signed JAR (x509_hash, leaf+IACA x5c), encrypted response`);
 }
 
 /**

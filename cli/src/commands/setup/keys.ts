@@ -314,8 +314,8 @@ export async function setupGenerateVerifierRequestSigningKey(ctx: CommandContext
 }
 
 /**
- * Create an IACA-issued leaf with digitalSignature + clientAuth so Wallet2 can
- * authenticate signed Request Objects as `x509_hash`.
+ * Create an IACA-issued leaf with digitalSignature + clientAuth.
+ * Session `x5c` carries this leaf; Wallet2 JAR PKIX chains it to the pinned IACA.
  */
 export async function setupCreateVerifierRequestSigningCertificate(ctx: CommandContext): Promise<string> {
   const step = ctx.nextStep();

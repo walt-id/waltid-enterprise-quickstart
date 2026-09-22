@@ -5,13 +5,19 @@ import { join } from 'node:path';
 import test from 'node:test';
 import { CommandContext } from '../../context.js';
 import { Config } from '../../config.js';
-import { loadRelyingPartyIntoTrustRegistry } from './trust.js';
+import {
+  loadRelyingPartyIntoTrustRegistry,
+  pinWallet2RequestObjectTrustAnchor,
+} from './trust.js';
 
 const PEM = '-----BEGIN CERTIFICATE-----\nMIIB\n-----END CERTIFICATE-----';
+const IACA_PEM = '-----BEGIN CERTIFICATE-----\nIACA\n-----END CERTIFICATE-----';
 
 class FakeOrgClient {
   posts: unknown[] = [];
+  puts: Array<{ path: string; body: unknown }> = [];
   sources: Array<{ sourceId: string; assurance?: { accepted?: boolean } }> = [];
+  walletConfig: Record<string, unknown> = { configuration: {} };
   postResult: { data: Record<string, unknown> } = {
     data: {
       success: true,
@@ -25,13 +31,20 @@ class FakeOrgClient {
 
   async get(path: string) {
     if (path.endsWith('/sources')) return { data: this.sources };
-    return { data: { certificatePem: PEM } };
+    if (path.endsWith('/configuration/view')) return { data: this.walletConfig };
+    if (path.includes('verifier-request-signing')) return { data: { certificatePem: PEM } };
+    return { data: { certificatePem: IACA_PEM } };
   }
 
   async post(_path: string, body: unknown) {
     this.posts.push(body);
     if (this.postError) throw this.postError;
     return this.postResult;
+  }
+
+  async put(path: string, body: unknown) {
+    this.puts.push({ path, body });
+    return { data: {} };
   }
 }
 
@@ -75,4 +88,26 @@ test('a duplicate-looking failure is propagated when the source stays unaccepted
     /not accepted/,
   );
   assert.equal(client.posts.length, 1);
+});
+
+test('Wallet2 Request Object trust pins the IACA CA', async () => {
+  const { ctx, client } = context();
+  await pinWallet2RequestObjectTrustAnchor(ctx);
+  assert.equal(client.puts.length, 1);
+  const body = client.puts[0].body as {
+    configuration: { requestObjectX509Trust: { x509TrustAnchorsPem: string[] } };
+  };
+  assert.equal(body.configuration.requestObjectX509Trust.x509TrustAnchorsPem[0], IACA_PEM);
+  assert.match(client.puts[0].path, /wallet-service-api\/configuration\/update$/);
+});
+
+test('an already pinned IACA is not written again', async () => {
+  const { ctx, client } = context();
+  client.walletConfig = {
+    configuration: {
+      requestObjectX509Trust: { x509TrustAnchorsPem: [IACA_PEM] },
+    },
+  };
+  await pinWallet2RequestObjectTrustAnchor(ctx);
+  assert.equal(client.puts.length, 0);
 });

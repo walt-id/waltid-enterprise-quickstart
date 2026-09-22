@@ -31,7 +31,7 @@ We currently have the following flows:
 
 ### ETSI Trust Lists Flow
 
-This flow demonstrates trust list verification using the Enterprise Trust Registry Service. It issues and presents an mDL against `etsi-trust-list`, using a signed OpenID4VP Request Object and encrypted response. Wallet2 authenticates the JAR with relying-party identities from its linked Trust Registry. Unsigned Verifier2 services omit `clientId` so they bind as `redirect_uri`.
+This flow demonstrates trust list verification using the Enterprise Trust Registry Service. It issues and presents an mDL against `etsi-trust-list`, using a signed OpenID4VP Request Object and encrypted response. Wallet2 authenticates the JAR by chaining the request-signing leaf to the IACA pinned on Wallet2. The RP LoTE lists that leaf as a relying party; the IACA stays a PID/mDL issuer. Unsigned Verifier2 services omit `clientId` so they bind as `redirect_uri`.
 
 ```bash
 npx tsx walt.ts --flow-etsi-trust-lists

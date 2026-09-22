@@ -107,7 +107,12 @@ export async function linkVerifier2ToTrustRegistry(ctx: CommandContext): Promise
   }
 }
 
-/** Link Wallet2 to Trust Registry so signed Request Objects can use relying-party identities. */
+/**
+ * Link Wallet2 to Trust Registry so relying-party identities can join the JAR
+ * trust store. This journey still pins the IACA as a CA via
+ * pinWallet2RequestObjectTrustAnchor: PKIX looks up the leaf's issuer, and an
+ * RP LoTE leaf is not a CA.
+ */
 export async function linkWallet2ToTrustRegistry(ctx: CommandContext): Promise<void> {
   const step = ctx.nextStep();
   ctx.log('Link Wallet2 to Trust Registry (via service dependency)', 'FLOW');
@@ -270,11 +275,56 @@ export async function loadIacaIntoTrustRegistry(ctx: CommandContext): Promise<vo
   }
 }
 
+function normalizePem(pem: string): string {
+  return pem.replace(/\s/g, '');
+}
+
 /**
- * Load the verifier request-signing leaf as a relying-party LoTE.
- * The IACA stays a PID/mDL issuer identity; reusing it here makes
- * `etsi-trust-list` report MULTIPLE_MATCHES on the issuer chain.
+ * Pin the IACA as Wallet2's Request Object CA.
+ *
+ * `x509_hash` PKIX looks up the leaf's issuer in the trust store. The journey
+ * IACA is a PID/mDL issuer on the trust list, not a relying party, so registry
+ * RP identities do not supply it. The leaf still goes in session `x5c`.
  */
+export async function pinWallet2RequestObjectTrustAnchor(ctx: CommandContext): Promise<void> {
+  const step = ctx.nextStep();
+  ctx.log('Pin IACA as Wallet2 Request Object trust anchor', 'SETUP');
+
+  const iacaPem = ctx.ctx.iacaPem || (await getStoredCertificatePem(ctx, CERT_IDS.vicalIacaCert));
+  if (!iacaPem) {
+    throw new Error('IACA certificate not found. Run setup-create-iaca-certificate first.');
+  }
+  ctx.ctx.iacaPem = iacaPem;
+
+  const walletPath = `${ctx.tenantPath}.${RESOURCES.wallet}`;
+  const viewPath = `/v2/${walletPath}/wallet-service-api/configuration/view`;
+  const current = (await ctx.orgClient.get(viewPath)).data ?? {};
+  ctx.saveJson('wallet2-configuration-view.json', current, step);
+
+  const existingPins: string[] =
+    current.configuration?.requestObjectX509Trust?.x509TrustAnchorsPem ?? [];
+  if (existingPins.some((pem) => normalizePem(pem) === normalizePem(iacaPem))) {
+    console.log('   [SKIP] Wallet2 already pins the IACA as a Request Object trust anchor');
+    return;
+  }
+
+  const updated = {
+    ...current,
+    configuration: {
+      ...(current.configuration ?? {}),
+      requestObjectX509Trust: {
+        x509TrustAnchorsPem: [iacaPem, ...existingPins],
+      },
+    },
+  };
+  ctx.saveJson('wallet2-configuration-update-request.json', updated, step);
+  await ctx.orgClient.put(
+    `/v2/${walletPath}/wallet-service-api/configuration/update`,
+    updated,
+  );
+  console.log('   [OK] Wallet2 pins the IACA for x509_hash Request Object authentication');
+}
+
 type TrustSourceSummary = {
   sourceId: string;
   assurance?: {
@@ -298,6 +348,13 @@ function isAcceptedTrustSource(source?: TrustSourceSummary): boolean {
   return source?.assurance?.accepted === true;
 }
 
+/**
+ * Load the verifier request-signing leaf as a relying-party LoTE.
+ * The IACA stays a PID/mDL issuer identity; reusing it here makes
+ * `etsi-trust-list` report MULTIPLE_MATCHES on the issuer chain.
+ * JAR PKIX uses the IACA PEM pin from pinWallet2RequestObjectTrustAnchor,
+ * not this leaf.
+ */
 export async function loadRelyingPartyIntoTrustRegistry(ctx: CommandContext): Promise<void> {
   const step = ctx.nextStep();
   ctx.log('Load relying-party identities into trust registry', 'FLOW');
@@ -439,13 +496,16 @@ export async function setupEtsiTrustRegistry(ctx: CommandContext): Promise<void>
   await setupCreateVerifierRequestSigningCertificate(ctx);
   await linkVerifier2ToKms(ctx);
 
-  console.log('\n--- Step 6: Load Relying-Party Identities ---');
+  console.log('\n--- Step 6: Pin IACA as Wallet2 Request Object CA ---');
+  await pinWallet2RequestObjectTrustAnchor(ctx);
+
+  console.log('\n--- Step 7: Load Relying-Party Identities ---');
   await loadRelyingPartyIntoTrustRegistry(ctx);
 
-  console.log('\n--- Step 7: Link Wallet2 to Trust Registry ---');
+  console.log('\n--- Step 8: Link Wallet2 to Trust Registry ---');
   await linkWallet2ToTrustRegistry(ctx);
 
-  console.log('\n--- Step 8: List Trust Sources ---');
+  console.log('\n--- Step 9: List Trust Sources ---');
   await listTrustSources(ctx);
 
   console.log('\n[SETUP] ETSI Trust Registry setup complete');
