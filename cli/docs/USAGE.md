@@ -144,7 +144,7 @@ The `--setup-etsi-trust-registry` command performs:
 - Import the Austrian and Italian national TSLs and the EU LoTL
 - Load local IACA certificate into trust registry (PID providers list)
 - Generate a verifier request-signing key and IACA-issued leaf with `clientAuth`
-- Load the IACA as a relying-party LoTE (`EUWRPRCProvidersList`) for JAR PKIX
+- Load the verifier request-signing leaf certificate as a relying-party LoTE (`EUWRPRCProvidersList`) for JAR PKIX
 - Link Wallet2 to Trust Registry
 - List trust sources with authenticity states
 
