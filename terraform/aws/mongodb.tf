@@ -169,6 +169,28 @@ resource "kubectl_manifest" "mongodb_replica_set" {
 
       statefulSet = {
         spec = {
+          # Sized explicitly, because the operator's own defaults are 16Gi of data and 2Gi of logs. 500,000
+          # verification sessions outgrew 16Gi, after which mongod could not start at all - it aborted on
+          # "28: No space left on device" while opening its WiredTiger spill instance and restarted eleven times,
+          # so the whole stack failed on storage while looking like a database performance problem. The volume
+          # names are fixed by the operator.
+          volumeClaimTemplates = [
+            {
+              metadata = { name = "data-volume" }
+              spec = {
+                accessModes = ["ReadWriteOnce"]
+                resources   = { requests = { storage = var.mongodb_data_volume_size } }
+              }
+            },
+            {
+              metadata = { name = "logs-volume" }
+              spec = {
+                accessModes = ["ReadWriteOnce"]
+                resources   = { requests = { storage = var.mongodb_logs_volume_size } }
+              }
+            },
+          ]
+
           template = {
             spec = merge({
               topologySpreadConstraints = [
