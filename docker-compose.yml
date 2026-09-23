@@ -133,7 +133,13 @@ services:
     # optional HOCON substitutions in config/license.conf leave the configured values untouched.
     # LICENSE_STATE_ENCRYPTION_KEY is the exception, because .env declares it empty, so it arrives as
     # an empty string. The API treats a blank value as unset and generates its own secret.
+    # Bounded, and the heap percentage raised to match. Unbounded, the JVM sized its heap from host
+    # RAM - 25% of 78 GB here - and a run presenting 250 KB portraits took the whole machine with it;
+    # an 8 GB cap without MaxRAMPercentage would instead give a 2 GB heap and OOM-kill the container.
+    # The Helm chart solves the same problem with api.maxRamPercentage.
+    mem_limit: ${ENTERPRISE_MEM_LIMIT:-8g}
     environment:
+      - JAVA_TOOL_OPTIONS=-XX:MaxRAMPercentage=${ENTERPRISE_MAX_RAM_PERCENTAGE:-70}
       - LICENSE_STATE_ENCRYPTION_KEY
       - LICENSE_SEED_CREDENTIAL
       - LICENSE_SEED_CREDENTIAL_FILE
