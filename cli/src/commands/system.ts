@@ -36,29 +36,58 @@ async function getSuperadminToken(ctx: CommandContext): Promise<string> {
 // System Commands
 // ============================================================================
 
-/** Recreate the database (dev endpoint) */
-export async function recreateDb(ctx: CommandContext): Promise<void> {
+/**
+ * Header + guidance shared by every /v1/dev/* call: the server refuses these routes unless
+ * dev-mode is enabled AND a matching token is configured server-side (config/dev-mode-access.conf).
+ */
+function devModeHeaders(ctx: CommandContext): Record<string, string> {
+  return ctx.config.devModeToken ? { 'X-Dev-Mode-Token': ctx.config.devModeToken } : {};
+}
+
+/** True if `status`/`text` is the dev-mode-access gate refusing the request, not the handler itself. */
+function logIfDevModeAccessDenied(ctx: CommandContext, status: number, text: string): boolean {
+  if (status === 503 && text.includes('dev-mode-access token is configured')) {
+    console.log(`   [WARN] Server has no dev-mode-access token configured (config/dev-mode-access.conf).`);
+    console.log(`          Set accessToken there, or point DEV_MODE_TOKEN at the same value.`);
+    return true;
+  }
+  if (status === 401 && text.includes('X-Dev-Mode-Token')) {
+    const sentToken = ctx.config.devModeToken ? `'${ctx.config.devModeToken}'` : '(none sent)';
+    console.log(`   [WARN] Dev-mode access token missing or doesn't match the server's config/dev-mode-access.conf.`);
+    console.log(`          CLI sent ${sentToken} - set DEV_MODE_TOKEN to the server's configured accessToken.`);
+    return true;
+  }
+  return false;
+}
+
+/** Recreate the database (dev endpoint). Returns false on any failure - callers must not proceed. */
+export async function recreateDb(ctx: CommandContext): Promise<boolean> {
   ctx.log('Recreating database', 'SYSTEM');
-  
+
   const adminUrl = buildBaseUrl(ctx.config.baseUrl, ctx.config.port);
-  
+
   try {
     const response = await fetch(`${adminUrl}/v1/dev/database-recreate`, {
       method: 'POST',
-      headers: { 'accept': '*/*' },
+      headers: { 'accept': '*/*', ...devModeHeaders(ctx) },
     });
-    
+
     if (!response.ok) {
       const text = await response.text();
-      console.log(`   [WARN] Database recreate returned ${response.status}: ${text}`);
-    } else {
-      console.log(`   [OK] Database recreated`);
+      if (!logIfDevModeAccessDenied(ctx, response.status, text)) {
+        console.log(`   [WARN] Database recreate returned ${response.status}: ${text}`);
+      }
+      return false;
     }
+
+    console.log(`   [OK] Database recreated`);
+    return true;
   } catch (error: any) {
     console.log(`   [WARN] Database recreate failed: ${error.message}`);
     if (error.cause) {
       console.log(`   [CAUSE] ${error.cause.message || error.cause}`);
     }
+    return false;
   }
 }
 
@@ -126,39 +155,51 @@ export async function createSuperadminAccount(ctx: CommandContext): Promise<bool
   }
 }
 
-/** Initialize the database with default data */
-export async function initDb(ctx: CommandContext): Promise<void> {
+/** Initialize the database with default data. Returns false on any failure - callers must not proceed. */
+export async function initDb(ctx: CommandContext): Promise<boolean> {
   ctx.log('Initializing database', 'SYSTEM');
-  
+
   const adminUrl = buildBaseUrl(ctx.config.baseUrl, ctx.config.port);
-  
+
   const loginResponse = await fetch(`${adminUrl}/auth/account/emailpass`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email: ctx.config.email, password: ctx.config.password }),
   });
-  
-  const loginData = await loginResponse.json() as { token?: string };
-  const token = loginData.token;
-  
-  if (!token) {
-    throw new Error('Could not get superadmin token for database init');
+
+  const loginText = await loginResponse.text();
+  let token: string | undefined;
+  try {
+    token = loginText ? (JSON.parse(loginText) as { token?: string }).token : undefined;
+  } catch {
+    // fall through - reported below via the empty-body/non-JSON message
   }
-  
+
+  if (!token) {
+    console.log(`   [WARN] Could not get superadmin token for database init (login returned ${loginResponse.status}: ${loginText || '<empty body>'}).`);
+    console.log(`          Is the enterprise-api container running? Did superadmin account creation succeed above?`);
+    return false;
+  }
+
   const initResponse = await fetch(`${adminUrl}/v1/dev/initial-setup`, {
     method: 'POST',
-    headers: { 
+    headers: {
       'accept': '*/*',
       'Authorization': `Bearer ${token}`,
+      ...devModeHeaders(ctx),
     },
   });
-  
+
   if (!initResponse.ok) {
     const text = await initResponse.text();
-    console.log(`   [WARN] Database init returned ${initResponse.status}: ${text}`);
-  } else {
-    console.log(`   [OK] Database initialized`);
+    if (!logIfDevModeAccessDenied(ctx, initResponse.status, text)) {
+      console.log(`   [WARN] Database init returned ${initResponse.status}: ${text}`);
+    }
+    return false;
   }
+
+  console.log(`   [OK] Database initialized`);
+  return true;
 }
 
 /**
@@ -378,13 +419,53 @@ export async function setupCreateAdminAccount(ctx: CommandContext): Promise<void
 }
 
 /** Run full system initialization */
-export async function runSystemInit(ctx: CommandContext): Promise<void> {
-  await recreateDb(ctx);
-  await createSuperadminAccount(ctx);
-  await initDb(ctx);
+/**
+ * Fail fast with a clear diagnosis instead of letting every step 404/crash separately.
+ * A wrong BASE_URL/PORT most commonly shows up as: this repo's own docker Caddy container
+ * still running and silently intercepting the default enterprise.localhost:80, while the
+ * intended target (a local `:waltid-enterprise-api-development:run`, or a down docker stack)
+ * never sees the request.
+ */
+async function preflightCheck(ctx: CommandContext): Promise<boolean> {
+  const adminUrl = buildBaseUrl(ctx.config.baseUrl, ctx.config.port);
+
+  try {
+    const response = await fetch(`${adminUrl}/features/registered`);
+    if (response.ok) return true;
+    console.log(`\n[ERROR] ${adminUrl} did not respond like an Enterprise API (HTTP ${response.status}).`);
+  } catch (error: any) {
+    console.log(`\n[ERROR] Could not reach ${adminUrl}: ${error.message}`);
+  }
+
+  console.log(`       Check what's actually running there:`);
+  console.log(`       - Docker stack:   docker compose ps   (is 'waltid-enterprise' Up?)`);
+  console.log(`       - Make sure the BASE_URL and PORT are set correctly e.g._ BASE_URL=localhost PORT=3000 <your command>`);
+  return false;
+}
+
+/** Returns false when the preflight check fails, so callers can skip dependent steps. */
+export async function runSystemInit(ctx: CommandContext): Promise<boolean> {
+  if (!(await preflightCheck(ctx))) {
+    return false;
+  }
+
+  if (!(await recreateDb(ctx))) {
+    console.log('\n[ERROR] Database recreate failed - aborting system initialization.');
+    return false;
+  }
+  if (!(await createSuperadminAccount(ctx))) {
+    console.log('\n[ERROR] Superadmin account creation failed - aborting system initialization.');
+    return false;
+  }
+  if (!(await initDb(ctx))) {
+    console.log('\n[ERROR] Database initialization failed - aborting system initialization.');
+    return false;
+  }
+
   await createOrganization(ctx);
   await setupCreateAdminRole(ctx);
   await setupCreateAdminAccount(ctx);
   await createHostAlias(ctx);
   console.log('\n[SYSTEM] System initialization complete');
+  return true;
 }

@@ -181,6 +181,8 @@ export interface Config {
   password: string;
   port: number;
   superadminToken: string;
+  /** Required by the server to call /v1/dev/* once dev-mode is enabled; see config/dev-mode-access.conf */
+  devModeToken: string;
   adminEmail: string;
   adminPassword: string;
   /** Custom domain for host alias (optional) */
@@ -224,6 +226,10 @@ export interface SuperadminCredentials {
   token: string;
   email: string;
   password: string;
+}
+
+export interface DevModeAccessCredentials {
+  accessToken: string;
 }
 
 // ============================================================================
@@ -326,12 +332,37 @@ export function readSuperadminConfig(configDir: string): SuperadminCredentials {
 }
 
 /**
+ * Read the dev-mode-access token from config file.
+ * Falls back to an empty value if the file doesn't exist - the server fails closed the
+ * same way (refuses /v1/dev/* with 503) rather than silently allowing unauthenticated access.
+ */
+export function readDevModeAccessConfig(configDir: string): DevModeAccessCredentials {
+  const configPath = join(configDir, 'config', 'dev-mode-access.conf');
+
+  const defaults: DevModeAccessCredentials = { accessToken: '' };
+
+  if (!existsSync(configPath)) {
+    return defaults;
+  }
+
+  try {
+    const content = readFileSync(configPath, 'utf-8');
+    const match = content.match(/accessToken\s*=\s*"([^"]+)"/);
+    if (match) defaults.accessToken = match[1];
+    return defaults;
+  } catch {
+    return defaults;
+  }
+}
+
+/**
  * Create configuration from environment variables.
  * @param projectRoot - Root directory of the project (for config file lookup)
  */
 export function createConfig(projectRoot: string): Config {
   const superadminCreds = readSuperadminConfig(projectRoot);
-  
+  const devModeCreds = readDevModeAccessConfig(projectRoot);
+
   return {
     baseUrl: process.env.BASE_URL || 'enterprise.localhost',
     organization: process.env.ORGANIZATION || 'waltid',
@@ -342,6 +373,7 @@ export function createConfig(projectRoot: string): Config {
       ? parseInt(process.env.PORT) 
       : 0,  // Default to no port (uses protocol default: 80 for HTTP, 443 for HTTPS)
     superadminToken: process.env.SUPERADMIN_TOKEN || superadminCreds.token || '',
+    devModeToken: process.env.DEV_MODE_TOKEN || devModeCreds.accessToken || '',
     adminEmail: process.env.ADMIN_EMAIL || 'admin@walt.id',
     adminPassword: process.env.ADMIN_PASSWORD || 'admin123456',
     hostAliasDomain: process.env.HOST_ALIAS_DOMAIN || undefined,

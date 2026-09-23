@@ -368,18 +368,25 @@ async function main(): Promise<void> {
 
     // System commands
     if (args.includes('--recreate')) {
-      await runSystemInit(ctx);
-      await runFull(ctx);
+      if (await runSystemInit(ctx)) {
+        await runFull(ctx);
+      } else {
+        process.exitCode = 1;
+      }
       return;
     }
 
     if (args.includes('--init-system')) {
-      await runSystemInit(ctx);
+      if (!(await runSystemInit(ctx))) {
+        process.exitCode = 1;
+      }
       return;
     }
 
     if (args.includes('--setup-recreate')) {
-      await runSystemInit(ctx);
+      if (!(await runSystemInit(ctx))) {
+        process.exitCode = 1;
+      }
       return;
     }
 
