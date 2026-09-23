@@ -170,6 +170,12 @@ key is encrypted with the same secret and cannot be kept anyway.
 **DEV** license. A PROD license refuses to start while `dev-mode` is enabled, and vice versa. Remove
 `dev-mode` from `enabledFeatures` before using a PROD license.
 
+With `dev-mode` enabled, its `/v1/dev/*` endpoints (used by the CLI's `--recreate`/`--init-system`)
+additionally require a matching `X-Dev-Mode-Token` header, configured via `config/dev-mode-access.conf`'s
+`accessToken` - see [Set a dev-mode access token](#use-docker-compose) above; the server refuses to start
+at all with the value it ships with. The CLI reads that same file automatically; override it with the
+`DEV_MODE_TOKEN` environment variable if you point the CLI at a different server.
+
 ### Troubleshooting
 
 - Container exits during startup - the license was rejected. `docker compose logs waltid-enterprise`
@@ -179,6 +185,9 @@ key is encrypted with the same secret and cannot be kept anyway.
   `LICENSE_STATE_ENCRYPTION_KEY` or leftover `license_state` than the `license request` run).
 - Every endpoint returns `503 Enterprise API is unavailable because the license is not active` - the
   process started but the license is not active. `GET /livez` still responds in this state.
+- Enterprise API container crash-loops, or `/v1/dev/*` returns `503` / `401` - `config/dev-mode-access.conf`
+  still has the shipped placeholder `accessToken`, is unset, or doesn't match what the CLI sends. See
+  [Set a dev-mode access token](#use-docker-compose) above.
 - `Heartbeat failed: ... 403 Forbidden: License '<id>' has no installation binding` - the license is
   not bound to your installation. Either the installation key was discarded with
   `license reset --include-installation-key` and walt.id has not unbound the license, or the license
@@ -220,6 +229,21 @@ git clone https://github.com/walt-id/waltid-enterprise-quickstart.git
 ```bash
 cd waltid-enterprise-quickstart
 ```
+
+**Set a dev-mode access token**
+
+`config/_features.conf` enables `dev-mode`, which requires `config/dev-mode-access.conf` to hold a real,
+secret `accessToken` before the Enterprise API will start at all. Since this repo is public, no value
+committed here could ever be a real secret - `config/dev-mode-access.conf` ships with the same literal
+placeholder walt.id's own documentation uses as an example, `"replace-with-a-per-deployment-secret"`,
+which the server explicitly refuses to boot with. Edit that file and set your own value before continuing:
+
+```hocon[config/dev-mode-access.conf]
+accessToken = "<a value only you know>"
+```
+
+If you skip this, `docker compose up` will bring up every other container, but the Enterprise API
+container will crash-loop - check `docker compose logs waltid-enterprise` if that happens.
 
 **Run The Stack**
 

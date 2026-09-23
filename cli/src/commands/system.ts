@@ -426,8 +426,18 @@ export async function setupCreateAdminAccount(ctx: CommandContext): Promise<void
  * intended target (a local `:waltid-enterprise-api-development:run`, or a down docker stack)
  * never sees the request.
  */
+/** Same literal string the server refuses to boot with - see config/dev-mode-access.conf. */
+const WELL_KNOWN_PLACEHOLDER_DEV_MODE_TOKEN = 'replace-with-a-per-deployment-secret';
+
 async function preflightCheck(ctx: CommandContext): Promise<boolean> {
   const adminUrl = buildBaseUrl(ctx.config.baseUrl, ctx.config.port);
+
+  if (ctx.config.devModeToken === WELL_KNOWN_PLACEHOLDER_DEV_MODE_TOKEN) {
+    console.log(`\n[ERROR] config/dev-mode-access.conf still has the shipped placeholder accessToken.`);
+    console.log(`       The Enterprise API refuses to start with that value - edit config/dev-mode-access.conf,`);
+    console.log(`       set accessToken to your own value, and restart docker compose before continuing.`);
+    return false;
+  }
 
   try {
     const response = await fetch(`${adminUrl}/features/registered`);
