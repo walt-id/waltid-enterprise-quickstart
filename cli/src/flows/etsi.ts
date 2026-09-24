@@ -19,7 +19,7 @@
 
 import { mkdirSync } from 'fs';
 import { CommandContext } from '../context.js';
-import { CERT_IDS, KEY_IDS, RESOURCES, MDL_DOC_TYPE, defaultWalletKeyReference } from '../config.js';
+import { CERT_IDS, KEY_IDS, RESOURCES, selectedMdocDcqlCredential, defaultWalletKeyReference } from '../config.js';
 import { MDL_ISSUER_SERVICE_TYPE } from '../trust-registry/index.js';
 import {
   getStoredCertificatePem,
@@ -77,20 +77,7 @@ async function createEtsiVerificationSession(ctx: CommandContext): Promise<void>
     keyReference,
     core_flow: {
       dcql_query: {
-        credentials: [
-          {
-            id: 'my_mdl',
-            format: 'mso_mdoc',
-            meta: {
-              doctype_value: MDL_DOC_TYPE,
-            },
-            claims: [
-              { path: ['org.iso.18013.5.1', 'family_name'] },
-              { path: ['org.iso.18013.5.1', 'given_name'] },
-              { path: ['org.iso.18013.5.1', 'birth_date'] },
-            ],
-          },
-        ],
+        credentials: [selectedMdocDcqlCredential('my')],
       },
       policies: {
         vc_policies: vcPolicies,

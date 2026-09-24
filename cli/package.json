@@ -12,7 +12,7 @@
     "walt": "tsx walt.ts",
     "build": "tsc",
     "typecheck": "tsc --noEmit",
-    "test": "tsx --test src/commands/setup/trust.test.ts"
+    "test": "tsx --test src/commands/setup/trust.test.ts src/config.test.ts"
   },
   "keywords": [
     "walt.id",

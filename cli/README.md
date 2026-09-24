@@ -39,13 +39,12 @@ This will recreate the database and run the full setup from scratch.
 
 ## Flows Available
 
-We currently have the following flows. The ETSI Trust Lists and Trust List Assurance flows below
-always exercise mDL sample data, independent of `CREDENTIAL_TYPE` — only the primary use case above
-switches between PID and mDL.
+We currently have the following flows. Issue and present use the same `CREDENTIAL_TYPE` as setup
+(PID by default, or mDL when `CREDENTIAL_TYPE=mdl`).
 
 ### ETSI Trust Lists Flow
 
-This flow demonstrates trust list verification using the Enterprise Trust Registry Service. It issues and presents an mDL against `etsi-trust-list`, using a signed OpenID4VP Request Object and encrypted response. Wallet2 authenticates the JAR by chaining the request-signing leaf to the IACA pinned on Wallet2. The RP LoTE lists that leaf as a relying party; the IACA stays a PID/mDL issuer. Unsigned Verifier2 services omit `clientId` so they bind as `redirect_uri`.
+This flow demonstrates trust list verification using the Enterprise Trust Registry Service. It issues and presents the selected credential against `etsi-trust-list`, using a signed OpenID4VP Request Object and encrypted response. Wallet2 authenticates the JAR by chaining the request-signing leaf to the IACA pinned on Wallet2. The RP LoTE lists that leaf as a relying party; the IACA stays a PID/mDL issuer. Unsigned Verifier2 services omit `clientId` so they bind as `redirect_uri`.
 
 ```bash
 npx tsx walt.ts --flow-etsi-trust-lists

@@ -11,7 +11,7 @@
  */
 
 import { CommandContext } from '../context.js';
-import { RESOURCES, STATUS_CONFIG_IDS, CREDENTIAL_TYPES, getCredentialType, defaultWalletDidReference } from '../config.js';
+import { RESOURCES, STATUS_CONFIG_IDS, selectedMdocDcqlCredential, defaultWalletDidReference } from '../config.js';
 
 /** Present can return before verifier policy evaluation finishes. */
 const IN_PROGRESS_SESSION_STATUSES = new Set(['IN_USE']);
@@ -182,9 +182,6 @@ export async function runCreateVerificationSession(
   
   ctx.log(`Create verifier2 session (${policyDesc})`, 'RUN');
 
-  const credType = getCredentialType();
-  const credConfig = CREDENTIAL_TYPES[credType];
-
   const vcPolicies: any[] = [
     { policy: 'signature' },
   ];
@@ -212,16 +209,7 @@ export async function runCreateVerificationSession(
     flow_type: 'cross_device',
     core_flow: {
       dcql_query: {
-        credentials: [
-          {
-            id: `my_${credType}`,
-            format: 'mso_mdoc',
-            meta: {
-              doctype_value: credConfig.docType,
-            },
-            claims: credConfig.claims.map(claim => ({ path: [credConfig.namespace, claim] })),
-          },
-        ],
+        credentials: [selectedMdocDcqlCredential('my')],
       },
       policies: {
         vc_policies: vcPolicies,

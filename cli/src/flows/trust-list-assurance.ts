@@ -4,10 +4,12 @@ import { basename } from 'path';
 import { CommandContext } from '../context.js';
 import {
   CERT_IDS,
+  CREDENTIAL_TYPES,
   defaultWalletDidReference,
   defaultWalletKeyReference,
-  MDL_DOC_TYPE,
+  getCredentialType,
   RESOURCES,
+  selectedMdocDcqlCredential,
 } from '../config.js';
 import { setupLogin, linkVerifier2ToTrustRegistry } from '../commands/setup/index.js';
 import { clearWalletCredentials, runWalletPresent, waitForSessionInfo } from '../commands/run.js';
@@ -215,7 +217,7 @@ function extractCredentialIds(receiveResponse: any): string[] {
 }
 
 /**
- * Issue from the existing mdl-profile, overriding x5Chain to leaf-only for this offer.
+ * Issue from the existing issuer profile, overriding x5Chain to leaf-only for this offer.
  * Issuer2 merges CredentialOfferCreateRequest.runtimeOverrides over the profile
  * (x5Chain replaces; credentialData deep-merges).
  */
@@ -224,6 +226,7 @@ async function testVerifierIntegration(
   leafPem: string,
   expectedSourceId: string
 ): Promise<void> {
+  const credConfig = CREDENTIAL_TYPES[getCredentialType()];
   const profilePath = `${ctx.tenantPath}.${RESOURCES.issuer}.${RESOURCES.issuerProfile}`;
   await clearWalletCredentials(ctx);
 
@@ -236,10 +239,9 @@ async function testVerifierIntegration(
         pemEncodedCertificate: leafPem,
       }],
       credentialData: {
-        'org.iso.18013.5.1': {
+        [credConfig.namespace]: {
           family_name: 'Trust List',
           given_name: 'Root Omitted',
-          document_number: 'TRUSTLIST01',
         },
       },
     },
@@ -251,7 +253,7 @@ async function testVerifierIntegration(
   );
   ctx.saveJson('trust-list-offer-response.json', offerResponse.data, step);
   const offerUrl = offerResponse.data.credentialOffer;
-  if (!offerUrl) throw new Error('mdl-profile did not return a credential offer');
+  if (!offerUrl) throw new Error(`${RESOURCES.issuerProfile} did not return a credential offer`);
 
   step = ctx.nextStep();
   const receiveRequest = {
@@ -272,15 +274,7 @@ async function testVerifierIntegration(
     flow_type: 'cross_device',
     core_flow: {
       dcql_query: {
-        credentials: [{
-          id: 'trust_list_mdl',
-          format: 'mso_mdoc',
-          meta: { doctype_value: MDL_DOC_TYPE },
-          claims: [
-            { path: ['org.iso.18013.5.1', 'family_name'] },
-            { path: ['org.iso.18013.5.1', 'given_name'] },
-          ],
-        }],
+        credentials: [selectedMdocDcqlCredential('trust_list')],
       },
       policies: {
         vc_policies: [
