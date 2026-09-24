@@ -173,6 +173,22 @@ export function getCredentialType(): CredentialType {
   return value;
 }
 
+/**
+ * DCQL credential query for the issuer profile selected by CREDENTIAL_TYPE.
+ * Flows that issue from `RESOURCES.issuerProfile` must present with this query;
+ * a hardcoded mDL doctype against a PID profile yields OID4VP `access_denied`.
+ */
+export function selectedMdocDcqlCredential(idPrefix: string) {
+  const credType = getCredentialType();
+  const credConfig = CREDENTIAL_TYPES[credType];
+  return {
+    id: `${idPrefix}_${credType}`,
+    format: 'mso_mdoc' as const,
+    meta: { doctype_value: credConfig.docType },
+    claims: credConfig.claims.map(claim => ({ path: [credConfig.namespace, claim] })),
+  };
+}
+
 // ============================================================================
 // Type Definitions
 // ============================================================================
