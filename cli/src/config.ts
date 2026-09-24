@@ -94,8 +94,84 @@ export const CLI_DS_CRL_URI = 'https://walt-cli.example/crl';
 /** mDL document type */
 export const MDL_DOC_TYPE = 'org.iso.18013.5.1.mDL';
 
+/** PID (mdoc) document type. Doubles as the mdoc namespace, per ARF Annex 3.01 (PID Rulebook) 3.1.1. */
+export const PID_DOC_TYPE = 'eu.europa.ec.eudi.pid.1';
+
+/** Verifier2 client ID */
+export const VERIFIER2_CLIENT_ID = 'walt-cli-verifier';
 /** id-kp-clientAuth — required for Wallet2 signed Request Object (x509_hash) authentication */
 export const CLIENT_AUTH_EKU_OID = '1.3.6.1.5.5.7.3.2';
+
+// ============================================================================
+// Credential Type Configuration
+// ============================================================================
+
+/** Credential types the CLI's primary use case can issue and verify */
+export type CredentialType = 'mdl' | 'pid';
+
+/** Per-credential-type doctype, namespace, verification claims and sample issuer data */
+export interface CredentialTypeConfig {
+  /** mso_mdoc doctype, used as credentialConfigurationId and DCQL meta.doctype_value */
+  docType: string;
+  /** mdoc namespace the attributes below live under */
+  namespace: string;
+  /** Attributes requested by the verifier's DCQL query, in the namespace above */
+  claims: string[];
+  /** Sample credentialData issued to the issuer profile, in the namespace above */
+  credentialData: Record<string, unknown>;
+}
+
+/**
+ * Sample data and claim selection per credential type.
+ *
+ * PID mandatory attributes per ARF Annex 3.01 (PID Rulebook) v1.7: family_name,
+ * given_name, birth_date, birth_place, nationality, portrait (attributes) plus
+ * issuing_authority, issuing_country (metadata). `age_over_18` is not a PID
+ * attribute - it was removed from the PID following CIR 2024/2977 (Rulebook v1.1) -
+ * so `nationality` is requested instead as a mandatory, KYC-relevant attribute.
+ */
+export const CREDENTIAL_TYPES: Record<CredentialType, CredentialTypeConfig> = {
+  mdl: {
+    docType: MDL_DOC_TYPE,
+    namespace: 'org.iso.18013.5.1',
+    claims: ['family_name', 'given_name', 'birth_date'],
+    credentialData: {
+      family_name: 'Doe',
+      given_name: 'John',
+      birth_date: '1990-01-01',
+      issue_date: '2024-01-01',
+      expiry_date: '2029-01-01',
+      issuing_country: 'US',
+      issuing_authority: 'Test DMV',
+      document_number: 'DL123456789',
+      un_distinguishing_sign: 'USA',
+    },
+  },
+  pid: {
+    docType: PID_DOC_TYPE,
+    namespace: PID_DOC_TYPE,
+    claims: ['family_name', 'given_name', 'birth_date', 'nationality'],
+    credentialData: {
+      family_name: 'Schneider',
+      given_name: 'Anna',
+      birth_date: '1985-03-12',
+      nationality: ['DE'],
+      issuance_date: '2024-01-01',
+      expiry_date: '2029-01-01',
+      issuing_country: 'DE',
+      issuing_authority: 'Bundesdruckerei GmbH',
+    },
+  },
+};
+
+/** Selected credential type, from CREDENTIAL_TYPE env var, defaulting to 'pid' */
+export function getCredentialType(): CredentialType {
+  const value = (process.env.CREDENTIAL_TYPE || 'pid').toLowerCase();
+  if (value !== 'mdl' && value !== 'pid') {
+    throw new Error(`Unsupported CREDENTIAL_TYPE '${value}'. Expected 'mdl' or 'pid'.`);
+  }
+  return value;
+}
 
 // ============================================================================
 // Type Definitions
@@ -110,6 +186,8 @@ export interface Config {
   password: string;
   port: number;
   superadminToken: string;
+  /** Required by the server to call /v1/dev/* once dev-mode is enabled; see config/dev-mode-access.conf */
+  devModeToken: string;
   adminEmail: string;
   adminPassword: string;
   /** Custom domain for host alias (optional) */
@@ -153,6 +231,10 @@ export interface SuperadminCredentials {
   token: string;
   email: string;
   password: string;
+}
+
+export interface DevModeAccessCredentials {
+  accessToken: string;
 }
 
 // ============================================================================
@@ -255,12 +337,37 @@ export function readSuperadminConfig(configDir: string): SuperadminCredentials {
 }
 
 /**
+ * Read the dev-mode-access token from config file.
+ * Falls back to an empty value if the file doesn't exist - the server fails closed the
+ * same way (refuses /v1/dev/* with 503) rather than silently allowing unauthenticated access.
+ */
+export function readDevModeAccessConfig(configDir: string): DevModeAccessCredentials {
+  const configPath = join(configDir, 'config', 'dev-mode-access.conf');
+
+  const defaults: DevModeAccessCredentials = { accessToken: '' };
+
+  if (!existsSync(configPath)) {
+    return defaults;
+  }
+
+  try {
+    const content = readFileSync(configPath, 'utf-8');
+    const match = content.match(/accessToken\s*=\s*"([^"]+)"/);
+    if (match) defaults.accessToken = match[1];
+    return defaults;
+  } catch {
+    return defaults;
+  }
+}
+
+/**
  * Create configuration from environment variables.
  * @param projectRoot - Root directory of the project (for config file lookup)
  */
 export function createConfig(projectRoot: string): Config {
   const superadminCreds = readSuperadminConfig(projectRoot);
-  
+  const devModeCreds = readDevModeAccessConfig(projectRoot);
+
   return {
     baseUrl: process.env.BASE_URL || 'enterprise.localhost',
     organization: process.env.ORGANIZATION || 'waltid',
@@ -271,6 +378,7 @@ export function createConfig(projectRoot: string): Config {
       ? parseInt(process.env.PORT) 
       : 0,  // Default to no port (uses protocol default: 80 for HTTP, 443 for HTTPS)
     superadminToken: process.env.SUPERADMIN_TOKEN || superadminCreds.token || '',
+    devModeToken: process.env.DEV_MODE_TOKEN || devModeCreds.accessToken || '',
     adminEmail: process.env.ADMIN_EMAIL || 'admin@walt.id',
     adminPassword: process.env.ADMIN_PASSWORD || 'admin123456',
     hostAliasDomain: process.env.HOST_ALIAS_DOMAIN || undefined,

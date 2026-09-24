@@ -178,6 +178,7 @@ Other Options:
   --help, -h              Show this help message
 
 Environment Variables:
+  CREDENTIAL_TYPE         Primary use case credential type: 'pid' or 'mdl' (default: pid)
   BASE_URL                Enterprise stack base URL (default: enterprise.localhost)
   PORT                    Port number (default: none, uses protocol default)
   ORGANIZATION            Organization ID (default: waltid)
@@ -367,18 +368,25 @@ async function main(): Promise<void> {
 
     // System commands
     if (args.includes('--recreate')) {
-      await runSystemInit(ctx);
-      await runFull(ctx);
+      if (await runSystemInit(ctx)) {
+        await runFull(ctx);
+      } else {
+        process.exitCode = 1;
+      }
       return;
     }
 
     if (args.includes('--init-system')) {
-      await runSystemInit(ctx);
+      if (!(await runSystemInit(ctx))) {
+        process.exitCode = 1;
+      }
       return;
     }
 
     if (args.includes('--setup-recreate')) {
-      await runSystemInit(ctx);
+      if (!(await runSystemInit(ctx))) {
+        process.exitCode = 1;
+      }
       return;
     }
 

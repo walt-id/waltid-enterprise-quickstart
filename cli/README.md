@@ -1,6 +1,6 @@
 # Enterprise CLI Tool
 
-The purpose of this tool is to help new customers understand how the setup works for the Enterprise stack. It also contains commands for running common flows or flows which are related to some of our white label demos, which are available (here)[https://github.com/walt-id/waltid-enterprise-examples].
+The purpose of this tool is to help new customers understand how the setup works for the Enterprise stack. It also contains commands for running common flows or flows which are related to some of our white label demos, which are available [here](https://github.com/walt-id/waltid-enterprise-examples).
 
 
 ## Getting Started
@@ -9,14 +9,26 @@ There are a number of environment variable files which can be created. You will 
 
 You can utilise the default values for your first run, then customise later on based on your needs.
 
-Run the enterprise stack locally, using the guide found (here)[../README.md]. Once it is up and running, you can start using the CLI in this directory by running 
+Run the enterprise stack locally, using the guide found [here](../README.md). Once it is up and running, you can start using the CLI in this directory by running 
 
 ```bash
 npm install
 npx tsx walt.ts
 ```
 
-This will run the full setup and primary use case (issue and verify mDL credential) to ensure the setup succeeded
+This will run the full setup and primary use case (issue and verify a **PID** credential — mdoc,
+`eu.europa.ec.eudi.pid.1` — by default) to ensure the setup succeeded. Set `CREDENTIAL_TYPE=mdl` to
+run the **mDL** flow instead, e.g. `CREDENTIAL_TYPE=mdl npx tsx walt.ts`.
+
+`CREDENTIAL_TYPE` must match between setup and run: the issuer is only configured for one credential
+type at a time, decided by whichever `CREDENTIAL_TYPE` was active during `--setup-all`/`--recreate`.
+Changing it for a later plain `npx tsx walt.ts` without recreating fails with
+`credentialConfigurationId '...' is not configured in this issuer service` — pass the same
+`CREDENTIAL_TYPE` you set up with, or add `--recreate` to switch:
+
+```bash
+CREDENTIAL_TYPE=mdl npx tsx walt.ts --recreate
+```
 
 At any point, you can recreate this initial setup by running
 
@@ -27,7 +39,9 @@ This will recreate the database and run the full setup from scratch.
 
 ## Flows Available
 
-We currently have the following flows:
+We currently have the following flows. The ETSI Trust Lists and Trust List Assurance flows below
+always exercise mDL sample data, independent of `CREDENTIAL_TYPE` — only the primary use case above
+switches between PID and mDL.
 
 ### ETSI Trust Lists Flow
 
@@ -67,9 +81,9 @@ npx tsx walt.ts --flow-credential-revocation
 
 ### Bank Tenant Setup
 
-This setup will create a separate tenant within the enterprise stack (bank-tenant), which is used for the bank demo found (here)[https://github.com/walt-id/waltid-enterprise-examples/tree/main/waltid-bank-demo].
+This setup will create a separate tenant within the enterprise stack (bank-tenant), which is used for the bank demo found [here](https://github.com/walt-id/waltid-enterprise-examples/tree/main/waltid-bank-demo).
 
-For this flow, you will need to configure the bank-tenant.env file with the correct values. You can find an example of the bank-tenant.env file (here)[bank-tenant.env.example]. These will need to align with the environment variables used in the bank demo. The examples in both repositories currently match, but beware if you make any updates!
+For this flow, you will need to configure the bank-tenant.env file with the correct values. You can find an example of the bank-tenant.env file [here](bank-tenant.env.example). These will need to align with the environment variables used in the bank demo. The examples in both repositories currently match, but beware if you make any updates!
 
 ```bash
 npx tsx walt.ts --setup-bank-tenant
@@ -77,9 +91,9 @@ npx tsx walt.ts --setup-bank-tenant
 
 ### Government Services Setup
 
-This setup will create a separate tenant within the enterprise stack (gov-central), which is used for the government services demo found (here)[https://github.com/walt-id/waltid-enterprise-examples/tree/main/waltid-gov-serice].
+This setup will create a separate tenant within the enterprise stack (gov-central), which is used for the government services demo found [here](https://github.com/walt-id/waltid-enterprise-examples/tree/main/waltid-gov-serice).
 
-For this flow, you will need to configure the gov-services.env file with the correct values. You can find an example of the gov-services.env file (here)[gov-services.env.example]. These will need to align with the environment variables used in the government services demo. The examples in both repositories currently match, but beware if you make any updates!
+For this flow, you will need to configure the gov-services.env file with the correct values. You can find an example of the gov-services.env file [here](gov-services.env.example). These will need to align with the environment variables used in the government services demo. The examples in both repositories currently match, but beware if you make any updates!
 
 ```bash
 npx tsx walt.ts --setup-gov-services
