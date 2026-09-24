@@ -177,10 +177,14 @@ resource "kubectl_manifest" "mongodb_replica_set" {
           volumeClaimTemplates = [
             {
               metadata = { name = "data-volume" }
-              spec = {
+              # storageClassName is set only when provisioned IOPS or throughput were asked for, so the claim
+              # keeps inheriting the default class otherwise.
+              spec = merge({
                 accessModes = ["ReadWriteOnce"]
                 resources   = { requests = { storage = var.mongodb_data_volume_size } }
-              }
+                }, length(kubernetes_storage_class.gp3_mongodb_data) > 0 ? {
+                storageClassName = kubernetes_storage_class.gp3_mongodb_data[0].metadata[0].name
+              } : {})
             },
             {
               metadata = { name = "logs-volume" }
