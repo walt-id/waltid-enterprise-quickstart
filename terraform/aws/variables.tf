@@ -222,6 +222,24 @@ variable "mongodb_logs_volume_size" {
   default     = "2Gi"
 }
 
+variable "mongodb_data_volume_iops" {
+  description = <<-EOT
+    Provisioned IOPS for the MongoDB data volume, or 0 to leave the gp3 default of 3000.
+
+    Size does not raise gp3 IOPS: a 400Gi volume still gets 3000 IOPS and 125 MB/s unless they are set
+    explicitly. That ceiling is invisible in the database's own CPU - a throttled volume makes mongod wait
+    rather than work - so it looks like the application being slow rather than the storage being capped.
+  EOT
+  type        = number
+  default     = 0
+}
+
+variable "mongodb_data_volume_throughput" {
+  description = "Provisioned throughput in MB/s for the MongoDB data volume, or 0 to leave the gp3 default of 125."
+  type        = number
+  default     = 0
+}
+
 variable "documentdb_instance_class" {
   description = "Instance class for DocumentDB"
   type        = string
