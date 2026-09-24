@@ -681,7 +681,6 @@ async function createEudiVerifier(
       const request = {
         type: 'verifier2',
         baseUrl: config.serviceBaseUrl,
-        clientId: 'eudi-demo-verifier',
         clientMetadata: buildEudiVerifierClientMetadata(config),
       };
       ctx.saveJson('create-eudi-verifier-request.json', request);

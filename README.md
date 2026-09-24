@@ -170,6 +170,12 @@ key is encrypted with the same secret and cannot be kept anyway.
 **DEV** license. A PROD license refuses to start while `dev-mode` is enabled, and vice versa. Remove
 `dev-mode` from `enabledFeatures` before using a PROD license.
 
+With `dev-mode` enabled, its `/v1/dev/*` endpoints (used by the CLI's `--recreate`/`--init-system`)
+additionally require a matching `X-Dev-Mode-Token` header, configured via `config/dev-mode-access.conf`'s
+`accessToken` - see [Set a dev-mode access token](#use-docker-compose) above; the server refuses to start
+at all with the value it ships with. The CLI reads that same file automatically; override it with the
+`DEV_MODE_TOKEN` environment variable if you point the CLI at a different server.
+
 ### Troubleshooting
 
 - Container exits during startup - the license was rejected. `docker compose logs waltid-enterprise`
@@ -179,6 +185,9 @@ key is encrypted with the same secret and cannot be kept anyway.
   `LICENSE_STATE_ENCRYPTION_KEY` or leftover `license_state` than the `license request` run).
 - Every endpoint returns `503 Enterprise API is unavailable because the license is not active` - the
   process started but the license is not active. `GET /livez` still responds in this state.
+- Enterprise API container crash-loops, or `/v1/dev/*` returns `503` / `401` - `config/dev-mode-access.conf`
+  still has the shipped placeholder `accessToken`, is unset, or doesn't match what the CLI sends. See
+  [Set a dev-mode access token](#use-docker-compose) above.
 - `Heartbeat failed: ... 403 Forbidden: License '<id>' has no installation binding` - the license is
   not bound to your installation. Either the installation key was discarded with
   `license reset --include-installation-key` and walt.id has not unbound the license, or the license
@@ -220,6 +229,21 @@ git clone https://github.com/walt-id/waltid-enterprise-quickstart.git
 ```bash
 cd waltid-enterprise-quickstart
 ```
+
+**Set a dev-mode access token**
+
+`config/_features.conf` enables `dev-mode`, which requires `config/dev-mode-access.conf` to hold a real,
+secret `accessToken` before the Enterprise API will start at all. Since this repo is public, no value
+committed here could ever be a real secret - `config/dev-mode-access.conf` ships with the same literal
+placeholder walt.id's own documentation uses as an example, `"replace-with-a-per-deployment-secret"`,
+which the server explicitly refuses to boot with. Edit that file and set your own value before continuing:
+
+```hocon[config/dev-mode-access.conf]
+accessToken = "<a value only you know>"
+```
+
+If you skip this, `docker compose up` will bring up every other container, but the Enterprise API
+container will crash-loop - check `docker compose logs waltid-enterprise` if that happens.
 
 **Run The Stack**
 
@@ -279,22 +303,33 @@ cd waltid-enterprise-quickstart
 cd cli
 npm install
 
-# Run full setup + primary use case (mDL issuance & verification)
+# Run full setup + primary use case (PID issuance & verification, by default)
 npx tsx walt.ts --recreate
 
 # Subsequence calls don't need to recreate the DB:
 npx tsx walt.ts
 ```
 
+The primary use case issues and verifies a **PID** (mdoc, `eu.europa.ec.eudi.pid.1`) credential by
+default. Set `CREDENTIAL_TYPE=mdl` to run the **mDL** (`org.iso.18013.5.1.mDL`) flow instead:
+
+```bash
+CREDENTIAL_TYPE=mdl npx tsx walt.ts --recreate
+```
+
+The issuer is only configured for one credential type at a time, so pair `CREDENTIAL_TYPE` with
+`--recreate` when switching — see [cli/README.md](cli/README.md) for details.
+
 ### Common Commands
 
-| Command                       | Description                             |
-|-------------------------------|-----------------------------------------|
-| `npx tsx walt.ts`             | Full setup + primary use case (default) |
-| `npx tsx walt.ts --recreate`  | Recreate database and run full setup    |
-| `npx tsx walt.ts --setup-all` | Run all setup commands                  |
-| `npx tsx walt.ts --run-all`   | Run primary use case only               |
-| `npx tsx walt.ts --help`      | Show all available commands             |
+| Command                                   | Description                                      |
+|--------------------------------------------|--------------------------------------------------|
+| `npx tsx walt.ts`                         | Full setup + primary use case (default)          |
+| `npx tsx walt.ts --recreate`              | Recreate database and run full setup             |
+| `npx tsx walt.ts --setup-all`             | Run all setup commands                           |
+| `npx tsx walt.ts --run-all`               | Run primary use case only                        |
+| `npx tsx walt.ts --help`                  | Show all available commands                      |
+| `CREDENTIAL_TYPE=mdl npx tsx walt.ts ...` | Run the mDL flow instead of the default PID flow |
 
 ### Configuration
 
@@ -312,7 +347,8 @@ our [changelogs](https://docs.walt.id/enterprise-stack/release-notes/overview) t
 releases and pre-releases of the Enterprise Stack.
 
 Need Support? As an Enterprise customer you should also have a support contract with us. Please
-raise any issues via the , or reach out to the team over email if you need to be given access.
+raise any issues via the [Support Portal](https://support.walt.id), or reach out to the team over
+email if you need to be given access.
 
 ## Join the community
 

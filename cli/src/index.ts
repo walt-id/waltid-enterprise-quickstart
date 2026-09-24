@@ -146,7 +146,7 @@ Setup Commands (create resources):
 
 Additional Setup Commands:
   --setup-create-trust-registry  Create trust registry service
-  --setup-etsi-trust-registry  Complete ETSI trust registry setup (create, link, import lists)
+  --setup-etsi-trust-registry  Complete ETSI trust registry setup (lists, IACA pin, RP LoTE, signed JAR)
   --setup-import-trust-list <file>  Import trust list from file
   --setup-create-oidc-bridge  Create OIDC Bridge service (OIDC IdP backed by VC verification)
   --clear-wallet-credentials  Clear all credentials from wallet (useful between flows)
@@ -178,6 +178,7 @@ Other Options:
   --help, -h              Show this help message
 
 Environment Variables:
+  CREDENTIAL_TYPE         Primary use case credential type: 'pid' or 'mdl' (default: pid)
   BASE_URL                Enterprise stack base URL (default: enterprise.localhost)
   PORT                    Port number (default: none, uses protocol default)
   ORGANIZATION            Organization ID (default: waltid)
@@ -367,18 +368,25 @@ async function main(): Promise<void> {
 
     // System commands
     if (args.includes('--recreate')) {
-      await runSystemInit(ctx);
-      await runFull(ctx);
+      if (await runSystemInit(ctx)) {
+        await runFull(ctx);
+      } else {
+        process.exitCode = 1;
+      }
       return;
     }
 
     if (args.includes('--init-system')) {
-      await runSystemInit(ctx);
+      if (!(await runSystemInit(ctx))) {
+        process.exitCode = 1;
+      }
       return;
     }
 
     if (args.includes('--setup-recreate')) {
-      await runSystemInit(ctx);
+      if (!(await runSystemInit(ctx))) {
+        process.exitCode = 1;
+      }
       return;
     }
 

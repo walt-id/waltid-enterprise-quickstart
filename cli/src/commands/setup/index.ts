@@ -11,6 +11,7 @@ export {
   setupCreateWallet,
   setupCreateVerifier2,
   setupCreateServices,
+  linkVerifier2ToKms,
   setupLinkX509Dependencies,
 } from './tenant.js';
 
@@ -20,6 +21,12 @@ export {
   setupCreateIacaCertificate,
   setupCreateDocumentSignerCertificate,
   setupStoreVicalSignerCertificate,
+  setupGenerateVerifierRequestSigningKey,
+  setupCreateVerifierRequestSigningCertificate,
+  getStoredCertificatePem,
+  kmsKeyRef,
+  x509HashClientId,
+  certificatePemToDerBase64,
 } from './keys.js';
 
 // Issuer
@@ -45,8 +52,11 @@ export {
   setupCreateTrustRegistry,
   setupImportTrustList,
   linkVerifier2ToTrustRegistry,
+  linkWallet2ToTrustRegistry,
   importPublicTrustLists,
   loadIacaIntoTrustRegistry,
+  pinWallet2RequestObjectTrustAnchor,
+  loadRelyingPartyIntoTrustRegistry,
   listTrustSources,
   setupEtsiTrustRegistry,
 } from './trust.js';
