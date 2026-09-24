@@ -238,13 +238,16 @@ const response = await ctx.orgClient.post(
 
 ### Service dependencies
 
-Link services using the dependency API:
+Link services using `CommandContext.addServiceDependency` (v2 JSON `{ dependency: path }`):
 
 ```typescript
-await ctx.orgClient.post(
-  `/v1/${ctx.tenantPath}.${RESOURCES.verifier2}/verifier2-service-api/dependencies/add`,
-  `${ctx.tenantPath}.${RESOURCES.trustRegistry}`,
-  'text/plain'
+await ctx.addServiceDependency(
+  `/v2/${ctx.tenantPath}.${RESOURCES.verifier2}/verifier-service-api/dependencies/add`,
+  `${ctx.tenantPath}.${RESOURCES.trustRegistry}`
+);
+await ctx.addServiceDependency(
+  `/v2/${ctx.tenantPath}.${RESOURCES.wallet}/wallet-service-api/dependencies/add`,
+  `${ctx.tenantPath}.${RESOURCES.trustRegistry}`
 );
 ```
 

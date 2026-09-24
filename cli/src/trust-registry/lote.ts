@@ -1,4 +1,7 @@
 export const MDL_ISSUER_SERVICE_TYPE = 'urn:waltid:trust-service:mdl-issuer';
+export const RELYING_PARTY_SERVICE_TYPE = 'urn:waltid:trust-service:relying-party';
+export const LOTE_TYPE_EU_PID_PROVIDERS = 'http://uri.etsi.org/19602/LoTEType/EUPIDProvidersList';
+export const LOTE_TYPE_EU_WRP_RC_PROVIDERS = 'http://uri.etsi.org/19602/LoTEType/EUWRPRCProvidersList';
 
 export interface LoteEntityInput {
   id: string;
@@ -30,7 +33,8 @@ function multilingualUri(uriValue: string): object {
 export function buildCertificateAnchorLote(
   listId: string,
   territory: string,
-  entities: LoteEntityInput[]
+  entities: LoteEntityInput[],
+  loteType: string = LOTE_TYPE_EU_PID_PROVIDERS
 ): object {
   const issueDate = new Date();
   const nextUpdate = new Date(issueDate.getTime() + 365 * 24 * 60 * 60 * 1000);
@@ -40,7 +44,7 @@ export function buildCertificateAnchorLote(
       ListAndSchemeInformation: {
         LoTEVersionIdentifier: 1,
         LoTESequenceNumber: 1,
-        LoTEType: 'http://uri.etsi.org/19602/LoTEType/EUPIDProvidersList',
+        LoTEType: loteType,
         SchemeOperatorName: [multilingual('walt.id quickstart operator')],
         SchemeOperatorAddress: {
           SchemeOperatorPostalAddress: [{
