@@ -47,6 +47,7 @@ export const KEY_IDS = {
   issuerSigningKey: 'issuer-signing-key',
   vicalSigningKey: 'vical-signing-key',
   attesterSigningKey: 'attester-signing-key',
+  verifierRequestSigningKey: 'verifier-request-signing-key',
 } as const;
 
 /** Default IDs created by Wallet2 composable init */
@@ -65,6 +66,7 @@ export const CERT_IDS = {
   vicalIacaCert: 'vical-iaca-cert',
   docSignerCert: 'vical-doc-signer-cert',
   vicalSignerCert: 'vical-signer-cert',
+  verifierRequestSigningCert: 'verifier-request-signing-cert',
 } as const;
 
 /** X.509 certificate profiles accepted by POST/PUT `/x509-service-api/certificates` */
@@ -80,6 +82,7 @@ export const CERT_PROFILES = {
 export const CERT_VALIDITY_DAYS = {
   iaca: 3650,
   documentSigner: 365,
+  verifierRequestSigning: 365,
 } as const;
 
 /** Issuer Alternative Name URI used by the default CLI IACA and document signer */
@@ -96,6 +99,8 @@ export const PID_DOC_TYPE = 'eu.europa.ec.eudi.pid.1';
 
 /** Verifier2 client ID */
 export const VERIFIER2_CLIENT_ID = 'walt-cli-verifier';
+/** id-kp-clientAuth — required for Wallet2 signed Request Object (x509_hash) authentication */
+export const CLIENT_AUTH_EKU_OID = '1.3.6.1.5.5.7.3.2';
 
 // ============================================================================
 // Credential Type Configuration

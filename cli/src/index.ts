@@ -146,7 +146,7 @@ Setup Commands (create resources):
 
 Additional Setup Commands:
   --setup-create-trust-registry  Create trust registry service
-  --setup-etsi-trust-registry  Complete ETSI trust registry setup (create, link, import lists)
+  --setup-etsi-trust-registry  Complete ETSI trust registry setup (lists, IACA pin, RP LoTE, signed JAR)
   --setup-import-trust-list <file>  Import trust list from file
   --setup-create-oidc-bridge  Create OIDC Bridge service (OIDC IdP backed by VC verification)
   --clear-wallet-credentials  Clear all credentials from wallet (useful between flows)

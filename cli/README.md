@@ -45,7 +45,7 @@ switches between PID and mDL.
 
 ### ETSI Trust Lists Flow
 
-This flow demonstrates trust list verification using the Enterprise Trust Registry Service. It will use the previously created trust registry and trust lists from the initial setup and show how to issue, accept, share and verify credentials all following key trust principles.
+This flow demonstrates trust list verification using the Enterprise Trust Registry Service. It issues and presents an mDL against `etsi-trust-list`, using a signed OpenID4VP Request Object and encrypted response. Wallet2 authenticates the JAR by chaining the request-signing leaf to the IACA pinned on Wallet2. The RP LoTE lists that leaf as a relying party; the IACA stays a PID/mDL issuer. Unsigned Verifier2 services omit `clientId` so they bind as `redirect_uri`.
 
 ```bash
 npx tsx walt.ts --flow-etsi-trust-lists
