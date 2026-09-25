@@ -168,6 +168,15 @@ resource "aws_eks_node_group" "main" {
 
   instance_types = var.node_instance_types
 
+  # EKS defaults the AMI to x86 when this is unset, so an arm64 instance type would receive an x86 image and the
+  # node would never join the cluster. Derived from the requested instance types rather than exposed as another
+  # variable: Graviton families carry a "g" after the generation digit (c7g, c8g, m7g), which is unambiguous.
+  ami_type = length([for t in var.node_instance_types : t if can(regex("^[a-z]+[0-9]+g[a-z]*\\.", t))]) > 0 ? "AL2023_ARM_64_STANDARD" : "AL2023_x86_64_STANDARD"
+
+  # Left to the AWS default (ON_DEMAND) unless asked for: spot instances can be reclaimed mid-run, which shows
+  # up as nodes disappearing from a load test rather than as an obvious infrastructure event.
+  capacity_type = var.node_capacity_type
+
   scaling_config {
     desired_size = var.node_desired_size
     min_size     = var.node_min_size
@@ -193,6 +202,43 @@ resource "aws_eks_node_group" "main" {
   ]
 
   tags = merge(local.common_tags, { Name = "${var.cluster_name}-node-group" })
+}
+
+# Nodes for the load generator itself, kept off the nodes under test.
+#
+# The taint is the point: without it the generator would be scheduled onto API nodes and would compete for the
+# CPU whose utilisation we are trying to measure. The generator's Job tolerates `dedicated=loadgen`, nothing else
+# does.
+resource "aws_eks_node_group" "loadgen" {
+  count = var.loadgen_node_count > 0 ? 1 : 0
+
+  cluster_name    = aws_eks_cluster.main.name
+  node_group_name = "${var.cluster_name}-loadgen"
+  node_role_arn   = aws_iam_role.node.arn
+  subnet_ids      = aws_subnet.private[*].id
+
+  instance_types = var.loadgen_instance_types
+  capacity_type  = var.loadgen_capacity_type
+  ami_type       = length([for t in var.loadgen_instance_types : t if can(regex("^[a-z]+[0-9]+g[a-z]*\\.", t))]) > 0 ? "AL2023_ARM_64_STANDARD" : "AL2023_x86_64_STANDARD"
+  disk_size      = 50
+
+  scaling_config {
+    desired_size = var.loadgen_node_count
+    min_size     = var.loadgen_node_count
+    max_size     = var.loadgen_node_count
+  }
+
+  labels = {
+    role = "loadgen"
+  }
+
+  taint {
+    key    = "dedicated"
+    value  = "loadgen"
+    effect = "NO_SCHEDULE"
+  }
+
+  tags = var.tags
 }
 
 resource "aws_eks_addon" "vpc_cni" {

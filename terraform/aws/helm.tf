@@ -31,6 +31,13 @@ resource "helm_release" "traefik" {
     value = "internet-facing"
   }
 
+  # The chart exposes no key for this, so it goes in as a static CLI argument. Only websecure is
+  # set: it is the entrypoint the ingress serves, and `web` only redirects to it.
+  set {
+    name  = "additionalArguments[0]"
+    value = "--entrypoints.websecure.http2.maxconcurrentstreams=${var.traefik_max_concurrent_streams}"
+  }
+
   depends_on = [
     aws_eks_addon.vpc_cni,
     aws_eks_addon.coredns,
@@ -177,6 +184,33 @@ resource "kubernetes_storage_class" "gp3" {
     type      = "gp3"
     encrypted = "true"
   }
+
+  depends_on = [aws_eks_addon.ebs_csi]
+}
+
+# A gp3 volume's IOPS do not scale with its size: 400Gi still gets 3000 IOPS and 125 MB/s. A database volume
+# that needs more has to say so, and only the database volume should pay for it, so this is a separate class
+# rather than a change to the default one above. Created only when asked for, so the default stays as it was.
+resource "kubernetes_storage_class" "gp3_mongodb_data" {
+  count = var.mongodb_data_volume_iops > 0 || var.mongodb_data_volume_throughput > 0 ? 1 : 0
+
+  metadata {
+    name = "gp3-mongodb-data"
+  }
+
+  storage_provisioner    = "ebs.csi.aws.com"
+  reclaim_policy         = var.gp3_storage_class_reclaim_policy
+  volume_binding_mode    = "WaitForFirstConsumer"
+  allow_volume_expansion = true
+
+  parameters = merge(
+    {
+      type      = "gp3"
+      encrypted = "true"
+    },
+    var.mongodb_data_volume_iops > 0 ? { iops = tostring(var.mongodb_data_volume_iops) } : {},
+    var.mongodb_data_volume_throughput > 0 ? { throughput = tostring(var.mongodb_data_volume_throughput) } : {},
+  )
 
   depends_on = [aws_eks_addon.ebs_csi]
 }
