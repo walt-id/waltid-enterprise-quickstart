@@ -142,6 +142,7 @@ The `--setup-etsi-trust-registry` command performs:
 - Create trust registry service
 - Link Verifier2 to Trust Registry
 - Import the Austrian, German and Italian national TSLs and the EU LoTL
+- Pin the German TSL's real signer certificate via `trustedSourceSignerCertificates`, then re-load it under `REQUIRE_AUTHENTICATED` to prove the pin is honored
 - Load local IACA certificate into trust registry (PID providers list)
 - Generate a verifier request-signing key and IACA-issued leaf with `clientAuth`
 - Pin the IACA on Wallet2 (`requestObjectX509Trust.x509TrustAnchorsPem`) so `x509_hash` PKIX can chain the leaf

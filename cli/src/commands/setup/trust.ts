@@ -204,6 +204,131 @@ export async function importPublicTrustLists(ctx: CommandContext): Promise<void>
   }
 }
 
+/**
+ * Real signer certificate of Germany's national TSL (BNetzA), extracted from that list's own
+ * ds:Signature/ds:KeyInfo at https://tl.bundesnetzagentur.de/TL-DE.xml on 2026-09-28.
+ * CN=German Trusted List Signer 14, O=Federal Network Agency, C=DE,
+ * SHA-256 88:BB:9B:30:8D:E7:09:08:AC:55:58:3A:9F:8D:22:E6:93:34:C0:99:C8:B9:C5:A8:C5:8D:53:4A:40:EF:DF:C1,
+ * valid until 2027-04-29.
+ *
+ * If BNetzA rotates this certificate, demonstrateAuthenticatedSignerTrust below will start
+ * failing with SIGNATURE_VALIDATION_FAILED - re-extract the current one from the list's own
+ * <ds:X509Certificate> and replace the constant below.
+ */
+const GERMAN_TSL_SIGNER_CERTIFICATE_PEM = `-----BEGIN CERTIFICATE-----
+MIIGAzCCA7egAwIBAgIBDjBBBgkqhkiG9w0BAQowNKAPMA0GCWCGSAFlAwQCAwUA
+oRwwGgYJKoZIhvcNAQEIMA0GCWCGSAFlAwQCAwUAogMCAUAwVjEmMCQGA1UEAwwd
+R2VybWFuIFRydXN0ZWQgTGlzdCBTaWduZXIgMTQxHzAdBgNVBAoMFkZlZGVyYWwg
+TmV0d29yayBBZ2VuY3kxCzAJBgNVBAYTAkRFMB4XDTI1MDQyOTA3NDUxM1oXDTI3
+MDQyOTA3NDUxM1owVjEmMCQGA1UEAwwdR2VybWFuIFRydXN0ZWQgTGlzdCBTaWdu
+ZXIgMTQxHzAdBgNVBAoMFkZlZGVyYWwgTmV0d29yayBBZ2VuY3kxCzAJBgNVBAYT
+AkRFMIICIDALBgkqhkiG9w0BAQoDggIPADCCAgoCggIBAL7YYJr/2Aep/qIzTi2y
+5uYDW86oJT/l9nEwiW4ZDaeb6YMrsAk+x4HpoHKAVRIwPzCM2o5lKLMFapbgh1+e
+Uc7fuK24ApWD30vm70M6AUD8u1o5QogJ0Z699NEP0alaJjhNJNcSmrh2bVanuWAT
+mF2gzLFNNht8pXux+a9maHOUSxBFL1aX0IMehEqkAWeITeHQ5FiXo8vy+ij9MaKv
+FuyCEkQ8RZzi68B9a3Aywxgaq0sXJFRFZAMU8ihOA7FFf/1C4Ymw//2ZpTfwicRV
+rE8dd/HLa87iH349dJAqALuLh4rvuH0gSbd31J6qC2VwLAml2XFED0Jag7fx0ozT
+skfT8PN70Is32HX1VnV7Kljq40lsgwgop0DJyGUVsglprPcgfqvp4TzUTnXvVOxD
+GaXbnATOTCjxVAloxRMMo8lCf87mTcCEiT8kWxFyvHTrRxzrcJxq1CzxdpuliLzk
+joTFlauGKPH5dDhy9F08eZBc4KBBqZ7ni/P5UCVObdA92A/Y/+YYJfIMkiqqSM23
+70s/xT9br86umed9IJEVLL1AvqM9Uip89MGK9flW7GFWjs1okjAXD11SaptZge1d
+Gja+cwX1apz1ywsjwx8KhrAsKt00LKqLzyphcfKMi2r3n5KkeEe5SCiRnXe7ErFP
+pmCqTysBBi1npTUL/YesdgCxAgMBAAGjdjB0MB0GA1UdDgQWBBQUNc/EoS6HWAug
+PIha2Q4OCT0snjAfBgNVHSMEGDAWgBQUNc/EoS6HWAugPIha2Q4OCT0snjAMBgNV
+HRMBAf8EAjAAMA4GA1UdDwEB/wQEAwIGQDAUBgNVHSUBAf8ECjAIBgYEAJE3AwAw
+QQYJKoZIhvcNAQEKMDSgDzANBglghkgBZQMEAgMFAKEcMBoGCSqGSIb3DQEBCDAN
+BglghkgBZQMEAgMFAKIDAgFAA4ICAQA4yK0WShV11Jav8maUpWwQw5TnY+X4rZxM
+/TjAZrjY0GshfS+U5V69ERrOpwniwNsDcM9a8OB/ID0l4+JVxLT3i9l68TVkLa+P
+XzktD3KA2lBKPxj9fLzu/tVae2VslPjHTkRMXfBNIiQh7khdR4EP+zMAtzPztqfo
+DlM2Vsphzsy5drbbU87g/OPmfXE8bcjdofMax4ZoAxKbwXZUS7BYzdzHbGJIbdVf
+ka9Ru98cKVYZbRMrxHa/vRqUuzu2A+Z/G8aXq67ha7yveVTt//yiy1qtQ65Wnx9B
+TNIwYEouINFuU4yqiIc7OBS1aQHX0rN2CS2rdwsbt6T3woXZkKP8zau8BBhGAy4r
+cD1T4W59M/j6Yk69wIRYw+0rX2uivvu9wuao/khQMdFOtvCOUc2nYBX/SnxGYKbc
+R3hr6JGJBNrAoXRlZJ4ZJaALkhMdH85w1fOOaeF5Aw+gP+3NH7Q1iBeJbQfAwWc2
+HSZRZpGkGlYv6b0tolUa0RV2m6gP0GDXTtiIlCHG3n9onaNJlWbxsfebr9H0b5DC
+RMaxLmfhabm1RBGv+IeYoxZrlVWa5plyD4lZ//Q9sRH7TmakRhxQkoT1F/48Z5e5
+MqSMKzQhScfNsraiU0452tXi1PofGIhr7x+IMPqTNK8Zwl74h1gRhlRkdDRJjtSG
+uxYuOBiQYQ==
+-----END CERTIFICATE-----`;
+
+function normalizePem(pem: string): string {
+  return pem.replace(/\s/g, '');
+}
+
+/**
+ * Demonstrates trustedSourceSignerCertificates end-to-end: pins Germany's real TSL signer
+ * certificate on the trust registry's own configuration (not a service-creation-time-only
+ * field - configuration/update takes the identical shape), then re-loads that same TSL under
+ * REQUIRE_AUTHENTICATED to prove the pin is actually honored, not just accepted and ignored.
+ *
+ * Uses REQUIRE_AUTHENTICATED specifically (not REQUIRE_VALID_SIGNATURE, which
+ * importPublicTrustLists already covers) so the response's assurance.authenticityState is
+ * AUTHENTICATED only if trustedSourceSignerCertificates actually gated admission.
+ */
+export async function demonstrateAuthenticatedSignerTrust(ctx: CommandContext): Promise<void> {
+  const step = ctx.nextStep();
+  ctx.log('Configure trustedSourceSignerCertificates and load an authenticated TSL', 'FLOW');
+
+  const trustRegistryPath = `${ctx.tenantPath}.${RESOURCES.trustRegistry}`;
+  const viewPath = `/v1/${trustRegistryPath}/trust-registry-api/configuration/view`;
+  const current = (await ctx.orgClient.get(viewPath)).data ?? {};
+  ctx.saveJson('trust-registry-configuration-view.json', current, step);
+
+  const existingSigners: string[] = current.trustedSourceSignerCertificates ?? [];
+  if (!existingSigners.some((pem) => normalizePem(pem) === normalizePem(GERMAN_TSL_SIGNER_CERTIFICATE_PEM))) {
+    const updated = {
+      ...current,
+      trustedSourceSignerCertificates: [...existingSigners, GERMAN_TSL_SIGNER_CERTIFICATE_PEM],
+    };
+    ctx.saveJson('trust-registry-configuration-update-request.json', updated, step);
+    await ctx.orgClient.put(
+      `/v1/${trustRegistryPath}/trust-registry-api/configuration/update`,
+      updated
+    );
+    console.log('   [OK] trustedSourceSignerCertificates now pins the German TSL signer certificate');
+  } else {
+    console.log('   [SKIP] German TSL signer certificate already pinned');
+  }
+
+  const sourceId = 'de-tsl-authenticated-trusted-signer';
+  const request = {
+    sourceId,
+    url: 'https://tl.bundesnetzagentur.de/TL-DE.xml',
+    acceptancePolicy: 'REQUIRE_AUTHENTICATED',
+  };
+  ctx.saveJson(`import-${sourceId}-request.json`, request, step);
+
+  try {
+    const response = await ctx.orgClient.post(
+      `/v1/${trustRegistryPath}/trust-registry-api/sources/load`,
+      request
+    );
+    ctx.saveJson(`import-${sourceId}-response.json`, response.data, step);
+
+    if (response.data.success && response.data.assurance?.authenticityState === 'AUTHENTICATED') {
+      console.log(`   [OK] ${sourceId} loaded and AUTHENTICATED via the pinned signer certificate`);
+      console.log(`        Entities: ${response.data.entitiesLoaded || 0}`);
+      console.log(`        Services: ${response.data.servicesLoaded || 0}`);
+      console.log(`        Identities: ${response.data.identitiesLoaded || 0}`);
+    } else {
+      console.log(
+        `   [WARN] ${sourceId} did not authenticate as expected: ` +
+        `${response.data.error || response.data.assurance?.authenticityState}`
+      );
+    }
+  } catch (error: any) {
+    const errMsg = error.message || error.response?.data?.message || '';
+    if (error.status === 409 ||
+        errMsg.includes('Duplicate target') ||
+        errMsg.includes('already exists') ||
+        errMsg.includes('Overwriting targets')) {
+      console.log(`   [SKIP] ${sourceId} already exists`);
+    } else {
+      console.log(`   [WARN] Failed to import ${sourceId}: ${errMsg}`);
+    }
+  }
+}
+
 /** Load local IACA certificate into trust registry */
 export async function loadIacaIntoTrustRegistry(ctx: CommandContext): Promise<void> {
   const step = ctx.nextStep();
@@ -279,10 +404,6 @@ export async function loadIacaIntoTrustRegistry(ctx: CommandContext): Promise<vo
       throw new Error(`Failed to load IACA trust source: ${errMsg}`);
     }
   }
-}
-
-function normalizePem(pem: string): string {
-  return pem.replace(/\s/g, '');
 }
 
 /**
@@ -494,24 +615,27 @@ export async function setupEtsiTrustRegistry(ctx: CommandContext): Promise<void>
   console.log('\n--- Step 3: Import Public Trust Lists ---');
   await importPublicTrustLists(ctx);
 
-  console.log('\n--- Step 4: Load Local IACA Certificate ---');
+  console.log('\n--- Step 4: Demonstrate trustedSourceSignerCertificates ---');
+  await demonstrateAuthenticatedSignerTrust(ctx);
+
+  console.log('\n--- Step 5: Load Local IACA Certificate ---');
   await loadIacaIntoTrustRegistry(ctx);
 
-  console.log('\n--- Step 5: Create Verifier Request-Signing Key and Certificate ---');
+  console.log('\n--- Step 6: Create Verifier Request-Signing Key and Certificate ---');
   await setupGenerateVerifierRequestSigningKey(ctx);
   await setupCreateVerifierRequestSigningCertificate(ctx);
   await linkVerifier2ToKms(ctx);
 
-  console.log('\n--- Step 6: Pin IACA as Wallet2 Request Object CA ---');
+  console.log('\n--- Step 7: Pin IACA as Wallet2 Request Object CA ---');
   await pinWallet2RequestObjectTrustAnchor(ctx);
 
-  console.log('\n--- Step 7: Load Relying-Party Identities ---');
+  console.log('\n--- Step 8: Load Relying-Party Identities ---');
   await loadRelyingPartyIntoTrustRegistry(ctx);
 
-  console.log('\n--- Step 8: Link Wallet2 to Trust Registry ---');
+  console.log('\n--- Step 9: Link Wallet2 to Trust Registry ---');
   await linkWallet2ToTrustRegistry(ctx);
 
-  console.log('\n--- Step 9: List Trust Sources ---');
+  console.log('\n--- Step 10: List Trust Sources ---');
   await listTrustSources(ctx);
 
   console.log('\n[SETUP] ETSI Trust Registry setup complete');
