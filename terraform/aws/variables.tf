@@ -70,6 +70,17 @@ variable "node_instance_types" {
   default     = ["t3.medium"]
 }
 
+variable "node_capacity_type" {
+  description = "Billing model for the EKS node group: ON_DEMAND or SPOT. Spot draws on a separate EC2 vCPU quota, which is what makes larger clusters reachable when the on-demand quota is the binding limit."
+  type        = string
+  default     = "ON_DEMAND"
+
+  validation {
+    condition     = contains(["ON_DEMAND", "SPOT"], var.node_capacity_type)
+    error_message = "node_capacity_type must be ON_DEMAND or SPOT."
+  }
+}
+
 variable "node_desired_size" {
   description = "Desired number of worker nodes"
   type        = number
@@ -192,6 +203,43 @@ variable "mongodb_node_disk_size" {
   default     = 20
 }
 
+variable "mongodb_data_volume_size" {
+  description = <<-EOT
+    Size of the MongoDB data volume.
+
+    Without this the MongoDB Community Operator applies its own default of 16Gi, which is easy to outgrow: a load
+    test of 500,000 verification sessions filled it, and mongod then failed to start with
+    "28: No space left on device" while opening its WiredTiger spill instance, restarting eleven times. The
+    storage class allows volume expansion, so this can be raised on an existing deployment, but not lowered.
+  EOT
+  type        = string
+  default     = "16Gi"
+}
+
+variable "mongodb_logs_volume_size" {
+  description = "Size of the MongoDB logs volume. The operator's own default is 2Gi."
+  type        = string
+  default     = "2Gi"
+}
+
+variable "mongodb_data_volume_iops" {
+  description = <<-EOT
+    Provisioned IOPS for the MongoDB data volume, or 0 to leave the gp3 default of 3000.
+
+    Size does not raise gp3 IOPS: a 400Gi volume still gets 3000 IOPS and 125 MB/s unless they are set
+    explicitly. That ceiling is invisible in the database's own CPU - a throttled volume makes mongod wait
+    rather than work - so it looks like the application being slow rather than the storage being capped.
+  EOT
+  type        = number
+  default     = 0
+}
+
+variable "mongodb_data_volume_throughput" {
+  description = "Provisioned throughput in MB/s for the MongoDB data volume, or 0 to leave the gp3 default of 125."
+  type        = number
+  default     = 0
+}
+
 variable "documentdb_instance_class" {
   description = "Instance class for DocumentDB"
   type        = string
@@ -271,6 +319,26 @@ variable "traefik_replicas" {
   }
 }
 
+variable "traefik_max_concurrent_streams" {
+  description = <<-EOT
+    HTTP/2 SETTINGS_MAX_CONCURRENT_STREAMS for the websecure entrypoint.
+
+    Traefik's own default is 250. That is low for this deployment shape: a client that
+    multiplexes many requests over one connection - a load generator, an API gateway, a
+    server-side integration - is refused above the limit with a 408 while every pod looks
+    healthy, which is very hard to diagnose from the symptom. Raised here on purpose; the cost
+    is a little memory per open stream. 1000 was not enough either: a load-test arm at 1188 concurrent streams
+    failed the same way, so the default is now well clear of any concurrency we drive.
+  EOT
+  type        = number
+  default     = 4000
+
+  validation {
+    condition     = var.traefik_max_concurrent_streams >= 1
+    error_message = "Traefik max concurrent streams must be at least 1."
+  }
+}
+
 variable "letsencrypt_server" {
   description = "Let's Encrypt ACME directory URL"
   type        = string
@@ -340,4 +408,41 @@ variable "dns_subdomain" {
   description = "Subdomain to point to ingress load balancer in Route 53 zone. Leave blank to use the zone root"
   type        = string
   default     = ""
+}
+
+variable "loadgen_node_count" {
+  description = <<-EOT
+    Worker nodes for a dedicated load-generation node group. Zero means none, which is the default and leaves
+    the cluster exactly as before.
+
+    It exists because the load generator, not the service, turned out to set the measured ceiling: at 2174
+    sessions/s the generator process was pinned at 100% CPU while the API nodes sat at 46% and the database at
+    14%. Running the generator on its own nodes makes client capacity a dial rather than a property of whichever
+    CI runner picked up the job. The group is tainted, so nothing else schedules onto it and the generator never
+    competes with the service it is measuring.
+  EOT
+  type        = number
+  default     = 0
+
+  validation {
+    condition     = var.loadgen_node_count >= 0
+    error_message = "Load generator node count cannot be negative."
+  }
+}
+
+variable "loadgen_instance_types" {
+  description = "Instance types for the load-generation node group. The generator is CPU-bound, so prefer compute-optimised sizes."
+  type        = list(string)
+  default     = ["c7a.8xlarge"]
+}
+
+variable "loadgen_capacity_type" {
+  description = "Billing model for the load-generation nodes (ON_DEMAND or SPOT)."
+  type        = string
+  default     = "SPOT"
+
+  validation {
+    condition     = contains(["ON_DEMAND", "SPOT"], var.loadgen_capacity_type)
+    error_message = "Capacity type must be ON_DEMAND or SPOT."
+  }
 }

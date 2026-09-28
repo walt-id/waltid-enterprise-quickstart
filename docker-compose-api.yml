@@ -27,6 +27,11 @@ services:
       # `docker compose up --wait` treats its clean exit as a failure.
       init-keyfile:
         condition: service_completed_successfully
+    # WiredTiger's default cache is 50% of (RAM - 1 GB), which on a 78 GB developer machine is
+    # ~38 GB for a database that holds a few hundred MB. It was measured at 21.3 GB with the host
+    # at 0 bytes available and thrashing. The cache is a cache: capping it costs a dev stack
+    # nothing and keeps the machine usable. Raise MONGO_CACHE_GB for data-heavy local work.
+    mem_limit: ${MONGO_MEM_LIMIT:-4g}
     volumes:
       - mongo-keyfile-vol:/etc/mongodb/pki
       - mongodb-data:/data/db/
@@ -36,7 +41,7 @@ services:
       # Cleared first, not just written at the end: a restarted container keeps its filesystem, so a
       # sentinel left from the previous run would mark the unauthenticated phase below as ready.
       rm -f /tmp/mongodb-bootstrapped
-      mongod --replSet rs0 --bind_ip_all --port 27017 --logpath /var/log/mongodb/mongod.log --logappend & MONGO_PID=$$!
+      mongod --replSet rs0 --bind_ip_all --port 27017 --wiredTigerCacheSizeGB ${MONGO_CACHE_GB:-2} --logpath /var/log/mongodb/mongod.log --logappend & MONGO_PID=$$!
       until mongosh --port 27017 --eval "db.runCommand({ ping: 1 })" >/dev/null 2>&1; do
         sleep 2
       done
@@ -57,7 +62,7 @@ services:
       wait $$MONGO_PID
 
       touch /tmp/mongodb-bootstrapped
-      exec mongod --replSet rs0 --bind_ip_all --port 27017 --keyFile /etc/mongodb/pki/keyfile --logpath /var/log/mongodb/mongod.log --logappend
+      exec mongod --replSet rs0 --bind_ip_all --port 27017 --wiredTigerCacheSizeGB ${MONGO_CACHE_GB:-2} --keyFile /etc/mongodb/pki/keyfile --logpath /var/log/mongodb/mongod.log --logappend
       '
     env_file:
       - .env
