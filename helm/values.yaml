@@ -188,6 +188,10 @@ api:
     tag: latest
     imagePullPolicy: Always
     pullSecrets: waltid-regcred
+  # Heap as a share of the container memory limit. The JVM default is 25, which wastes most of
+  # the limit and produced `Java heap space` under sustained load; 50 is the practical ceiling,
+  # since the non-heap footprint measured about 0.9Gi (metaspace, threads, direct buffers).
+  maxRamPercentage: 50
   resources:
     requests:
       cpu: "100m"
@@ -202,6 +206,9 @@ api:
     targetCPUUtilizationPercentage: 90
 
 web:
+  # The UI is not needed for API-only or load-test deployments, and its image is amd64-only, so a
+  # Graviton node group cannot run it - `helm --wait` then fails on a component nothing depends on.
+  enabled: true
   ports:
   - name: http
     port: 80

@@ -17,6 +17,7 @@ spec:
           type: Utilization
           averageUtilization: {{ .Values.api.hpa.targetCPUUtilizationPercentage }}
 ---
+{{- if .Values.web.enabled }}
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
@@ -35,3 +36,4 @@ spec:
         target:
           type: Utilization
           averageUtilization: {{ .Values.web.hpa.targetCPUUtilizationPercentage }}
+{{- end }}
