@@ -10,6 +10,13 @@
 
 import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';
+import {
+  credentialMetaForFormat,
+  mdocNamespaceForFormat,
+  normalizeEntitlement,
+  normalizeIdentifierType,
+  parseClaimPaths,
+} from './eudi-wrp.js';
 
 // ============================================================================
 // Types
@@ -38,8 +45,10 @@ export interface EudiDemoConfig {
   };
   /** Provider information */
   provider: {
-    type: 'WALLET_PROVIDER' | 'RELYING_PARTY_PROVIDER';
+    /** Registrar providerType; WalletRelyingParty for an RP verifier */
+    type: string;
     policyUri: string;
+    policyType: string;
   };
   /** Wallet Relying Party information */
   walletRp: {
@@ -55,13 +64,13 @@ export interface EudiDemoConfig {
     identifier: string;
     purpose: string;
     privacyPolicyUri: string;
+    policyType: string;
   };
-  /** Credential configuration for verification */
+  /** Credential the RP may request from a wallet */
   credential: {
     format: string;
-    claims: string[];
-    name: string;
-    version: string;
+    claims: Array<Array<string | number>>;
+    meta: Record<string, unknown>;
   };
   /** Supervisory authority information */
   supervisoryAuthority: {
@@ -164,15 +173,18 @@ export function createEudiDemoConfig(): EudiDemoConfig {
       country: process.env.EUDI_LEGAL_ENTITY_COUNTRY || 'AT',
       legalName: process.env.EUDI_LEGAL_ENTITY_NAME || 'walt.id GmbH',
       identifier: process.env.EUDI_LEGAL_ENTITY_IDENTIFIER || 'ATUID123456789',
-      identifierType: process.env.EUDI_LEGAL_ENTITY_IDENTIFIER_TYPE || 'http://data.europa.eu/eudi/id/VAT-No',
+      identifierType: normalizeIdentifierType(
+        process.env.EUDI_LEGAL_ENTITY_IDENTIFIER_TYPE || 'http://data.europa.eu/eudi/id/VATIN'
+      ),
       email: process.env.EUDI_LEGAL_ENTITY_EMAIL || 'office@walt.id',
       phone: process.env.EUDI_LEGAL_ENTITY_PHONE || '+436648860100',
       postalAddress: process.env.EUDI_LEGAL_ENTITY_ADDRESS || 'Liechtensteinstrasse 111/115, 1090 Vienna, Austria',
       infoUri: process.env.EUDI_LEGAL_ENTITY_INFO_URI || 'https://walt.id',
     },
     provider: {
-      type: (process.env.EUDI_PROVIDER_TYPE as 'WALLET_PROVIDER' | 'RELYING_PARTY_PROVIDER') || 'RELYING_PARTY_PROVIDER',
+      type: process.env.EUDI_PROVIDER_TYPE || 'WalletRelyingParty',
       policyUri: process.env.EUDI_PROVIDER_POLICY_URI || 'https://walt.id/privacy-policy',
+      policyType: process.env.EUDI_PROVIDER_POLICY_TYPE || 'http://data.europa.eu/eudi/policy/privacy-policy',
     },
     walletRp: {
       tradeName: process.env.EUDI_WRP_TRADE_NAME || 'walt.id Identity Verification',
@@ -180,19 +192,18 @@ export function createEudiDemoConfig(): EudiDemoConfig {
       supportUri: process.env.EUDI_WRP_SUPPORT_URI || 'https://walt.id/contact',
       registryUri: process.env.EUDI_WRP_REGISTRY_URI || 'https://registry.serviceproviders.eudiw.dev',
       isPsb: process.env.EUDI_WRP_IS_PSB === 'true',
-      entitlements: (process.env.EUDI_WRP_ENTITLEMENTS || 'AGE_VERIFICATION,IDENTITY_VERIFICATION').split(',').map(s => s.trim()),
+      entitlements: (process.env.EUDI_WRP_ENTITLEMENTS || 'Service_Provider')
+        .split(',')
+        .map((value) => normalizeEntitlement(value))
+        .filter(Boolean),
     },
     intendedUse: {
       identifier: process.env.EUDI_INTENDED_USE_ID || 'USE-WALTID-001',
       purpose: process.env.EUDI_INTENDED_USE_PURPOSE || 'Identity verification for walt.id enterprise services',
       privacyPolicyUri: process.env.EUDI_INTENDED_USE_PRIVACY_URI || 'https://walt.id/privacy-policy',
+      policyType: process.env.EUDI_INTENDED_USE_POLICY_TYPE || 'http://data.europa.eu/eudi/policy/privacy-statement',
     },
-    credential: {
-      format: process.env.EUDI_CREDENTIAL_FORMAT || 'jwt_vc',
-      claims: (process.env.EUDI_CREDENTIAL_CLAIMS || 'credentialSubject.name,credentialSubject.dateOfBirth').split(',').map(s => s.trim()),
-      name: process.env.EUDI_CREDENTIAL_NAME || 'PID Credential',
-      version: process.env.EUDI_CREDENTIAL_VERSION || '1.0',
-    },
+    credential: buildCredentialConfig(),
     supervisoryAuthority: {
       name: process.env.EUDI_SUPERVISORY_AUTHORITY_NAME || 'DSB',
       country: process.env.EUDI_SUPERVISORY_AUTHORITY_COUNTRY || 'AT',
@@ -205,6 +216,39 @@ export function createEudiDemoConfig(): EudiDemoConfig {
       legislativeIdentifier: process.env.EUDI_LAW_LEGISLATIVE_ID || 'GDPR-ART-6',
     },
     certificatePassword: process.env.EUDI_CERTIFICATE_PASSWORD || 'WaltIdEudi2024!',
+  };
+}
+
+function splitCsv(value: string | undefined, fallback: string): string[] {
+  return (value || fallback)
+    .split(',')
+    .map((part) => part.trim())
+    .filter(Boolean);
+}
+
+function buildCredentialConfig(): EudiDemoConfig['credential'] {
+  const format = process.env.EUDI_CREDENTIAL_FORMAT || 'mso_mdoc';
+  const doctype = process.env.EUDI_CREDENTIAL_DOCTYPE || 'eu.europa.ec.eudi.pid.1';
+  const vctValues = splitCsv(process.env.EUDI_CREDENTIAL_VCT, 'urn:eudi:pid:1');
+  const claimsRaw = process.env.EUDI_CREDENTIAL_CLAIMS || 'given_name,family_name,birth_date';
+  const metaJson = process.env.EUDI_CREDENTIAL_META;
+
+  let meta: Record<string, unknown>;
+  if (metaJson) {
+    meta = JSON.parse(metaJson) as Record<string, unknown>;
+  } else {
+    meta = credentialMetaForFormat(format, {
+      doctype,
+      vctValues,
+      name: process.env.EUDI_CREDENTIAL_NAME,
+      version: process.env.EUDI_CREDENTIAL_VERSION,
+    });
+  }
+
+  return {
+    format,
+    claims: parseClaimPaths(claimsRaw, mdocNamespaceForFormat(format, doctype)),
+    meta,
   };
 }
 

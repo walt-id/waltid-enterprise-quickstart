@@ -98,6 +98,15 @@ For this flow, you will need to configure the gov-services.env file with the cor
 npx tsx walt.ts --setup-gov-services
 ```
 
+### EUDI WRPC Flow
+
+This flow allows you to get a WRPAC (Wallet Relying Provider Access Certificate) and use it to verify credentials from the EUDI reference wallet.
+
+```bash
+npx tsx walt.ts --setup-eudi-demo
+```
+
+
 ## Advanced Usage
 
 You can also run specific setup commands by running. Check the [docs folder](docs) for the full set of commands.

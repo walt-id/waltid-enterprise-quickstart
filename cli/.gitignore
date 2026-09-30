@@ -7,3 +7,5 @@ journey-test-*/
 .auth_token
 walt-log-*
 dist/
+eudi-demo.env
+certs/
