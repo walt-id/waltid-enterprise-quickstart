@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   buildLiveRegistrarCredentialCreateItem,
+  buildLiveRegistrarProvidedAttestation,
   credentialMetaForFormat,
   decodeFlexibleBase64,
   extractCreatedId,
@@ -15,6 +16,7 @@ import {
   parseClaimPaths,
   shouldRegisterProvidedAttestations,
 } from '../../eudi-wrp.js';
+import { createEudiDemoConfig } from '../../eudi-demo-config.js';
 
 test('extractCreatedId reads nested registrar id maps', () => {
   const response = {
@@ -155,9 +157,41 @@ test('shouldRegisterProvidedAttestations is true only for issuer roles', () => {
   );
   assert.equal(
     shouldRegisterProvidedAttestations([
-      'http://data.europa.eu/eudi/entitlement/PID_Provider',
+      'http://data.europa.eu/eudi/entitlement/Non_Q_EAA_Provider',
     ]),
     true
+  );
+});
+
+test('pid and eaa registrar roles force issuer entitlements', () => {
+  const pid = createEudiDemoConfig('pid_provider');
+  assert.deepEqual(pid.walletRp.entitlements, [
+    'http://data.europa.eu/eudi/entitlement/PID_Provider',
+  ]);
+  assert.equal(pid.createVerifier, false);
+  assert.equal(pid.certFilePrefix, 'eudi-pid-provider');
+  assert.equal(pid.credential.meta.doctype_value, 'eu.europa.ec.eudi.pid.1');
+  assert.equal(pid.intendedUse.identifier, 'USE-WALTID-PID-001');
+
+  const eaa = createEudiDemoConfig('non_q_eaa_provider');
+  assert.deepEqual(eaa.walletRp.entitlements, [
+    'http://data.europa.eu/eudi/entitlement/Non_Q_EAA_Provider',
+  ]);
+  assert.equal(eaa.createVerifier, false);
+  assert.equal(eaa.certFilePrefix, 'eudi-eaa-provider');
+  assert.equal(eaa.credential.meta.doctype_value, 'org.iso.18013.5.1.mDL');
+  assert.equal(eaa.intendedUse.identifier, 'USE-WALTID-EAA-001');
+});
+
+test('buildLiveRegistrarProvidedAttestation stringifies meta', () => {
+  assert.deepEqual(
+    buildLiveRegistrarProvidedAttestation('mso_mdoc', {
+      doctype_value: 'eu.europa.ec.eudi.pid.1',
+    }),
+    {
+      format: 'mso_mdoc',
+      meta: '{"doctype_value":"eu.europa.ec.eudi.pid.1"}',
+    }
   );
 });
 

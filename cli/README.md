@@ -100,11 +100,20 @@ npx tsx walt.ts --setup-gov-services
 
 ### EUDI WRPC Flow
 
-This flow allows you to get a WRPAC (Wallet Relying Provider Access Certificate) and use it to verify credentials from the EUDI reference wallet.
+This flow registers a Wallet Relying Party on the public EUDI registrar and downloads
+the WRPAC / WRPRC. `--setup-eudi-demo` is the Service_Provider (verifier) path and
+creates a verifier2 service. The issuer entitlements are separate commands: they
+still mint certificates, but they skip verifier2.
 
 ```bash
 npx tsx walt.ts --setup-eudi-demo
+npx tsx walt.ts --setup-eudi-pid-provider
+npx tsx walt.ts --setup-eudi-eaa-provider
 ```
+
+Certificates are written under `cli/certs/` as `eudi-rp-*`, `eudi-pid-provider-*`,
+and `eudi-eaa-provider-*`. Registering as PID_Provider or Non_Q_EAA_Provider does
+not by itself make the EUDI reference wallet accept credentials from this issuer.
 
 
 ## Advanced Usage

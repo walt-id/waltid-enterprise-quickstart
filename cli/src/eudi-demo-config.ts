@@ -22,8 +22,15 @@ import {
 // Types
 // ============================================================================
 
+export type EudiRegistrarRole = 'service_provider' | 'pid_provider' | 'non_q_eaa_provider';
+
 /** EUDI Demo configuration from environment variables */
 export interface EudiDemoConfig {
+  role: EudiRegistrarRole;
+  /** PKCS#12 / WRPRC filename prefix under cli/certs */
+  certFilePrefix: string;
+  /** Create a verifier2 service after registration (service-provider only) */
+  createVerifier: boolean;
   /** WRP Registry base URL */
   registryBaseUrl: string;
   /** Tenant ID for the EUDI demo verifier */
@@ -163,8 +170,14 @@ export function loadEudiDemoEnv(cliDir: string): void {
 /**
  * Create EUDI demo configuration from environment variables.
  */
-export function createEudiDemoConfig(): EudiDemoConfig {
+export function createEudiDemoConfig(
+  role: EudiRegistrarRole = 'service_provider'
+): EudiDemoConfig {
+  const profile = eudiRegistrarRoleProfile(role);
   return {
+    role,
+    certFilePrefix: profile.certFilePrefix,
+    createVerifier: profile.createVerifier,
     registryBaseUrl: process.env.EUDI_REGISTRY_BASE_URL || 'https://registry.serviceproviders.eudiw.dev',
     tenantId: process.env.EUDI_TENANT || 'eudi-demo',
     verifierName: process.env.EUDI_VERIFIER_NAME || 'eudi-verifier',
@@ -187,23 +200,28 @@ export function createEudiDemoConfig(): EudiDemoConfig {
       policyType: process.env.EUDI_PROVIDER_POLICY_TYPE || 'http://data.europa.eu/eudi/policy/privacy-policy',
     },
     walletRp: {
-      tradeName: process.env.EUDI_WRP_TRADE_NAME || 'walt.id Identity Verification',
-      description: process.env.EUDI_WRP_DESCRIPTION || 'EUDI Wallet verification service powered by walt.id',
+      tradeName: role === 'service_provider'
+        ? (process.env.EUDI_WRP_TRADE_NAME || profile.tradeName)
+        : profile.tradeName,
+      description: role === 'service_provider'
+        ? (process.env.EUDI_WRP_DESCRIPTION || profile.description)
+        : profile.description,
       supportUri: process.env.EUDI_WRP_SUPPORT_URI || 'https://walt.id/contact',
       registryUri: process.env.EUDI_WRP_REGISTRY_URI || 'https://registry.serviceproviders.eudiw.dev',
       isPsb: process.env.EUDI_WRP_IS_PSB === 'true',
-      entitlements: (process.env.EUDI_WRP_ENTITLEMENTS || 'Service_Provider')
-        .split(',')
-        .map((value) => normalizeEntitlement(value))
-        .filter(Boolean),
+      entitlements: profile.entitlements,
     },
     intendedUse: {
-      identifier: process.env.EUDI_INTENDED_USE_ID || 'USE-WALTID-001',
-      purpose: process.env.EUDI_INTENDED_USE_PURPOSE || 'Identity verification for walt.id enterprise services',
+      identifier: role === 'service_provider'
+        ? (process.env.EUDI_INTENDED_USE_ID || profile.intendedUseId)
+        : profile.intendedUseId,
+      purpose: role === 'service_provider'
+        ? (process.env.EUDI_INTENDED_USE_PURPOSE || profile.purpose)
+        : profile.purpose,
       privacyPolicyUri: process.env.EUDI_INTENDED_USE_PRIVACY_URI || 'https://walt.id/privacy-policy',
       policyType: process.env.EUDI_INTENDED_USE_POLICY_TYPE || 'http://data.europa.eu/eudi/policy/privacy-statement',
     },
-    credential: buildCredentialConfig(),
+    credential: buildCredentialConfig(role),
     supervisoryAuthority: {
       name: process.env.EUDI_SUPERVISORY_AUTHORITY_NAME || 'DSB',
       country: process.env.EUDI_SUPERVISORY_AUTHORITY_COUNTRY || 'AT',
@@ -219,6 +237,51 @@ export function createEudiDemoConfig(): EudiDemoConfig {
   };
 }
 
+export function eudiRegistrarRoleProfile(role: EudiRegistrarRole): {
+  entitlements: string[];
+  tradeName: string;
+  description: string;
+  intendedUseId: string;
+  purpose: string;
+  certFilePrefix: string;
+  createVerifier: boolean;
+} {
+  if (role === 'pid_provider') {
+    return {
+      entitlements: [normalizeEntitlement('PID_Provider')],
+      tradeName: 'walt.id PID Provider',
+      description: 'Person Identification Data issuance service powered by walt.id',
+      intendedUseId: 'USE-WALTID-PID-001',
+      purpose: 'Issuance of Person Identification Data',
+      certFilePrefix: 'eudi-pid-provider',
+      createVerifier: false,
+    };
+  }
+  if (role === 'non_q_eaa_provider') {
+    return {
+      entitlements: [normalizeEntitlement('Non_Q_EAA_Provider')],
+      tradeName: 'walt.id EAA Provider',
+      description: 'Non-qualified electronic attestation issuance service powered by walt.id',
+      intendedUseId: 'USE-WALTID-EAA-001',
+      purpose: 'Issuance of non-qualified electronic attestations of attributes',
+      certFilePrefix: 'eudi-eaa-provider',
+      createVerifier: false,
+    };
+  }
+  return {
+    entitlements: (process.env.EUDI_WRP_ENTITLEMENTS || 'Service_Provider')
+      .split(',')
+      .map((value) => normalizeEntitlement(value))
+      .filter(Boolean),
+    tradeName: 'walt.id Identity Verification',
+    description: 'EUDI Wallet verification service powered by walt.id',
+    intendedUseId: 'USE-WALTID-001',
+    purpose: 'Identity verification for walt.id enterprise services',
+    certFilePrefix: 'eudi-rp',
+    createVerifier: true,
+  };
+}
+
 function splitCsv(value: string | undefined, fallback: string): string[] {
   return (value || fallback)
     .split(',')
@@ -226,12 +289,21 @@ function splitCsv(value: string | undefined, fallback: string): string[] {
     .filter(Boolean);
 }
 
-function buildCredentialConfig(): EudiDemoConfig['credential'] {
-  const format = process.env.EUDI_CREDENTIAL_FORMAT || 'mso_mdoc';
-  const doctype = process.env.EUDI_CREDENTIAL_DOCTYPE || 'eu.europa.ec.eudi.pid.1';
-  const vctValues = splitCsv(process.env.EUDI_CREDENTIAL_VCT, 'urn:eudi:pid:1');
-  const claimsRaw = process.env.EUDI_CREDENTIAL_CLAIMS || 'given_name,family_name,birth_date';
-  const metaJson = process.env.EUDI_CREDENTIAL_META;
+function buildCredentialConfig(role: EudiRegistrarRole): EudiDemoConfig['credential'] {
+  const isEaa = role === 'non_q_eaa_provider';
+  const format = (isEaa ? process.env.EUDI_EAA_CREDENTIAL_FORMAT : process.env.EUDI_CREDENTIAL_FORMAT)
+    || 'mso_mdoc';
+  const doctype = (isEaa ? process.env.EUDI_EAA_CREDENTIAL_DOCTYPE : process.env.EUDI_CREDENTIAL_DOCTYPE)
+    || (isEaa ? 'org.iso.18013.5.1.mDL' : 'eu.europa.ec.eudi.pid.1');
+  const vctValues = splitCsv(
+    isEaa ? process.env.EUDI_EAA_CREDENTIAL_VCT : process.env.EUDI_CREDENTIAL_VCT,
+    isEaa ? 'urn:eudi:mdl:1' : 'urn:eudi:pid:1'
+  );
+  const claimsRaw = (isEaa ? process.env.EUDI_EAA_CREDENTIAL_CLAIMS : process.env.EUDI_CREDENTIAL_CLAIMS)
+    || (isEaa
+      ? 'family_name,given_name,birth_date,document_number'
+      : 'given_name,family_name,birth_date');
+  const metaJson = isEaa ? process.env.EUDI_EAA_CREDENTIAL_META : process.env.EUDI_CREDENTIAL_META;
 
   let meta: Record<string, unknown>;
   if (metaJson) {
@@ -240,8 +312,12 @@ function buildCredentialConfig(): EudiDemoConfig['credential'] {
     meta = credentialMetaForFormat(format, {
       doctype,
       vctValues,
-      name: process.env.EUDI_CREDENTIAL_NAME,
-      version: process.env.EUDI_CREDENTIAL_VERSION,
+      name: isEaa
+        ? (process.env.EUDI_EAA_CREDENTIAL_NAME || 'mDL Credential')
+        : process.env.EUDI_CREDENTIAL_NAME,
+      version: isEaa
+        ? process.env.EUDI_EAA_CREDENTIAL_VERSION
+        : process.env.EUDI_CREDENTIAL_VERSION,
     });
   }
 

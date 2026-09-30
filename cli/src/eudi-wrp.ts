@@ -188,6 +188,21 @@ export function buildLiveRegistrarCredentialCreateItem(
   };
 }
 
+/** Live `/provided_attestation/create` also stores meta as a JSON string. */
+export function buildLiveRegistrarProvidedAttestation(
+  format: string,
+  meta?: Record<string, unknown>
+): { format: string; meta: string } {
+  const metaObject =
+    meta && Object.keys(meta).length > 0
+      ? meta
+      : { name: 'PID Credential', version: '1.0' };
+  return {
+    format,
+    meta: JSON.stringify(metaObject),
+  };
+}
+
 export function mdocNamespaceForFormat(format: string, doctype: string): string | undefined {
   return format === 'mso_mdoc' ? doctype : undefined;
 }

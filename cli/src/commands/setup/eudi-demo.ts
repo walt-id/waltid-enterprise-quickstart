@@ -28,6 +28,7 @@ import {
   isoDateOnly,
   shouldRegisterProvidedAttestations,
   buildLiveRegistrarCredentialCreateItem,
+  buildLiveRegistrarProvidedAttestation,
 } from '../../eudi-wrp.js';
 import { setupLogin } from './auth.js';
 
@@ -524,10 +525,12 @@ async function createProvidedAttestation(
 
   const request = {
     hash_pid: hashPid,
-    providesAttestations: [{
-      format: config.credential.format,
-      meta: config.credential.meta,
-    }],
+    providesAttestations: [
+      buildLiveRegistrarProvidedAttestation(
+        config.credential.format,
+        config.credential.meta
+      ),
+    ],
   };
 
   const response = await wrpRequest<WrpCreateResponse>(
@@ -753,9 +756,12 @@ export async function runEudiDemoSetup(
   config: EudiDemoConfig
 ): Promise<void> {
   console.log('\n=== EUDI Demo Setup ===\n');
+  console.log(`Role: ${config.walletRp.entitlements.join(', ')}`);
   console.log(`WRP Registry: ${config.registryBaseUrl}`);
   console.log(`Tenant: ${config.tenantId}`);
-  console.log(`Verifier: ${config.verifierName}`);
+  if (config.createVerifier) {
+    console.log(`Verifier: ${config.verifierName}`);
+  }
   console.log(`Service Base URL: ${config.serviceBaseUrl}`);
   console.log(`Legal Entity: ${config.legalEntity.legalName} (${config.legalEntity.country})\n`);
 
@@ -824,17 +830,24 @@ export async function runEudiDemoSetup(
   const certDir = join(ctx.cliDir, 'certs');
   mkdirSync(certDir, { recursive: true });
   const certPaths = {
-    wrpac: join(certDir, 'eudi-rp-certificate.p12'),
-    wrprcJwt: join(certDir, 'eudi-wrprc.jwt'),
-    wrprcCose: join(certDir, 'eudi-wrprc.cose'),
+    wrpac: join(certDir, `${config.certFilePrefix}-certificate.p12`),
+    wrprcJwt: join(certDir, `${config.certFilePrefix}-wrprc.jwt`),
+    wrprcCose: join(certDir, `${config.certFilePrefix}-wrprc.cose`),
   };
   writeFileSync(certPaths.wrpac, wrpacBuffer);
   writeFileSync(certPaths.wrprcJwt, wrprc.jwt);
   writeFileSync(certPaths.wrprcCose, wrprc.cose);
 
-  // Step 4: Create verifier2 service
-  console.log('\n--- Step 4: Create Verifier Service ---\n');
-  await createEudiVerifier(ctx, config, certPaths);
+  if (config.createVerifier) {
+    console.log('\n--- Step 4: Create Verifier Service ---\n');
+    await createEudiVerifier(ctx, config, certPaths);
+  } else {
+    console.log('\n--- Step 4: Enterprise issuer wiring ---');
+    console.log('   [SKIP] Verifier2 (this role is an issuer entitlement)');
+    console.log('   Registering as PID_Provider or Non_Q_EAA_Provider does not make the');
+    console.log('   EUDI reference wallet trust this issuer. The wallet still needs your');
+    console.log('   IACA / document-signer in its own trust store.');
+  }
 
   // Save WRP HTTP log
   const wrpLog = getWrpHttpLog();
@@ -857,6 +870,8 @@ export async function runEudiDemoSetup(
   console.log(`  WRPAC: ${certPaths.wrpac}`);
   console.log(`  WRPRC (JWT): ${certPaths.wrprcJwt}`);
   console.log(`  WRPRC (COSE): ${certPaths.wrprcCose}`);
-  console.log(`Verifier: ${ctx.config.organization}.${config.tenantId}.${config.verifierName}`);
+  if (config.createVerifier) {
+    console.log(`Verifier: ${ctx.config.organization}.${config.tenantId}.${config.verifierName}`);
+  }
   console.log(`\nLogs saved to: ${ctx.workdir}`);
 }
