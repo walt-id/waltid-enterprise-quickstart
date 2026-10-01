@@ -7,7 +7,7 @@
 # only appears with several pods needs more iterations than that allows.
 #
 # Uses the database, license and configuration of the running quickstart, so start that first:
-#   docker compose -f docker-compose-api.yml up -d mongodb
+#   docker compose up -d mongodb
 #   docker compose -f fleet/docker-compose-fleet.yml up -d
 #   <load test> --host waltid.enterprise.localhost --port 7600
 #

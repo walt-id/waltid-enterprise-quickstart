@@ -211,7 +211,7 @@ walt.id does not issue `installation-key.json`.
 
 ## 1. Docker-Compose: Run The Enterprise Stack
 
-Use docker-compose to bring up the Enterprise Stack API, UI and a MongoDB database (storage of the
+Use docker-compose to bring up the Enterprise Stack API and a MongoDB database (storage of the
 Enterprise Stack).
 
 You can update the version of the enterprise stack via the `.env` file.
@@ -248,21 +248,13 @@ container will crash-loop - check `docker compose logs waltid-enterprise` if tha
 **Run The Stack**
 
 ```bash
-docker compose pull 
+docker compose pull
 docker compose up
-```
-
-In case you want to only run the API, run:
-
-```bash
-docker compose -f docker-compose-api.yml up
 ```
 
 Once the docker-compose is running, you can
 visit [enterprise.localhost/swagger](http://enterprise.localhost/swagger) to access the Enterprise
 Stack APIs.
-
-The UI is running at [http://enterprise.localhost/login](http://enterprise.localhost/login)
 
 ### Using custom organisation names
 
@@ -272,7 +264,6 @@ organisation name, you can update the Caddyfile to add your own organisation dom
 ```yaml
   caddy:
     image: caddy:2-alpine
-    container_name: caddy
     restart: unless-stopped
     ports:
       - "80:80"
@@ -287,7 +278,6 @@ organisation name, you can update the Caddyfile to add your own organisation dom
           # add your own organisation domains here
     depends_on:
       - waltid-enterprise
-      - waltid-enterprise-ui
 ```
 
 ## 2. Enterprise CLI
