@@ -13,3 +13,8 @@ cli/walt-log-*/
 # must never be committed. .gitkeep is tracked so the Docker Compose bind mount source always exists.
 /license/*
 !/license/.gitkeep
+
+# Local crash and profiling artifacts that get dropped into the bind-mounted config/ directory.
+*.hprof
+*.jfr
+config/otel-agent.jar
