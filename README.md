@@ -200,6 +200,21 @@ at all with the value it ships with. The CLI reads that same file automatically;
 - Only set the relevant environment variables for the license activation mode you are using. All of
   them are provided as examples in the docker compose file.
 
+#### Harmless `ERROR` log lines
+
+A few `ERROR` lines on startup look alarming but do not indicate a problem:
+
+* `documentdb`: `Command 'atlasVersion' not found` (code 59), once per start. The `mongosh` health
+  check probes for MongoDB Atlas on connect, DocumentDB does not implement that command, and `mongosh`
+  ignores the reply. `IndexNotFound` / `NamespaceNotFound` on `DropIndexes` / `ListIndexes` during the
+  first start are migrations probing indexes and collections that do not exist yet.
+* `waltid-enterprise`: `Migration version 13 ... failed with error: 'Check failed.'`. This follows a
+  restart after a container was stopped before it finished starting (e.g. Ctrl-C right after `up`):
+  the next node replays the migrations from that stale node's DB version and also tries to apply
+  migration 13 (legacy wallet to wallet2), which is manual-only and is rejected. The remaining
+  migrations still complete and no data is changed. This comes from the shared migration framework,
+  so it is not specific to DocumentDB.
+
 ### Kubernetes / Helm
 
 The Helm chart reads license material from one pre-provisioned Secret, named by
@@ -284,35 +299,35 @@ organisation name, you can update the Caddyfile to add your own organisation dom
 
 `docker-compose-documentdb.yml` runs the same stack against [DocumentDB](https://documentdb.io), the
 open-source PostgreSQL engine - not AWS's proprietary service of the same name. It speaks the MongoDB
-wire protocol, so the only differences are `config-documentdb/database.conf` and
-`config-documentdb/enterprise.conf`, which `docker-compose-documentdb.yml` mounts over
-`config/database.conf` and `config/enterprise.conf`:
+wire protocol, so the only difference is `config-documentdb/database.conf`, which
+`docker-compose-documentdb.yml` mounts over `config/database.conf`:
 
 ```bash
 docker compose -f docker-compose-documentdb.yml up
 ```
 
+`config-documentdb/database.conf` selects the `DOCUMENTDB_POSTGRES` profile and sets
+`retryWrites=false` and `collation = "none"`, all of which this engine requires; a `MONGODB_*` profile
+would claim collation support it does not have, and without `retryWrites=false` writes fail. It connects
+without TLS because the local gateway defaults to `TLS_MODE=allowTLS` and the Java driver cannot bypass
+its self-signed certificate through `tlsInsecure`; enabling TLS needs the `ssl` trust-store block
+described in the file.
+
 This stack has no Caddy. The API is reached directly on `enterprise.localhost:7500` and carries the
 `enterprise.localhost` / `waltid.enterprise.localhost` aliases itself, because it calls its own public
-URLs (for example to fetch a credential offer) and those must resolve to the API container, on the port
-that `basePort = 7500` puts into them. Run the CLI against it with `PORT=7500`:
+URLs (for example to fetch a credential offer) and those must resolve to the API container. The compose
+file therefore sets the port the API listens on, the port in its public URLs and the host port all from
+`ENTERPRISE_API_PORT` (default 7500). Run the CLI against it with the same `PORT`:
 
 ```bash
 cd cli && PORT=7500 npx tsx walt.ts --recreate
 ```
 
-That file selects the `DOCUMENTDB_POSTGRES` profile and sets `retryWrites=false` and
-`collation = "none"`, all of which this engine requires; a `MONGODB_*` profile would claim collation
-support it does not have, and without `retryWrites=false` writes fail. It connects without TLS
-because the local gateway defaults to `TLS_MODE=allowTLS` and the Java driver cannot bypass its
-self-signed certificate through `tlsInsecure`; enabling TLS needs the `ssl` trust-store block
-described in the file.
-
 The DocumentDB stack uses its own docker project, network and volume
 (`waltid-enterprise-documentdb`, `documentdb-network`, `documentdb-data`), so a MongoDB stack on the
-same host is left alone. Do not run both at once unless you also change the host ports
-(`ENTERPRISE_API_PORT` and `DOCUMENTDB_PORT`; both stacks publish the API on 7500). DocumentDB itself
-listens on 10260 and is published on loopback only.
+same host is left alone. Both stacks publish the API on 7500 (the MongoDB stack's port is fixed), so to
+run both at once start this one with another port, e.g. `ENTERPRISE_API_PORT=7600`, and use `PORT=7600`
+for the CLI. DocumentDB itself listens on 10260 and is published on loopback only.
 
 #### On your own PostgreSQL
 
@@ -421,18 +436,3 @@ Licensed under our Enterprise License.
 <div align="center">
 <img src="./assets/walt-banner.png" alt="walt.id banner" />
 </div>
-
-## Harmless `ERROR` log lines
-
-A few `ERROR` lines on startup look alarming but do not indicate a problem:
-
-* `documentdb`: `Command 'atlasVersion' not found` (code 59), once per start. The `mongosh` health
-  check probes for MongoDB Atlas on connect, DocumentDB does not implement that command, and `mongosh`
-  ignores the reply. `IndexNotFound` / `NamespaceNotFound` on `DropIndexes` / `ListIndexes` during the
-  first start are migrations probing indexes and collections that do not exist yet.
-* `waltid-enterprise`: `Migration version 13 ... failed with error: 'Check failed.'`. This follows a
-  restart after a container was stopped before it finished starting (e.g. Ctrl-C right after `up`):
-  the next node replays the migrations from that stale node's DB version and also tries to apply
-  migration 13 (legacy wallet to wallet2), which is manual-only and is rejected. The remaining
-  migrations still complete and no data is changed. This comes from the shared migration framework,
-  so it is not specific to DocumentDB.

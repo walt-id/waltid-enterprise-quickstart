@@ -47,6 +47,7 @@ Enterprise stack:
 The Java driver ignores `tlsInsecure`, so the gateway certificate must be in a JKS trust store:
 
 ```bash
+mkdir -p certs
 echo | openssl s_client -connect db.example.com:10260 -servername db.example.com 2>/dev/null | openssl x509 > certs/gateway.crt
 keytool -importcert -noprompt -alias documentdb-gateway -file certs/gateway.crt \
   -keystore certs/documentdb-truststore.jks -storetype JKS -storepass "$TRUSTSTORE_PASSWORD"
@@ -54,30 +55,37 @@ keytool -importcert -noprompt -alias documentdb-gateway -file certs/gateway.crt 
 
 ## 3. Start the stack
 
-Set these in `.env` and start with the override, which switches off the bundled `documentdb` container
-and mounts the trust store:
+Put the gateway settings in their own env file, not in `.env`: `.env` is also read by the bundled
+DocumentDB stack, which would then connect to your real database (and a `walt.ts --recreate` against it
+would wipe it).
 
 ```bash
-DOCUMENTDB_CONNECTION_STRING='mongodb://waltid:<url-encoded password>@db.example.com:10260/?directConnection=true&retryWrites=false&tls=true'
-DOCUMENTDB_SSL_ENABLE=true
-DOCUMENTDB_TRUSTSTORE_FILE=./certs/documentdb-truststore.jks
-DOCUMENTDB_TRUSTSTORE_PASSWORD=<trust store password>
+cp documentdb-external.env.example documentdb-external.env   # gitignored
 ```
 
 ```bash
-docker compose -f docker-compose-documentdb.yml -f docker-compose-documentdb-external.yml up
+DOCUMENTDB_CONNECTION_STRING='mongodb://waltid:<url-encoded password>@db.example.com:10260/?directConnection=true&retryWrites=false&tls=true'
+DOCUMENTDB_TRUSTSTORE_PASSWORD=<trust store password>
+```
+
+Start with both env files and the override, which switches off the bundled `documentdb` container and
+mounts `certs/documentdb-truststore.jks` (Docker Compose v2.24.4 or newer):
+
+```bash
+docker compose --env-file .env --env-file documentdb-external.env \
+  -f docker-compose-documentdb.yml -f docker-compose-documentdb-external.yml up
 ```
 
 - `DOCUMENTDB_INVALID_HOSTNAME_ALLOWED=true` skips the hostname check if the certificate cannot match.
 - Outside this quickstart, set the same values in the `mongodb` block of `database.conf`, or as JVM
   overrides ([Docker deployment](https://docs.walt.id/enterprise-stack/setup/deployment/docker-deployment)).
   Keep exactly one `ssl` block.
-- Both compose variants publish the API on port 7500. If you also run the bundled one, give this stack its
-  own `COMPOSE_PROJECT_NAME`, `DOCUMENTDB_NETWORK` and `DOCUMENTDB_DATA_VOLUME`, so that `down -v` cannot
-  touch the other's data volume.
-- There is no Caddy: the API is reached on `enterprise.localhost:7500`
-  ([`config-documentdb/enterprise.conf`](../config-documentdb/enterprise.conf),
-  [Enterprise configuration](https://docs.walt.id/enterprise-stack/setup/configurations/config-files/enterprise)).
+- The override uses its own project, network and volume names, so `down -v` cannot touch the bundled
+  stack's data. Both publish the API on port 7500; to run them at the same time, set
+  `ENTERPRISE_API_PORT=7600` in `documentdb-external.env` and use `PORT=7600` for the CLI.
+- There is no Caddy: the API is reached on `enterprise.localhost:7500` (or your `ENTERPRISE_API_PORT`),
+  which is also the port in the URLs it generates
+  ([Enterprise configuration](https://docs.walt.id/enterprise-stack/setup/configurations/config-files/enterprise)).
 
 ## 4. License and first run
 

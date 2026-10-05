@@ -17,6 +17,7 @@ cli/walt-log-*/
 # Trust store (and any certificate material) for a DocumentDB gateway you operate yourself, see
 # docs/documentdb-existing-postgres.md.
 /certs/
+documentdb-external.env
 
 # Local crash and profiling artifacts that get dropped into the bind-mounted config/ directory.
 *.hprof
