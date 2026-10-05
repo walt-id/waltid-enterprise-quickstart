@@ -82,6 +82,11 @@ services:
       # local documentdb service and the default database name.
       - DOCUMENTDB_CONNECTION_STRING
       - DOCUMENTDB_DATABASE
+      # TLS towards a gateway that enforces it (see docker-compose-documentdb-external.yml).
+      - DOCUMENTDB_SSL_ENABLE
+      - DOCUMENTDB_TRUSTSTORE_LOCATION
+      - DOCUMENTDB_TRUSTSTORE_PASSWORD
+      - DOCUMENTDB_INVALID_HOSTNAME_ALLOWED
       # - LOG_LEVEL=trace
     ports:
       - "${ENTERPRISE_API_PORT:-7500}:7500"

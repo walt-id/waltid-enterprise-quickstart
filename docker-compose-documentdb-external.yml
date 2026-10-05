@@ -1,0 +1,32 @@
+# Override for docker-compose-documentdb.yml: run the Enterprise API against a DocumentDB gateway
+# that you operate yourself (for example on your own PostgreSQL, see
+# docs/documentdb-existing-postgres.md) instead of the bundled documentdb-local container.
+#
+# Use it together with the base file:
+#
+#   DOCUMENTDB_CONNECTION_STRING='mongodb://admin:<password>@db.example.com:10260/?directConnection=true&retryWrites=false&tls=true' \
+#   DOCUMENTDB_SSL_ENABLE=true \
+#   DOCUMENTDB_TRUSTSTORE_FILE=./certs/documentdb-truststore.jks \
+#   DOCUMENTDB_TRUSTSTORE_PASSWORD=<truststore password> \
+#   docker compose -f docker-compose-documentdb.yml -f docker-compose-documentdb-external.yml up
+#
+# The gateway of a package install always enforces TLS, so tls=true, ssl.enable and a JKS trust
+# store holding the gateway certificate are required (the Java driver ignores tlsInsecure). Set
+# DOCUMENTDB_INVALID_HOSTNAME_ALLOWED=true only when the certificate's name cannot match the host
+# you dial.
+
+services:
+  # Never started here: the profile is not enabled, and the API no longer waits for it.
+  documentdb:
+    profiles:
+      - bundled-documentdb
+
+  waltid-enterprise:
+    depends_on: !reset []
+    environment:
+      DOCUMENTDB_TRUSTSTORE_LOCATION: /certs/documentdb-truststore.jks
+    volumes:
+      - ${DOCUMENTDB_TRUSTSTORE_FILE:-./certs/documentdb-truststore.jks}:/certs/documentdb-truststore.jks:ro
+    # `host.docker.internal` reaches a gateway published on this machine. Remove if unused.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"

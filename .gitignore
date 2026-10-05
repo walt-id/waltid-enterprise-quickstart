@@ -14,6 +14,10 @@ cli/walt-log-*/
 /license/*
 !/license/.gitkeep
 
+# Trust store (and any certificate material) for a DocumentDB gateway you operate yourself, see
+# docs/documentdb-existing-postgres.md.
+/certs/
+
 # Local crash and profiling artifacts that get dropped into the bind-mounted config/ directory.
 *.hprof
 *.jfr

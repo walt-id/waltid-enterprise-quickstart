@@ -314,6 +314,12 @@ same host is left alone. Do not run both at once unless you also change the host
 (`ENTERPRISE_API_PORT` and `DOCUMENTDB_PORT`; both stacks publish the API on 7500). DocumentDB itself
 listens on 10260 and is published on loopback only.
 
+#### On your own PostgreSQL
+
+To use a PostgreSQL server you already run instead of the bundled `documentdb` container, add
+DocumentDB to it and start this stack with `docker-compose-documentdb-external.yml` on top; see
+[docs/documentdb-existing-postgres.md](docs/documentdb-existing-postgres.md).
+
 #### Licensing a DocumentDB stack
 
 A fresh DocumentDB has no license state, and the API refuses to start without it - exactly as on a
