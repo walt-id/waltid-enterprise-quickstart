@@ -30,7 +30,7 @@ services:
     depends_on: !reset []
     environment:
       # Explicit defaults rather than pass-through, so an empty value in the env file cannot replace
-      # a boolean in config-documentdb/database.conf with "" and stop the API from starting.
+      # a boolean in config/database-documentdb.conf with "" and stop the API from starting.
       - DOCUMENTDB_CONNECTION_STRING=${DOCUMENTDB_CONNECTION_STRING:?set DOCUMENTDB_CONNECTION_STRING in documentdb-external.env and pass it with --env-file}
       - DOCUMENTDB_SSL_ENABLE=${DOCUMENTDB_SSL_ENABLE:-true}
       - DOCUMENTDB_TRUSTSTORE_LOCATION=/certs/documentdb-truststore.jks

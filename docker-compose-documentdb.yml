@@ -1,35 +1,31 @@
 # walt.id Enterprise Stack quickstart backed by DocumentDB instead of MongoDB.
 #
 # DocumentDB (the open-source PostgreSQL engine, not AWS's proprietary service) speaks the MongoDB
-# wire protocol, so the Enterprise API needs only a different database.conf. This file is otherwise
-# a copy of docker-compose.yml with the database service swapped and the profile/connection handled
-# in config-documentdb/database.conf. It has no Caddy: the API is reached directly on
+# wire protocol, so this is docker-compose.yml with the database service swapped and a different
+# database.conf (config/database-documentdb.conf). There is no Caddy: the API is reached directly on
 # ENTERPRISE_API_PORT (default 7500) and carries the enterprise.localhost aliases itself. Run the CLI
-# against it with PORT set to the same value.
-#
-# Run it with:
+# with PORT set to the same value.
 #
 #   docker compose -f docker-compose-documentdb.yml up
 #
-# A separate project name keeps it isolated from the MongoDB stack, so both can exist on one host.
-# Both publish the API on 7500, so to run them at the same time start this one with another
-# ENTERPRISE_API_PORT (e.g. ENTERPRISE_API_PORT=7600, then PORT=7600 for the CLI).
+# It has its own project, network and volume. Both stacks publish the API on 7500 by default, so to
+# run them at the same time start this one with another port (ENTERPRISE_API_PORT=7600, then
+# PORT=7600 for the CLI).
 #
-# First activation needs a license seed exactly as the MongoDB quickstart does (see the README):
-# either LICENSE_SEED_CREDENTIAL with an online offer, or a .waltlicense bundle plus an installation
-# key that already exists in this database. The bound credential and installation key are persisted
-# in DocumentDB, so later restarts reuse them. Switching an existing MongoDB installation to
-# DocumentDB means transferring that state - see migrate-license-state-to-documentdb.sh.
+# A fresh database needs a license seed as in the MongoDB quickstart (see the README). The bound
+# license is persisted in DocumentDB, so restarts reuse it. A license binds to one installation at
+# a time, so activating it here invalidates the MongoDB installation it came from.
 
 name: waltid-enterprise-documentdb
 
 services:
   documentdb:
-    image: ${DOCUMENTDB_IMAGE:-ghcr.io/documentdb/documentdb/documentdb-local:latest}
+    # Pinned: DocumentDB is pre-GA and `latest` moves. Override with DOCUMENTDB_IMAGE.
+    image: ${DOCUMENTDB_IMAGE:-ghcr.io/documentdb/documentdb/documentdb-local:pg17-0.117.0}
     hostname: documentdb
-    # Plaintext is the container default (TLS_MODE=allowTLS) and is what config-documentdb uses, so
-    # no certificate material is needed for the quickstart. Add `--tlsMode requireTLS` here and the
-    # `ssl` block in config-documentdb/database.conf to serve over TLS instead.
+    # Plaintext is the container default (TLS_MODE=allowTLS) and is what config/database-documentdb.conf
+    # uses, so no certificate material is needed for the quickstart. Add `--tlsMode requireTLS` here and
+    # the `ssl` block in config/database-documentdb.conf to serve over TLS instead.
     command:
       - --username
       - ${DOCUMENTDB_USERNAME:-docdbuser}
@@ -78,11 +74,12 @@ services:
       # Points the stack at a different license server, for example a walt.id test environment.
       # Unset leaves the licenseServerUrl configured in config/license.conf untouched.
       - LICENSE_SERVER_URL
-      # Optional database overrides read by config-documentdb/database.conf. Leave unset to use the
-      # local documentdb service and the default database name. The TLS settings for a gateway you
-      # operate yourself are only set by docker-compose-documentdb-external.yml, so they can never
-      # reach this stack's bundled database by accident.
-      - DOCUMENTDB_CONNECTION_STRING
+      # Read by config/database-documentdb.conf. The connection string is always built from the
+      # documentdb service's login above (URL-encode special characters) and never taken from the
+      # environment, so one meant for a gateway you operate yourself cannot reach this stack's
+      # database by accident. docker-compose-documentdb-external.yml sets it, and the TLS settings,
+      # for that case.
+      - DOCUMENTDB_CONNECTION_STRING=mongodb://${DOCUMENTDB_USERNAME:-docdbuser}:${DOCUMENTDB_PASSWORD:-docdbpass123}@documentdb:10260/?directConnection=true&retryWrites=false
       - DOCUMENTDB_DATABASE
       # No Caddy, so the port the API listens on, the port in its public URLs and the host port must
       # be the same: the API calls its own public URLs both from inside this container (through the
@@ -97,7 +94,7 @@ services:
       - ./config:/config
       # Only database.conf is replaced; every other config file is shared with the MongoDB stack.
       # A later bind mount onto a file wins over the directory mount before it.
-      - ./config-documentdb/database.conf:/config/database.conf
+      - ./config/database-documentdb.conf:/config/database.conf
       # Offline/air-gapped activation: hold the .waltlicense here, plus the public
       # installation-request.json from `license request`. The fleet private key stays in
       # DocumentDB; do not expect walt.id to return installation-key.json.

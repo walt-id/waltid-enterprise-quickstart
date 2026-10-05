@@ -10,7 +10,7 @@ Enterprise API --- TLS, :10260 ---> documentdb-gateway --- local socket ---> you
 
 In `database.conf` that is `databaseType = mongodb` with `profile = DOCUMENTDB_POSTGRES`. See
 [Database configuration](https://docs.walt.id/enterprise-stack/setup/configurations/config-files/database)
-for the fields and [`config-documentdb/database.conf`](../config-documentdb/database.conf) for a working
+for the fields and [`config/database-documentdb.conf`](../config/database-documentdb.conf) for a working
 example.
 
 ## 1. Add DocumentDB to your PostgreSQL
