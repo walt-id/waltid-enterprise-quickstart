@@ -3,7 +3,9 @@
 # DocumentDB (the open-source PostgreSQL engine, not AWS's proprietary service) speaks the MongoDB
 # wire protocol, so the Enterprise API needs only a different database.conf. This file is otherwise
 # a copy of docker-compose.yml with the database service swapped and the profile/connection handled
-# in config-documentdb/database.conf.
+# in config-documentdb/database.conf. It has no Caddy: the API is reached directly on port 7500 and
+# carries the enterprise.localhost aliases itself, which config-documentdb/enterprise.conf matches
+# with basePort = 7500. Run the CLI against it with PORT=7500.
 #
 # Run it with:
 #
@@ -60,7 +62,10 @@ services:
 
   waltid-enterprise:
     image: waltid/waltid-enterprise-api:${ENTERPRISE_API_DOCKER_IMAGE_TAG}
-    restart: unless-stopped
+    # Pass-through form: a variable that is not defined anywhere is omitted from the container, so the
+    # optional HOCON substitutions in config/license.conf leave the configured values untouched.
+    # LICENSE_STATE_ENCRYPTION_KEY is the exception, because .env declares it empty, so it arrives as
+    # an empty string. The API treats a blank value as unset and generates its own secret.
     # Bounded, with the heap percentage raised to match, for the same reason as the MongoDB
     # quickstart: an unbounded JVM sizes its heap from host RAM.
     mem_limit: ${ENTERPRISE_MEM_LIMIT:-8g}
@@ -70,6 +75,8 @@ services:
       - LICENSE_SEED_CREDENTIAL
       - LICENSE_SEED_CREDENTIAL_FILE
       - LICENSE_INSTALLATION_KEY_FILE
+      # Points the stack at a different license server, for example a walt.id test environment.
+      # Unset leaves the licenseServerUrl configured in config/license.conf untouched.
       - LICENSE_SERVER_URL
       # Optional database overrides read by config-documentdb/database.conf. Leave unset to use the
       # local documentdb service and the default database name.
@@ -80,43 +87,26 @@ services:
       - "${ENTERPRISE_API_PORT:-7500}:7500"
     volumes:
       - ./config:/config
-      # Only database.conf is replaced; every other config file is shared with the MongoDB stack.
-      # A later bind mount onto a file wins over the directory mount before it.
+      # Only database.conf and enterprise.conf are replaced; every other config file is shared with
+      # the MongoDB stack. A later bind mount onto a file wins over the directory mount before it.
       - ./config-documentdb/database.conf:/config/database.conf
+      - ./config-documentdb/enterprise.conf:/config/enterprise.conf
+      # Offline/air-gapped activation: hold the .waltlicense here, plus the public
+      # installation-request.json from `license request`. The fleet private key stays in
+      # DocumentDB; do not expect walt.id to return installation-key.json.
       - ./license:/license
     networks:
-      - documentdb_network
-    depends_on:
-      documentdb:
-        condition: service_healthy
-
-  waltid-enterprise-ui:
-    image: waltid/waltid-enterprise-ui:${ENTERPRISE_UI_DOCKER_IMAGE_TAG:-${ENTERPRISE_API_DOCKER_IMAGE_TAG}}
-    ports:
-      - "${ENTERPRISE_UI_PORT:-7501}:3000"
-    environment:
-      - NUXT_PUBLIC_API_URL=http://enterprise.localhost
-    networks:
-      - documentdb_network
-    depends_on:
-      - waltid-enterprise
-
-  caddy:
-    image: caddy:2-alpine
-    restart: unless-stopped
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile
-    networks:
       documentdb_network:
+        # No reverse proxy in this stack, so the API owns its public hostnames. It calls its own
+        # public URLs (e.g. to fetch a credential offer), which must resolve to this container.
         aliases:
           - enterprise.localhost
           - waltid.enterprise.localhost
+          # add your own organisation domains here
     depends_on:
-      - waltid-enterprise
-      - waltid-enterprise-ui
+      documentdb:
+        condition: service_healthy
+    command: "--log-level=error"
 
 volumes:
   documentdb-data:
