@@ -322,7 +322,7 @@ DocumentDB itself listens on 10260, published on loopback only; its login is `DO
 
 To use a PostgreSQL server you already run instead of the bundled `documentdb` container, add
 DocumentDB to it and start this stack with `docker-compose-documentdb-external.yml` on top; see
-[docs/documentdb-existing-postgres.md](docs/documentdb-existing-postgres.md).
+[PostgreSQL deployment](https://docs.walt.id/enterprise-stack/setup/deployment/postgresql-deployment).
 
 #### Licensing a DocumentDB stack
 

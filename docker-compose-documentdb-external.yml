@@ -1,27 +1,15 @@
-# Override for docker-compose-documentdb.yml: run the Enterprise API against a DocumentDB gateway
-# that you operate yourself (for example on your own PostgreSQL, see
-# docs/documentdb-existing-postgres.md) instead of the bundled documentdb-local container.
-#
-# The gateway settings live in their own env file, not in .env, because .env is also read by the
-# bundled stack: a connection string there would point that stack (and a `walt.ts --recreate`
-# against it) at your real database. Copy documentdb-external.env.example to
-# documentdb-external.env, fill it in and pass both env files:
+# Run the API against a DocumentDB gateway you operate yourself (for example on your own PostgreSQL)
+# instead of the bundled container. Copy documentdb-external.env.example to documentdb-external.env
+# (not .env, which the bundled stack also reads), then:
 #
 #   docker compose --env-file .env --env-file documentdb-external.env \
 #     -f docker-compose-documentdb.yml -f docker-compose-documentdb-external.yml up
 #
-# Requires Docker Compose v2.24.4 or newer (`!reset` below).
-#
-# The gateway of a package install always enforces TLS, so tls=true, ssl.enable and a JKS trust
-# store holding the gateway certificate are required (the Java driver ignores tlsInsecure).
+# Needs Docker Compose v2.24.4+ (`!reset`). Setup guide: see documentdb-external.env.example.
 
-# Its own project, network and volume names, so it can run next to the bundled DocumentDB stack and
-# `down -v` here can never remove that stack's data volume. Both publish the API on 7500 by default;
-# set ENTERPRISE_API_PORT in documentdb-external.env to run them at the same time.
 name: waltid-enterprise-documentdb-external
 
 services:
-  # Never started here: the profile is not enabled, and the API no longer waits for it.
   documentdb:
     profiles:
       - bundled-documentdb
@@ -29,30 +17,24 @@ services:
   waltid-enterprise:
     depends_on: !reset []
     environment:
-      # Explicit defaults rather than pass-through, so an empty value in the env file cannot replace
-      # a boolean in config/database-documentdb.conf with "" and stop the API from starting.
       - DOCUMENTDB_CONNECTION_STRING=${DOCUMENTDB_CONNECTION_STRING:?set DOCUMENTDB_CONNECTION_STRING in documentdb-external.env and pass it with --env-file}
       - DOCUMENTDB_SSL_ENABLE=${DOCUMENTDB_SSL_ENABLE:-true}
       - DOCUMENTDB_TRUSTSTORE_LOCATION=/certs/documentdb-truststore.jks
       - DOCUMENTDB_TRUSTSTORE_PASSWORD=${DOCUMENTDB_TRUSTSTORE_PASSWORD:?set DOCUMENTDB_TRUSTSTORE_PASSWORD in documentdb-external.env}
-      # true only when the certificate's name cannot match the host you dial.
       - DOCUMENTDB_INVALID_HOSTNAME_ALLOWED=${DOCUMENTDB_INVALID_HOSTNAME_ALLOWED:-false}
     volumes:
-      # Long syntax so a missing trust store fails `up` instead of Docker creating a root-owned
-      # directory at that path.
+      # Long syntax so a missing trust store fails `up` instead of creating a directory.
       - type: bind
         source: ./certs/documentdb-truststore.jks
         target: /certs/documentdb-truststore.jks
         read_only: true
         bind:
           create_host_path: false
-    # `host.docker.internal` reaches a gateway published on this machine. Remove if unused.
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
 volumes:
-  # Unused here (the documentdb service is off), but declared by the base file; renamed so that
-  # `down -v` on this project cannot remove the bundled stack's documentdb-data volume.
+  # Renamed so `down -v` here cannot remove the bundled stack's data volume.
   documentdb-data:
     name: waltid-enterprise-documentdb-external-unused
 
