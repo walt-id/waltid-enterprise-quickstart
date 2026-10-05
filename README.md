@@ -280,6 +280,57 @@ organisation name, you can update the Caddyfile to add your own organisation dom
       - waltid-enterprise
 ```
 
+### DocumentDB instead of MongoDB
+
+`docker-compose-documentdb.yml` runs the same stack against [DocumentDB](https://documentdb.io), the
+open-source PostgreSQL engine - not AWS's proprietary service of the same name. It speaks the MongoDB
+wire protocol, so the only difference is `config-documentdb/database.conf`, which
+`docker-compose-documentdb.yml` mounts over `config/database.conf`:
+
+```bash
+docker compose -f docker-compose-documentdb.yml up
+```
+
+That file selects the `DOCUMENTDB_POSTGRES` profile and sets `retryWrites=false` and
+`collation = "none"`, all of which this engine requires; a `MONGODB_*` profile would claim collation
+support it does not have, and without `retryWrites=false` writes fail. It connects without TLS
+because the local gateway defaults to `TLS_MODE=allowTLS` and the Java driver cannot bypass its
+self-signed certificate through `tlsInsecure`; enabling TLS needs the `ssl` trust-store block
+described in the file.
+
+The DocumentDB stack uses its own docker project, network and volume
+(`waltid-enterprise-documentdb`, `documentdb-network`, `documentdb-data`), so a MongoDB stack on the
+same host is left alone. Do not run both at once unless you also change the host ports
+(`ENTERPRISE_API_PORT`, `ENTERPRISE_UI_PORT`, `DOCUMENTDB_PORT` and Caddy's 80/443). DocumentDB
+itself listens on 10260 and is published on loopback only.
+
+#### Licensing a DocumentDB stack
+
+A fresh DocumentDB has no license state, and the API refuses to start without it - exactly as on a
+fresh MongoDB. Activate with an online offer as usual:
+
+```bash
+LICENSE_SEED_CREDENTIAL="openid-credential-offer://..." docker compose -f docker-compose-documentdb.yml up
+```
+
+To move an **existing** MongoDB installation onto DocumentDB, copy the persisted license state
+instead of reactivating. A license can only be bound to one installation at a time, so a fresh
+activation would both consume a new credential and invalidate the old installation:
+
+```bash
+docker compose up -d mongodb
+docker compose -f docker-compose-documentdb.yml up -d documentdb
+./migrate-license-state-to-documentdb.sh
+docker compose -f docker-compose-documentdb.yml up -d
+```
+
+The script copies `license_state` and `license_state_key` with `mongodump`/`mongorestore`. The state
+carries an integrity MAC over its numeric fields, and a JSON round trip changes their BSON types and
+fails that check, so a BSON-preserving tool is required. The script reads the MongoDB credentials and
+network from `.env`; `SOURCE_DB` and `TARGET_DB` default to `waltid-enterprise` and can be
+overridden. The two configurations must agree on the database name, and the DocumentDB one also
+honours `DOCUMENTDB_DATABASE` and `DOCUMENTDB_CONNECTION_STRING`.
+
 ## 2. Enterprise CLI
 
 A TypeScript CLI tool for setting up and testing the walt.id Enterprise Stack.
