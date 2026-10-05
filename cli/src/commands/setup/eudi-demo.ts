@@ -4,7 +4,7 @@
  * This command:
  * 1. Authenticates with the WRP Registry using PID/OID4VP (displays QR code)
  * 2. Creates all required entities in the registry (law, legal person, etc.)
- * 3. Obtains an RP certificate in PKCS#12 format
+ * 3. Obtains a WRPAC (PKCS#12) and WRPRC (JWT + COSE)
  * 4. Sets up a verifier2 instance configured with the certificate
  *
  * Configuration is loaded from cli/eudi-demo.env (see eudi-demo.env.example).
@@ -14,13 +14,22 @@ import qrcode from 'qrcode-terminal';
 import { writeFileSync, mkdirSync } from 'fs';
 import { join } from 'path';
 import { CommandContext } from '../../context.js';
-import { RESOURCES } from '../../config.js';
 import {
   EudiDemoConfig,
   WrpAuthState,
   WrpEntityIds,
   buildEudiVerifierClientMetadata,
 } from '../../eudi-demo-config.js';
+import {
+  decodeFlexibleBase64,
+  extractCreatedId,
+  extractCreatedIds,
+  isAuthorizationPendingError,
+  isoDateOnly,
+  shouldRegisterProvidedAttestations,
+  buildLiveRegistrarCredentialCreateItem,
+  buildLiveRegistrarProvidedAttestation,
+} from '../../eudi-wrp.js';
 import { setupLogin } from './auth.js';
 
 // ============================================================================
@@ -56,6 +65,17 @@ export function getWrpHttpLog(): WrpHttpLogEntry[] {
   return wrpHttpLog;
 }
 
+function redactSecrets(body: unknown): unknown {
+  if (body == null || typeof body !== 'object' || Array.isArray(body)) {
+    return body;
+  }
+  const clone = { ...(body as Record<string, unknown>) };
+  if ('password' in clone) {
+    clone.password = '[REDACTED]';
+  }
+  return clone;
+}
+
 /** Clear the WRP HTTP log */
 export function clearWrpHttpLog(): void {
   wrpHttpLog.length = 0;
@@ -87,7 +107,7 @@ async function wrpRequest<T>(
     method,
     url,
     headers,
-    body,
+    body: redactSecrets(body),
   };
   ctx.saveJson(`wrp-${baseName}-request.json`, requestLog, step);
 
@@ -222,18 +242,19 @@ async function waitForAuthorization(
           throw new Error('No hash_pid received after authorization');
         }
 
-        ctx.saveJson('wrp-auth-hash-pid.json', { hashPid: hashPid.substring(0, 20) + '...' });
+        ctx.saveJson('wrp-auth-hash-pid.json', { hashPid });
         console.log(`   [OK] Authentication successful`);
-        console.log(`   hash_pid: ${hashPid.substring(0, 20)}...`);
+        console.log(`   hash_pid: ${hashPid}`);
         return hashPid;
       }
 
       console.log(' pending');
-    } catch (error: any) {
-      if (error.message?.includes('404') || error.message?.includes('not found')) {
+    } catch (error: unknown) {
+      if (isAuthorizationPendingError(error)) {
         console.log(' pending');
       } else {
-        console.log(` error: ${error.message}`);
+        const message = error instanceof Error ? error.message : String(error);
+        console.log(` error: ${message}`);
       }
     }
 
@@ -247,19 +268,12 @@ async function waitForAuthorization(
 // Entity Creation Functions
 // ============================================================================
 
-/** Standard WRP API response format for create operations */
+/** WRP create response envelope (ids live under data, often in a labeled map). */
 interface WrpCreateResponse {
+  code?: number;
+  status?: string;
   message?: string;
-  data?: number[];
-}
-
-/** Extract ID from WRP create response */
-function extractId(response: WrpCreateResponse, entityName: string): number {
-  const id = response.data?.[0];
-  if (!id) {
-    throw new Error(`No ${entityName} ID returned in response.data`);
-  }
-  return id;
+  data?: number[] | Record<string, number[]>;
 }
 
 async function createLaw(
@@ -282,7 +296,7 @@ async function createLaw(
     ctx, client, 'POST', '/law/create', request, 'create-law'
   );
 
-  const id = extractId(response, 'law');
+  const id = extractCreatedId(response, 'law');
   console.log(`   [OK] Law created: ${id}`);
   return id;
 }
@@ -308,7 +322,7 @@ async function createLegalPerson(
     ctx, client, 'POST', '/legal_person/create', request, 'create-legal-person'
   );
 
-  const id = extractId(response, 'legal person');
+  const id = extractCreatedId(response, 'legal person');
   console.log(`   [OK] Legal person created: ${id}`);
   return id;
 }
@@ -333,7 +347,7 @@ async function createIdentifier(
     ctx, client, 'POST', '/identifier/create', request, 'create-identifier'
   );
 
-  const id = extractId(response, 'identifier');
+  const id = extractCreatedId(response, 'identifier');
   console.log(`   [OK] Identifier created: ${id}`);
   return id;
 }
@@ -365,37 +379,47 @@ async function createLegalEntity(
     ctx, client, 'POST', '/legal_entity/create', request, 'create-legal-entity'
   );
 
-  const id = extractId(response, 'legal entity');
+  const id = extractCreatedId(response, 'legal entity');
   console.log(`   [OK] Legal entity created: ${id}`);
   return id;
 }
 
-async function createPolicy(
+async function createPolicies(
   ctx: CommandContext,
   client: WrpApiClient,
   config: EudiDemoConfig,
-  hashPid: string,
-  intention: 'wrp' | 'intended_use',
-  policyUri: string
-): Promise<number> {
-  ctx.log(`Creating policy (${intention})`, 'EUDI-DEMO');
+  hashPid: string
+): Promise<{ wrpPolicyId: number; intendedUsePolicyId: number }> {
+  ctx.log('Creating WRP and intended-use policies', 'EUDI-DEMO');
 
   const request = {
     hash_pid: hashPid,
-    policy: [{
-      intention,
-      policyURI: policyUri,
-      type: 'http://data.europa.eu/eudi/policy/privacy-policy',
-    }],
+    policy: [
+      {
+        intention: 'wrp',
+        policyURI: config.provider.policyUri,
+        type: config.provider.policyType,
+      },
+      {
+        intention: 'intended_use',
+        policyURI: config.intendedUse.privacyPolicyUri,
+        type: config.intendedUse.policyType,
+      },
+    ],
   };
 
   const response = await wrpRequest<WrpCreateResponse>(
-    ctx, client, 'POST', '/policy/create', request, `create-policy-${intention}`
+    ctx, client, 'POST', '/policy/create', request, 'create-policy'
   );
 
-  const id = extractId(response, `policy (${intention})`);
-  console.log(`   [OK] Policy (${intention}) created: ${id}`);
-  return id;
+  const ids = extractCreatedIds(response);
+  const wrpPolicyId = ids[0];
+  const intendedUsePolicyId = ids[1];
+  if (wrpPolicyId === undefined || intendedUsePolicyId === undefined) {
+    throw new Error(`Expected two policy IDs, received: ${JSON.stringify(response)}`);
+  }
+  console.log(`   [OK] Policies created: WRP ${wrpPolicyId}, intended use ${intendedUsePolicyId}`);
+  return { wrpPolicyId, intendedUsePolicyId };
 }
 
 async function createProvider(
@@ -414,7 +438,6 @@ async function createProvider(
       legalEntityId,
       policy_id: [policyId],
       providerType: config.provider.type,
-      x5c: [],
     }],
   };
 
@@ -422,7 +445,7 @@ async function createProvider(
     ctx, client, 'POST', '/provider/create', request, 'create-provider'
   );
 
-  const id = extractId(response, 'provider');
+  const id = extractCreatedId(response, 'provider');
   console.log(`   [OK] Provider created: ${id}`);
   return id;
 }
@@ -437,21 +460,20 @@ async function createCredential(
 
   const request = {
     hash_pid: hashPid,
-    credentials: [{
-      claims: config.credential.claims.map(path => ({ path })),
-      format: config.credential.format,
-      meta: {
-        name: config.credential.name,
-        version: config.credential.version,
-      },
-    }],
+    credentials: [
+      buildLiveRegistrarCredentialCreateItem(
+        config.credential.format,
+        config.credential.claims,
+        config.credential.meta
+      ),
+    ],
   };
 
   const response = await wrpRequest<WrpCreateResponse>(
     ctx, client, 'POST', '/credential/create', request, 'create-credential'
   );
 
-  const id = extractId(response, 'credential');
+  const id = extractCreatedId(response, 'credential');
   console.log(`   [OK] Credential created: ${id}`);
   return id;
 }
@@ -472,7 +494,7 @@ async function createIntendedUse(
   const request = {
     hash_pid: hashPid,
     intended_uses: [{
-      createdAt: now.toISOString(),
+      createdAt: isoDateOnly(now),
       credential_ids: [credentialId],
       intendedUseIdentifier: config.intendedUse.identifier,
       privacyPolicy_id: [policyId],
@@ -480,7 +502,7 @@ async function createIntendedUse(
         content: config.intendedUse.purpose,
         lang: 'en',
       }],
-      revokedAt: nextYear.toISOString(),
+      revokedAt: isoDateOnly(nextYear),
     }],
   };
 
@@ -488,7 +510,7 @@ async function createIntendedUse(
     ctx, client, 'POST', '/intended_use/create', request, 'create-intended-use'
   );
 
-  const id = extractId(response, 'intended use');
+  const id = extractCreatedId(response, 'intended use');
   console.log(`   [OK] Intended use created: ${id}`);
   return id;
 }
@@ -496,23 +518,26 @@ async function createIntendedUse(
 async function createProvidedAttestation(
   ctx: CommandContext,
   client: WrpApiClient,
+  config: EudiDemoConfig,
   hashPid: string
 ): Promise<number> {
   ctx.log('Creating provided attestation', 'EUDI-DEMO');
 
   const request = {
     hash_pid: hashPid,
-    providesAttestations: [{
-      format: 'jwt',
-      meta: 'EUDI Wallet verification attestation',
-    }],
+    providesAttestations: [
+      buildLiveRegistrarProvidedAttestation(
+        config.credential.format,
+        config.credential.meta
+      ),
+    ],
   };
 
   const response = await wrpRequest<WrpCreateResponse>(
     ctx, client, 'POST', '/provided_attestation/create', request, 'create-provided-attestation'
   );
 
-  const id = extractId(response, 'provided attestation');
+  const id = extractCreatedId(response, 'provided attestation');
   console.log(`   [OK] Provided attestation created: ${id}`);
   return id;
 }
@@ -540,7 +565,7 @@ async function createSupervisoryAuthority(
     ctx, client, 'POST', '/supervisory_authority/create', request, 'create-supervisory-authority'
   );
 
-  const id = extractId(response, 'supervisory authority');
+  const id = extractCreatedId(response, 'supervisory authority');
   console.log(`   [OK] Supervisory authority created: ${id}`);
   return id;
 }
@@ -552,7 +577,7 @@ async function createWalletRp(
   hashPid: string,
   providerId: number,
   intendedUseId: number,
-  providedAttestationId: number,
+  providedAttestationIds: number[],
   supervisoryAuthorityId: number
 ): Promise<number> {
   ctx.log('Creating Wallet Relying Party', 'EUDI-DEMO');
@@ -564,7 +589,7 @@ async function createWalletRp(
       intendedUse_ids: [intendedUseId],
       isPSB: config.walletRp.isPsb,
       provider_id: providerId,
-      providesAttestations_id: [providedAttestationId],
+      providesAttestations_id: providedAttestationIds,
       registryURI: config.walletRp.registryUri,
       srvDescription: [{
         content: config.walletRp.description,
@@ -573,6 +598,7 @@ async function createWalletRp(
       supervisoryAuthority: supervisoryAuthorityId,
       supportURI: [config.walletRp.supportUri],
       tradeName: config.walletRp.tradeName,
+      usesIntermediary: [],
     }],
   };
 
@@ -580,7 +606,7 @@ async function createWalletRp(
     ctx, client, 'POST', '/wallet_rp/create', request, 'create-wallet-rp'
   );
 
-  const id = extractId(response, 'wallet RP');
+  const id = extractCreatedId(response, 'wallet RP');
   console.log(`   [OK] Wallet Relying Party created: ${id}`);
   return id;
 }
@@ -595,18 +621,19 @@ interface WrpCertificateResponse {
   status?: string;
   data?: {
     file_base64?: string;
+    cose_base64?: string;
     filename?: string;
   };
 }
 
-async function generateRpCertificate(
+async function generateWrpac(
   ctx: CommandContext,
   client: WrpApiClient,
   config: EudiDemoConfig,
   hashPid: string,
   wrpId: number
 ): Promise<Buffer> {
-  ctx.log('Generating RP certificate (PKCS#12)', 'EUDI-DEMO');
+  ctx.log('Generating WRPAC (PKCS#12 access certificate)', 'EUDI-DEMO');
 
   const request = {
     hash_pid: hashPid,
@@ -615,37 +642,48 @@ async function generateRpCertificate(
   };
 
   const response = await wrpRequest<WrpCertificateResponse>(
-    ctx, client, 'POST', '/wallet_rp/certificate', 
-    request, 'generate-certificate'
+    ctx, client, 'POST', '/wallet_rp/certificate',
+    request, 'generate-wrpac'
   );
 
-  // API returns base64-encoded PKCS#12 in data.file_base64
   const base64Cert = response.data?.file_base64;
   if (!base64Cert) {
     throw new Error('No certificate data (file_base64) returned from API');
   }
 
   const certBuffer = Buffer.from(base64Cert, 'base64');
-  
-  // Add to HTTP log (redact password in logged request)
-  wrpHttpLog.push({
-    request: {
-      method: 'POST',
-      url: `${client.baseUrl}/wallet_rp/certificate`,
-      headers: { 'Content-Type': 'application/json' },
-      body: { ...request, password: '[REDACTED]' },
-    },
-    response: {
-      status: 200,
-      statusText: 'OK',
-      headers: {},
-      data: { certificateSize: certBuffer.length, format: 'PKCS#12 (base64 decoded)' },
-    },
-    timestamp: new Date().toISOString(),
-  });
-
-  console.log(`   [OK] RP certificate generated (${certBuffer.length} bytes)`);
+  console.log(`   [OK] WRPAC generated (${certBuffer.length} bytes)`);
   return certBuffer;
+}
+
+async function generateWrprc(
+  ctx: CommandContext,
+  client: WrpApiClient,
+  hashPid: string,
+  intendedUseId: number
+): Promise<{ jwt: Buffer; cose: Buffer }> {
+  ctx.log('Generating WRPRC (registration certificate)', 'EUDI-DEMO');
+
+  const request = {
+    hash_pid: hashPid,
+    intended_use_id: intendedUseId,
+  };
+
+  const response = await wrpRequest<WrpCertificateResponse>(
+    ctx, client, 'POST', '/intended_use/certificate',
+    request, 'generate-wrprc'
+  );
+
+  const jwtBase64 = response.data?.file_base64;
+  const coseBase64 = response.data?.cose_base64;
+  if (!jwtBase64 || !coseBase64) {
+    throw new Error('No WRPRC data (file_base64 / cose_base64) returned from API');
+  }
+
+  const jwt = decodeFlexibleBase64(jwtBase64);
+  const cose = decodeFlexibleBase64(coseBase64);
+  console.log(`   [OK] WRPRC generated (jwt ${jwt.length} bytes, cose ${cose.length} bytes)`);
+  return { jwt, cose };
 }
 
 // ============================================================================
@@ -655,7 +693,7 @@ async function generateRpCertificate(
 async function createEudiVerifier(
   ctx: CommandContext,
   config: EudiDemoConfig,
-  certPath: string
+  certPaths: { wrpac: string; wrprcJwt: string; wrprcCose: string }
 ): Promise<void> {
   ctx.log('Creating EUDI demo verifier2 service', 'EUDI-DEMO');
 
@@ -698,7 +736,9 @@ async function createEudiVerifier(
     console.log(`   [OK] Verifier created: ${verifierPath}`);
   }
 
-  console.log(`\n   RP Certificate saved to: ${certPath}`);
+  console.log(`\n   WRPAC saved to: ${certPaths.wrpac}`);
+  console.log(`   WRPRC (JWT) saved to: ${certPaths.wrprcJwt}`);
+  console.log(`   WRPRC (COSE) saved to: ${certPaths.wrprcCose}`);
   console.log(`   Certificate password: ${config.certificatePassword}`);
   console.log(`\n   To configure the verifier with the certificate, import it into your KMS`);
   console.log(`   and update the verifier configuration to use the certificate for client authentication.`);
@@ -716,9 +756,12 @@ export async function runEudiDemoSetup(
   config: EudiDemoConfig
 ): Promise<void> {
   console.log('\n=== EUDI Demo Setup ===\n');
+  console.log(`Role: ${config.walletRp.entitlements.join(', ')}`);
   console.log(`WRP Registry: ${config.registryBaseUrl}`);
   console.log(`Tenant: ${config.tenantId}`);
-  console.log(`Verifier: ${config.verifierName}`);
+  if (config.createVerifier) {
+    console.log(`Verifier: ${config.verifierName}`);
+  }
   console.log(`Service Base URL: ${config.serviceBaseUrl}`);
   console.log(`Legal Entity: ${config.legalEntity.legalName} (${config.legalEntity.country})\n`);
 
@@ -747,45 +790,64 @@ export async function runEudiDemoSetup(
     entityIds.legalPersonId, entityIds.identifierId
   );
 
-  entityIds.policyWrpId = await createPolicy(ctx, client, config, hashPid, 'wrp', config.provider.policyUri);
+  const policies = await createPolicies(ctx, client, config, hashPid);
+  entityIds.policyWrpId = policies.wrpPolicyId;
+  entityIds.policyIntendedUseId = policies.intendedUsePolicyId;
   entityIds.providerId = await createProvider(
     ctx, client, config, hashPid,
     entityIds.legalEntityId, entityIds.policyWrpId
   );
 
   entityIds.credentialId = await createCredential(ctx, client, config, hashPid);
-  entityIds.policyIntendedUseId = await createPolicy(
-    ctx, client, config, hashPid, 'intended_use', config.intendedUse.privacyPolicyUri
-  );
   entityIds.intendedUseId = await createIntendedUse(
     ctx, client, config, hashPid,
     entityIds.credentialId, entityIds.policyIntendedUseId
   );
 
-  entityIds.providedAttestationId = await createProvidedAttestation(ctx, client, hashPid);
+  const providedAttestationIds: number[] = [];
+  if (shouldRegisterProvidedAttestations(config.walletRp.entitlements)) {
+    entityIds.providedAttestationId = await createProvidedAttestation(ctx, client, config, hashPid);
+    providedAttestationIds.push(entityIds.providedAttestationId);
+  } else {
+    console.log('   [SKIP] Provided attestation (no issuer entitlement on this RP)');
+  }
   entityIds.supervisoryAuthorityId = await createSupervisoryAuthority(ctx, client, config, hashPid);
 
   entityIds.walletRpId = await createWalletRp(
     ctx, client, config, hashPid,
     entityIds.providerId, entityIds.intendedUseId,
-    entityIds.providedAttestationId, entityIds.supervisoryAuthorityId
+    providedAttestationIds, entityIds.supervisoryAuthorityId
   );
 
   // Save entity IDs summary
   ctx.saveJson('wrp-entity-ids-summary.json', entityIds);
 
-  // Step 3: Generate RP certificate
-  console.log('\n--- Step 3: Generate RP Certificate ---\n');
-  const certBuffer = await generateRpCertificate(ctx, client, config, hashPid, entityIds.walletRpId);
+  // Step 3: Generate WRPAC then WRPRC
+  console.log('\n--- Step 3: Generate RP Certificates ---\n');
+  const wrpacBuffer = await generateWrpac(ctx, client, config, hashPid, entityIds.walletRpId);
+  const wrprc = await generateWrprc(ctx, client, hashPid, entityIds.intendedUseId);
 
   const certDir = join(ctx.cliDir, 'certs');
   mkdirSync(certDir, { recursive: true });
-  const certPath = join(certDir, 'eudi-rp-certificate.p12');
-  writeFileSync(certPath, certBuffer);
+  const certPaths = {
+    wrpac: join(certDir, `${config.certFilePrefix}-certificate.p12`),
+    wrprcJwt: join(certDir, `${config.certFilePrefix}-wrprc.jwt`),
+    wrprcCose: join(certDir, `${config.certFilePrefix}-wrprc.cose`),
+  };
+  writeFileSync(certPaths.wrpac, wrpacBuffer);
+  writeFileSync(certPaths.wrprcJwt, wrprc.jwt);
+  writeFileSync(certPaths.wrprcCose, wrprc.cose);
 
-  // Step 4: Create verifier2 service
-  console.log('\n--- Step 4: Create Verifier Service ---\n');
-  await createEudiVerifier(ctx, config, certPath);
+  if (config.createVerifier) {
+    console.log('\n--- Step 4: Create Verifier Service ---\n');
+    await createEudiVerifier(ctx, config, certPaths);
+  } else {
+    console.log('\n--- Step 4: Enterprise issuer wiring ---');
+    console.log('   [SKIP] Verifier2 (this role is an issuer entitlement)');
+    console.log('   Registering as PID_Provider or Non_Q_EAA_Provider does not make the');
+    console.log('   EUDI reference wallet trust this issuer. The wallet still needs your');
+    console.log('   IACA / document-signer in its own trust store.');
+  }
 
   // Save WRP HTTP log
   const wrpLog = getWrpHttpLog();
@@ -804,7 +866,12 @@ export async function runEudiDemoSetup(
   console.log(`  Legal Entity ID: ${entityIds.legalEntityId}`);
   console.log(`  Provider ID: ${entityIds.providerId}`);
   console.log(`  Wallet RP ID: ${entityIds.walletRpId}`);
-  console.log(`\nCertificate: ${certPath}`);
-  console.log(`Verifier: ${ctx.config.organization}.${config.tenantId}.${config.verifierName}`);
+  console.log(`\nCertificates:`);
+  console.log(`  WRPAC: ${certPaths.wrpac}`);
+  console.log(`  WRPRC (JWT): ${certPaths.wrprcJwt}`);
+  console.log(`  WRPRC (COSE): ${certPaths.wrprcCose}`);
+  if (config.createVerifier) {
+    console.log(`Verifier: ${ctx.config.organization}.${config.tenantId}.${config.verifierName}`);
+  }
   console.log(`\nLogs saved to: ${ctx.workdir}`);
 }

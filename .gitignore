@@ -18,3 +18,4 @@ cli/walt-log-*/
 *.hprof
 *.jfr
 config/otel-agent.jar
+.env

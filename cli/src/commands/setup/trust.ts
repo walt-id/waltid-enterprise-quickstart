@@ -145,6 +145,12 @@ export async function importPublicTrustLists(ctx: CommandContext): Promise<void>
       acceptancePolicy: 'REQUIRE_VALID_SIGNATURE',
     },
     {
+      sourceId: 'de-tsl-authenticated',
+      url: 'https://tl.bundesnetzagentur.de/TL-DE.xml',
+      description: 'German TSL (XML format, RSASSA-PSS/MGF1-SHA256 XMLDSig integrity verified)',
+      acceptancePolicy: 'REQUIRE_VALID_SIGNATURE',
+    },
+    {
       sourceId: 'it-tsl-authenticated',
       url: 'https://eidas.agid.gov.it/TL/TSL-IT.xml',
       description: 'Italian TSL (XML format, XMLDSig integrity verified)',

@@ -141,7 +141,9 @@ Setup Commands (create resources):
   --setup-obtain-wallet-attestation  Obtain wallet attestation
   --setup-bank-tenant     Set up bank-tenant (issuer, wallet, verifier, KMS, X509)
   --setup-gov-services    Set up government services (multi-department issuers, verifier)
-  --setup-eudi-demo       Set up EUDI demo (WRP Registry auth, RP certificate, verifier2)
+  --setup-eudi-demo       Set up EUDI Service_Provider (WRP Registry auth, RP certificate, verifier2)
+  --setup-eudi-pid-provider  Register a PID_Provider on the WRP Registry
+  --setup-eudi-eaa-provider  Register a Non_Q_EAA_Provider on the WRP Registry
   --setup-acme-tenant     Set up acme tenant (Photo ID mDoc + Employee SD-JWT issuer, verifier)
 
 Additional Setup Commands:
@@ -212,6 +214,7 @@ EUDI demo (cli/eudi-demo.env — copy from eudi-demo.env.example):
   EUDI_SERVICE_BASE_URL   Public base URL for verifier service
   EUDI_LEGAL_ENTITY_*     Legal entity information for WRP registration
   EUDI_CERTIFICATE_PASSWORD  Password for PKCS#12 certificate
+  EUDI_EAA_CREDENTIAL_*   mDL / EAA overrides for --setup-eudi-eaa-provider
 
 Acme tenant (cli/acme-tenant.env — copy from acme-tenant.env.example):
   ACME_TENANT                   Tenant ID (default: acme-tenant)
@@ -256,6 +259,12 @@ Examples:
   # Set up EUDI demo with WRP Registry (requires cli/eudi-demo.env)
   npx tsx walt.ts --setup-eudi-demo
 
+  # Register a PID_Provider (same env file; writes certs/eudi-pid-provider-*)
+  npx tsx walt.ts --setup-eudi-pid-provider
+
+  # Register a Non_Q_EAA_Provider (mDL provided attestation by default)
+  npx tsx walt.ts --setup-eudi-eaa-provider
+
   # Set up acme tenant with Photo ID + Employee credentials (requires cli/acme-tenant.env)
   npx tsx walt.ts --setup-acme-tenant
 `);
@@ -289,6 +298,8 @@ async function main(): Promise<void> {
     '--setup-bank-tenant',
     '--setup-gov-services',
     '--setup-eudi-demo',
+    '--setup-eudi-pid-provider',
+    '--setup-eudi-eaa-provider',
     '--setup-acme-tenant',
     '--setup-create-trust-registry', '--setup-etsi-trust-registry', '--setup-import-trust-list',
     '--setup-create-superadmin', '--setup-create-organization',
@@ -321,7 +332,11 @@ async function main(): Promise<void> {
   if (args.includes('--setup-gov-services') || args.includes('--flow-gov-trust')) {
     loadGovServicesEnv(cliDir);
   }
-  if (args.includes('--setup-eudi-demo')) {
+  if (
+    args.includes('--setup-eudi-demo') ||
+    args.includes('--setup-eudi-pid-provider') ||
+    args.includes('--setup-eudi-eaa-provider')
+  ) {
     loadEudiDemoEnv(cliDir);
   }
   if (args.includes('--setup-acme-tenant')) {
@@ -352,8 +367,21 @@ async function main(): Promise<void> {
 
     if (args.includes('--setup-eudi-demo')) {
       ctx.ensureWorkdir();
-      const eudiConfig = createEudiDemoConfig();
-      await runEudiDemoSetup(ctx, eudiConfig);
+      await runEudiDemoSetup(ctx, createEudiDemoConfig('service_provider'));
+      ctx.saveHttpLog();
+      return;
+    }
+
+    if (args.includes('--setup-eudi-pid-provider')) {
+      ctx.ensureWorkdir();
+      await runEudiDemoSetup(ctx, createEudiDemoConfig('pid_provider'));
+      ctx.saveHttpLog();
+      return;
+    }
+
+    if (args.includes('--setup-eudi-eaa-provider')) {
+      ctx.ensureWorkdir();
+      await runEudiDemoSetup(ctx, createEudiDemoConfig('non_q_eaa_provider'));
       ctx.saveHttpLog();
       return;
     }
