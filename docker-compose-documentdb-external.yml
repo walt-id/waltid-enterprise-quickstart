@@ -1,0 +1,43 @@
+# Run the API against a DocumentDB gateway you operate yourself (for example on your own PostgreSQL)
+# instead of the bundled container. Copy documentdb-external.env.example to documentdb-external.env
+# (not .env, which the bundled stack also reads), then:
+#
+#   docker compose --env-file .env --env-file documentdb-external.env \
+#     -f docker-compose-documentdb.yml -f docker-compose-documentdb-external.yml up
+#
+# Needs Docker Compose v2.24.4+ (`!reset`). Setup guide: see documentdb-external.env.example.
+
+name: waltid-enterprise-documentdb-external
+
+services:
+  documentdb:
+    profiles:
+      - bundled-documentdb
+
+  waltid-enterprise:
+    depends_on: !reset []
+    environment:
+      - DOCUMENTDB_CONNECTION_STRING=${DOCUMENTDB_CONNECTION_STRING:?set DOCUMENTDB_CONNECTION_STRING in documentdb-external.env and pass it with --env-file}
+      - DOCUMENTDB_SSL_ENABLE=${DOCUMENTDB_SSL_ENABLE:-true}
+      - DOCUMENTDB_TRUSTSTORE_LOCATION=/certs/documentdb-truststore.jks
+      - DOCUMENTDB_TRUSTSTORE_PASSWORD=${DOCUMENTDB_TRUSTSTORE_PASSWORD:?set DOCUMENTDB_TRUSTSTORE_PASSWORD in documentdb-external.env}
+      - DOCUMENTDB_INVALID_HOSTNAME_ALLOWED=${DOCUMENTDB_INVALID_HOSTNAME_ALLOWED:-false}
+    volumes:
+      # Long syntax so a missing trust store fails `up` instead of creating a directory.
+      - type: bind
+        source: ./certs/documentdb-truststore.jks
+        target: /certs/documentdb-truststore.jks
+        read_only: true
+        bind:
+          create_host_path: false
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+volumes:
+  # Renamed so `down -v` here cannot remove the bundled stack's data volume.
+  documentdb-data:
+    name: waltid-enterprise-documentdb-external-unused
+
+networks:
+  documentdb_network:
+    name: waltid-enterprise-documentdb-external

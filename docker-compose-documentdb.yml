@@ -1,54 +1,34 @@
-# walt.id Enterprise Stack quickstart backed by DocumentDB instead of MongoDB.
-#
-# DocumentDB (the open-source PostgreSQL engine, not AWS's proprietary service) speaks the MongoDB
-# wire protocol, so the Enterprise API needs only a different database.conf. This file is otherwise
-# a copy of docker-compose.yml with the database service swapped and the profile/connection handled
-# in config-documentdb/database.conf.
-#
-# Run it with:
+# walt.id Enterprise Stack on DocumentDB (the open-source PostgreSQL engine) instead of MongoDB.
+# Same as docker-compose.yml, but without Caddy: the API is reached directly on ENTERPRISE_API_PORT
+# (default 7500), so run the CLI with the same PORT.
 #
 #   docker compose -f docker-compose-documentdb.yml up
 #
-# A separate project name keeps it isolated from the MongoDB stack, so both can exist on one host;
-# they must not publish the same host ports at the same time, so stop one before starting the other
-# or override the *_PORT variables.
-#
-# First activation needs a license seed exactly as the MongoDB quickstart does (see the README):
-# either LICENSE_SEED_CREDENTIAL with an online offer, or a .waltlicense bundle plus an installation
-# key that already exists in this database. The bound credential and installation key are persisted
-# in DocumentDB, so later restarts reuse them. Switching an existing MongoDB installation to
-# DocumentDB means transferring that state - see migrate-license-state-to-documentdb.sh.
+# Both stacks publish the API on 7500 by default; to run them together set e.g. ENTERPRISE_API_PORT=7600.
 
 name: waltid-enterprise-documentdb
 
 services:
   documentdb:
-    image: ${DOCUMENTDB_IMAGE:-ghcr.io/documentdb/documentdb/documentdb-local:latest}
+    # Pinned: DocumentDB is pre-GA and `latest` moves. Override with DOCUMENTDB_IMAGE.
+    image: ${DOCUMENTDB_IMAGE:-ghcr.io/documentdb/documentdb/documentdb-local:pg17-0.117.0}
     hostname: documentdb
-    # Plaintext is the container default (TLS_MODE=allowTLS) and is what config-documentdb uses, so
-    # no certificate material is needed for the quickstart. Add `--tlsMode requireTLS` here and the
-    # `ssl` block in config-documentdb/database.conf to serve over TLS instead.
     command:
       - --username
       - ${DOCUMENTDB_USERNAME:-docdbuser}
       - --password
       - ${DOCUMENTDB_PASSWORD:-docdbpass123}
     environment:
-      # Also declared as environment (not only as command flags) so the healthcheck below can read
-      # them; variables exported by the entrypoint are not visible to a later exec.
+      # Read by the healthcheck.
       USERNAME: ${DOCUMENTDB_USERNAME:-docdbuser}
       PASSWORD: ${DOCUMENTDB_PASSWORD:-docdbpass123}
     ports:
-      # Loopback-only by default: DocumentDB has no user-facing UI and should not be exposed.
       - "127.0.0.1:${DOCUMENTDB_PORT:-10260}:10260"
     volumes:
       - documentdb-data:/data
     networks:
       - documentdb_network
     healthcheck:
-      # `docker ps` reports Up well before the gateway accepts connections, and the first client to
-      # connect too early fails. An authenticated ping is the only signal that the endpoint is
-      # actually usable, so the API is gated on this rather than on the container having started.
       test:
         - "CMD-SHELL"
         - "mongosh --quiet --host 127.0.0.1 --port 10260 -u \"$$USERNAME\" -p \"$$PASSWORD\" --authenticationMechanism SCRAM-SHA-256 --eval 'db.runCommand({ ping: 1 }).ok' | grep -q 1"
@@ -60,9 +40,6 @@ services:
 
   waltid-enterprise:
     image: waltid/waltid-enterprise-api:${ENTERPRISE_API_DOCKER_IMAGE_TAG}
-    restart: unless-stopped
-    # Bounded, with the heap percentage raised to match, for the same reason as the MongoDB
-    # quickstart: an unbounded JVM sizes its heap from host RAM.
     mem_limit: ${ENTERPRISE_MEM_LIMIT:-8g}
     environment:
       - JAVA_TOOL_OPTIONS=-XX:MaxRAMPercentage=${ENTERPRISE_MAX_RAM_PERCENTAGE:-70}
@@ -71,52 +48,28 @@ services:
       - LICENSE_SEED_CREDENTIAL_FILE
       - LICENSE_INSTALLATION_KEY_FILE
       - LICENSE_SERVER_URL
-      # Optional database overrides read by config-documentdb/database.conf. Leave unset to use the
-      # local documentdb service and the default database name.
-      - DOCUMENTDB_CONNECTION_STRING
+      # Always the bundled database; docker-compose-documentdb-external.yml replaces it.
+      - DOCUMENTDB_CONNECTION_STRING=mongodb://${DOCUMENTDB_USERNAME:-docdbuser}:${DOCUMENTDB_PASSWORD:-docdbpass123}@documentdb:10260/?directConnection=true&retryWrites=false
       - DOCUMENTDB_DATABASE
-      # - LOG_LEVEL=trace
+      # Without Caddy the listen port, the port in public URLs and the host port must be the same.
+      - ENTERPRISE_WEB_PORT=${ENTERPRISE_API_PORT:-7500}
+      - ENTERPRISE_BASE_PORT=${ENTERPRISE_API_PORT:-7500}
     ports:
-      - "${ENTERPRISE_API_PORT:-7500}:7500"
+      - "${ENTERPRISE_API_PORT:-7500}:${ENTERPRISE_API_PORT:-7500}"
     volumes:
       - ./config:/config
-      # Only database.conf is replaced; every other config file is shared with the MongoDB stack.
-      # A later bind mount onto a file wins over the directory mount before it.
-      - ./config-documentdb/database.conf:/config/database.conf
+      - ./config/database-documentdb.conf:/config/database.conf
       - ./license:/license
     networks:
-      - documentdb_network
-    depends_on:
-      documentdb:
-        condition: service_healthy
-
-  waltid-enterprise-ui:
-    image: waltid/waltid-enterprise-ui:${ENTERPRISE_UI_DOCKER_IMAGE_TAG:-${ENTERPRISE_API_DOCKER_IMAGE_TAG}}
-    ports:
-      - "${ENTERPRISE_UI_PORT:-7501}:3000"
-    environment:
-      - NUXT_PUBLIC_API_URL=http://enterprise.localhost
-    networks:
-      - documentdb_network
-    depends_on:
-      - waltid-enterprise
-
-  caddy:
-    image: caddy:2-alpine
-    restart: unless-stopped
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile
-    networks:
       documentdb_network:
+        # The API calls its own public URLs, so these names must resolve to this container.
         aliases:
           - enterprise.localhost
           - waltid.enterprise.localhost
     depends_on:
-      - waltid-enterprise
-      - waltid-enterprise-ui
+      documentdb:
+        condition: service_healthy
+    command: "--log-level=error"
 
 volumes:
   documentdb-data:
