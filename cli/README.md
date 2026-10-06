@@ -9,22 +9,26 @@ There are a number of environment variable files which can be created. You will 
 
 You can utilise the default values for your first run, then customise later on based on your needs.
 
-Run the enterprise stack locally, using the guide found [here](../README.md). Once it is up and running, you can start using the CLI in this directory by running 
+Run the enterprise stack locally, using the guide found [here](../README.md). Once it is up and running, you can start using the CLI in this directory by running :
 
 ```bash
 npm install
-npx tsx walt.ts
 ```
 
-This will run the full setup and primary use case (issue and verify a **PID** credential — mdoc,
-`eu.europa.ec.eudi.pid.1` — by default) to ensure the setup succeeded. Set `CREDENTIAL_TYPE=mdl` to
-run the **mDL** flow instead, e.g. `CREDENTIAL_TYPE=mdl npx tsx walt.ts`.
+```bash
+PORT=7500 npx tsx walt.ts
+```
+Note, that you can either use the `walt.env` config or the environment parameter directly to specify the port of the Enterprise Stack.
 
-`CREDENTIAL_TYPE` must match between setup and run: the issuer is only configured for one credential
-type at a time, decided by whichever `CREDENTIAL_TYPE` was active during `--setup-all`/`--recreate`.
-Changing it for a later plain `npx tsx walt.ts` without recreating fails with
-`credentialConfigurationId '...' is not configured in this issuer service` — pass the same
-`CREDENTIAL_TYPE` you set up with, or add `--recreate` to switch:
+At any point, you can recreate this initial setup (by resetting the database):
+
+```bash
+npx tsx walt.ts --recreate
+```
+
+
+This will run the full setup and primary use case (issue and verify a **PID (`eu.europa.ec.eudi.pid.1`)** credential by default) to ensure the setup succeeded. Set `CREDENTIAL_TYPE=mdl` to
+run the **mDL (`org.iso.18013.5.1.mDL`)** flow instead, e.g. 
 
 ```bash
 CREDENTIAL_TYPE=mdl npx tsx walt.ts --recreate
