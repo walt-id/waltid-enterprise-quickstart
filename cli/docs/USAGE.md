@@ -243,7 +243,7 @@ npx tsx walt.ts --flow-credential-revocation
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `BASE_URL` | `enterprise.localhost` | Enterprise stack base URL |
-| `PORT` | `7500` | Port number (auto-omitted for HTTPS URLs) |
+| `PORT` | _(unset)_ | Port number. Unset uses the protocol default (80 for HTTP, i.e. Caddy in the docker-compose stack); use `7500` to reach the API directly |
 | `ORGANIZATION` | `waltid` | Organization ID |
 | `TENANT` | `<organization>-tenant01` | Tenant ID |
 | `EMAIL` | (from conf) | Superadmin email |
