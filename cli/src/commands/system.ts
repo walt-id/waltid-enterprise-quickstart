@@ -448,8 +448,10 @@ async function preflightCheck(ctx: CommandContext): Promise<boolean> {
   }
 
   console.log(`       Check what's actually running there:`);
-  console.log(`       - Docker stack:   docker compose ps   (is 'waltid-enterprise' Up?)`);
-  console.log(`       - Make sure the BASE_URL and PORT are set correctly e.g._ BASE_URL=localhost PORT=3000 <your command>`);
+  console.log(`       - Docker stack:   docker compose ps -a   (is 'waltid-enterprise' Up, or Exited?)`);
+  console.log(`       - HTTP 502 from Caddy usually means the API container exited at startup:`);
+  console.log(`         docker compose logs waltid-enterprise   (e.g. dev-mode token or license not configured)`);
+  console.log(`       - Without Caddy, point the CLI at the API directly: PORT=7500 <your command>`);
   return false;
 }
 

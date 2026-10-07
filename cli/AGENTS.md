@@ -319,7 +319,7 @@ await ctx.orgClient.put(
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `BASE_URL` | `enterprise.localhost` | Enterprise stack base URL |
-| `PORT` | `7500` | Port (auto-omitted for HTTPS) |
+| `PORT` | _(unset)_ | Port. Unset uses the protocol default (80 for HTTP, i.e. Caddy); `7500` reaches the API directly |
 | `ORGANIZATION` | `waltid` | Organization ID |
 | `TENANT` | `<org>-tenant01` | Tenant ID |
 | `EMAIL` | From config file | Superadmin email |

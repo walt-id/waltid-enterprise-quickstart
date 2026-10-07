@@ -176,38 +176,6 @@ additionally require a matching `X-Dev-Mode-Token` header, configured via `confi
 at all with the value it ships with. The CLI reads that same file automatically; override it with the
 `DEV_MODE_TOKEN` environment variable if you point the CLI at a different server.
 
-### Troubleshooting
-
-- Container exits during startup - the license was rejected. `docker compose logs waltid-enterprise`
-  states the reason (expired, not bound to this installation, DEV/PROD mismatch, missing seed,
-  `KeyTypeMissingException` from pointing `LICENSE_INSTALLATION_KEY_FILE` at the request file,
-  or `License fleet state integrity verification failed` from a different
-  `LICENSE_STATE_ENCRYPTION_KEY` or leftover `license_state` than the `license request` run).
-- Every endpoint returns `503 Enterprise API is unavailable because the license is not active` - the
-  process started but the license is not active. `GET /livez` still responds in this state.
-- Enterprise API container crash-loops, or `/v1/dev/*` returns `503` / `401` - `config/dev-mode-access.conf`
-  still has the shipped placeholder `accessToken`, is unset, or doesn't match what the CLI sends. See
-  [Set a dev-mode access token](#use-docker-compose) above.
-- `Heartbeat failed: ... 403 Forbidden: License '<id>' has no installation binding` - the license is
-  not bound to your installation. Either the installation key was discarded with
-  `license reset --include-installation-key` and walt.id has not unbound the license, or the license
-  is
-  bound to a different installation. Ask walt.id to unbind it, then start with a fresh credential
-  offer.
-  A license can only be bound to one installation at a time, so two stacks cannot share one license.
-- `GET /license/status` (superadmin auth) reports the restriction state, expiry countdown and any
-  warning message.
-- Only set the relevant environment variables for the license activation mode you are using. All of
-  them are provided as examples in the docker compose file.
-
-#### Harmless `ERROR` log lines
-
-- `documentdb`: `Command 'atlasVersion' not found`, once per start (the health check's `mongosh` probes
-  for MongoDB Atlas), and `IndexNotFound` / `NamespaceNotFound` on the first start (migrations probing
-  for indexes that do not exist yet).
-- `waltid-enterprise`: `Migration version 13 ... failed with error: 'Check failed.'` after restarting
-  an interrupted start. Migration 13 is manual-only; the others complete and no data changes.
-
 ### Kubernetes / Helm
 
 The Helm chart reads license material from one pre-provisioned Secret, named by
@@ -251,7 +219,9 @@ accessToken = "<a value only you know>"
 ```
 
 If you skip this, `docker compose up` will bring up every other container, but the Enterprise API
-container will crash-loop - check `docker compose logs waltid-enterprise` if that happens.
+container will exit with an error - check `docker compose ps -a` and `docker compose logs waltid-enterprise`
+if that happens. Caddy still answers on port 80 in that state, so requests fail with `502 Bad Gateway`.
+After fixing the file, `docker compose up -d` restarts the exited container.
 
 **Run The Stack**
 
@@ -266,8 +236,15 @@ Stack APIs.
 
 ### Using custom organisation names
 
-The caddy setup is configured only for the "waltid" organisation. If you want to use a custom
-organisation name, you can update the Caddyfile to add your own organisation domains.
+Every organisation gets its own hostname, `{organizationId}.enterprise.localhost`. The API uses the
+hostname of a request to decide which organisation it belongs to, and it also calls its own public
+URLs (for example to fetch a credential offer).
+
+On your machine, `*.localhost` resolves to loopback and the Caddyfile already proxies
+`*.enterprise.localhost` to the API. Inside the Docker network there is no wildcard DNS, so each
+organisation hostname needs a network alias on the `caddy` service. The stack ships with one for
+`waltid`. Add one for every other organisation, e.g. `your-org`, and recreate the container with
+`docker compose up -d`:
 
 ```yaml
   caddy:
@@ -283,10 +260,22 @@ organisation name, you can update the Caddyfile to add your own organisation dom
         aliases:
           - enterprise.localhost
           - waltid.enterprise.localhost
+          - your-org.enterprise.localhost
           # add your own organisation domains here
     depends_on:
       - waltid-enterprise
 ```
+
+Then run the CLI for that organisation:
+
+```bash
+cd cli && ORGANIZATION=your-org npx tsx walt.ts --recreate
+```
+
+Without the alias, creating the organisation and logging in still work, but issuing a credential
+fails with `HTTP 500 ... Failed to fetch credential offer from URI`, and the API log shows
+`Network error while fetching credential offer ... java.net.ConnectException: Connection refused`.
+The hostname then resolves to the container's own loopback, where nothing listens on port 80.
 
 ### DocumentDB instead of MongoDB
 
@@ -383,6 +372,40 @@ The issuer is only configured for one credential type at a time, so pair `CREDEN
 Superadmin credentials are read from `config/superadmin-registration.conf`.
 
 For detailed documentation, see **[cli/README.md](cli/README.md)**.
+
+
+### Troubleshooting
+
+- Container exits during startup - the license was rejected. `docker compose logs waltid-enterprise`
+  states the reason (expired, not bound to this installation, DEV/PROD mismatch, missing seed,
+  `KeyTypeMissingException` from pointing `LICENSE_INSTALLATION_KEY_FILE` at the request file,
+  or `License fleet state integrity verification failed` from a different
+  `LICENSE_STATE_ENCRYPTION_KEY` or leftover `license_state` than the `license request` run).
+- Every endpoint returns `503 Enterprise API is unavailable because the license is not active` - the
+  process started but the license is not active. `GET /livez` still responds in this state.
+- Enterprise API container exits at startup (all requests fail with `502 Bad Gateway` from Caddy), or `/v1/dev/*`
+  returns `503` / `401` - `config/dev-mode-access.conf`
+  still has the shipped placeholder `accessToken`, is unset, or doesn't match what the CLI sends. See
+  [Set a dev-mode access token](#use-docker-compose) above.
+- `Heartbeat failed: ... 403 Forbidden: License '<id>' has no installation binding` - the license is
+  not bound to your installation. Either the installation key was discarded with
+  `license reset --include-installation-key` and walt.id has not unbound the license, or the license
+  is
+  bound to a different installation. Ask walt.id to unbind it, then start with a fresh credential
+  offer.
+  A license can only be bound to one installation at a time, so two stacks cannot share one license.
+- `GET /license/status` (superadmin auth) reports the restriction state, expiry countdown and any
+  warning message.
+- Only set the relevant environment variables for the license activation mode you are using. All of
+  them are provided as examples in the docker compose file.
+
+#### Harmless `ERROR` log lines
+
+- `documentdb`: `Command 'atlasVersion' not found`, once per start (the health check's `mongosh` probes
+  for MongoDB Atlas), and `IndexNotFound` / `NamespaceNotFound` on the first start (migrations probing
+  for indexes that do not exist yet).
+- `waltid-enterprise`: `Migration version 13 ... failed with error: 'Check failed.'` after restarting
+  an interrupted start. Migration 13 is manual-only; the others complete and no data changes.
 
 ## Next Steps
 

@@ -16,9 +16,11 @@ npm install
 ```
 
 ```bash
-PORT=7500 npx tsx walt.ts
+npx tsx walt.ts
 ```
-Note, that you can either use the `walt.env` config or the environment parameter directly to specify the port of the Enterprise Stack.
+By default the CLI talks to `http://enterprise.localhost` (port 80), which is Caddy in the docker-compose stack. If you run the API without Caddy, set `PORT=7500`, either in `walt.env` or directly as an environment variable.
+
+To use another organisation, set `ORGANIZATION` (e.g. `ORGANIZATION=your-org npx tsx walt.ts --recreate`). Add a matching `your-org.enterprise.localhost` alias to the `caddy` service in `docker-compose.yml` first, see [Using custom organisation names](../README.md#using-custom-organisation-names).
 
 At any point, you can recreate this initial setup (by resetting the database):
 
