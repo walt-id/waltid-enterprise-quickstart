@@ -24,166 +24,17 @@ stack images & a valid license to use this quickstart.
 
 ## Licensing
 
-The Enterprise API refuses to start without a valid license, so configure this before bringing the
-stack up. A license is an SD-JWT verifiable credential signed by walt.id and cryptographically bound
-to your installation. It is configured in `config/license.conf`, which reads the `LICENSE_*`
-environment variables passed through by docker-compose.
-
-### License state encryption key
-
-`LICENSE_STATE_ENCRYPTION_KEY` encrypts the persisted license credential and the installation
-private key in MongoDB.
-
-It is unset in `.env`. The Enterprise API then generates a random secret on first start and shares
-it
-between replicas through MongoDB, so the quickstart needs no configuration. That secret is stored in
-the database, wrapped with a key compiled into the image, so a copy of the database plus the image
-is
-enough to read it.
-
-Set it for any deployment where that matters. The secret then lives outside the database and a
-database copy on its own cannot be used:
-
-- Use at least 32 characters and supply it from a secret manager.
-- Every replica must use the **same** value.
-- Back it up together with MongoDB. Losing it makes the persisted license state unreadable.
-- A wrong value fails startup closed, and live dual-key rotation is not supported.
-
-Never commit a shared value here, and do not copy one between deployments. A secret that appears in
-a
-repository or a published example protects nothing.
-
-#### Upgrading from a quickstart that shipped an example key
-
-Earlier revisions of this repository shipped `LICENSE_STATE_ENCRYPTION_KEY` pre-filled with a shared
-example value. That value has been removed, because a key published in a repository protects
-nothing.
-
-If your stack was activated while that value was in `.env`, the API now derives a different key and
-refuses to start:
-
-```
-License fleet state integrity verification failed: the stored license state was written with a
-different LICENSE_STATE_ENCRYPTION_KEY than this process derives.
-```
-
-The stored state is intact, only the key changed. Pick one of these:
-
-- **Keep the existing state.** Put the previous value back in `.env`. If you no longer have it, it
-  was
-  `waltid-enterprise-quickstart-license-state-key`. Treat that as a value to migrate away from, not
-  one
-  to keep: set your own secret afterwards on a fresh activation.
-- **Start clean.** Run `license reset --include-installation-key --confirm`, ask walt.id to unbind
-  the
-  installation, then activate again with a fresh credential offer. This discards the installation
-  key,
-  which is why walt.id has to unbind before the license can be used again.
-
-### Activation
-
-Pick one of the two modes. After a successful first activation, the bound credential and
-installation
-key are stored in MongoDB and later restarts reuse them, so an online offer is never redeemed twice.
-
-**Online** - the stack then renews itself automatically against `https://license.walt.id`.
+The Enterprise API refuses to start without a valid license. `config/_features.conf` enables
+`dev-mode`, so the quickstart needs a **DEV** license. With an online license from walt.id, start
+the stack like this:
 
 ```bash
 LICENSE_SEED_CREDENTIAL="openid-credential-offer://..." docker compose up
 ```
 
-**Offline / air-gapped** - the stack never contacts walt.id. The fleet private key is created
-**inside MongoDB** by `license request`. It is not written to disk, and walt.id never returns it.
-
-1. Create the public installation request. Use the same compose project, Mongo volume, and
-   `LICENSE_STATE_ENCRYPTION_KEY` you will use to run the API. `-o` writes the **request**, not a
-   private key:
-
-   You will receive a command like this from walt.id:
-
-```bash
-docker compose run --rm waltid-enterprise \
-  license request <licenseId> <organizationId> \
-  -o /license/installation-request.json
-```
-
-2. Send `license/installation-request.json` to walt.id. You get back a `.waltlicense` bundle only.
-
-3. Place that bundle in `license/` and start. Do **not** set `LICENSE_INSTALLATION_KEY_FILE`:
-
-```bash
-LICENSE_SEED_CREDENTIAL_FILE=/license/offline-license.waltlicense docker compose up
-```
-
-The API loads the matching private key from Mongo. Paths are **inside the container**
-(`/license/...`),
-because compose mounts `./license` at `/license`.
-
-Do not point `LICENSE_INSTALLATION_KEY_FILE` at `installation-request.json`. That file is a public
-request (`version` / `request` / `proof`) and startup fails with `KeyTypeMissingException`.
-`LICENSE_INSTALLATION_KEY_FILE` is only for rare pre-provision of a serialized walt.id key:
-
-```json
-{
-  "type": "jwk",
-  "jwk": {
-    "kty": "EC",
-    "crv": "P-256",
-    "d": "...",
-    "x": "...",
-    "y": "..."
-  }
-}
-```
-
-Offline licenses have **no grace period**: the stack stops serving the moment the credential
-expires.
-Request a renewal well before the expiry date shown in the `LICENSE EXPIRY WARNING` startup log
-line.
-
-### Resetting license state
-
-The container CLI has two license subcommands: `license request` (above) and `license reset`, which
-discards what is stored in MongoDB.
-
-| Command                                              | Effect                                                        | Needs walt.id                                                                      |
-|------------------------------------------------------|---------------------------------------------------------------|------------------------------------------------------------------------------------|
-| `license reset --confirm`                            | Removes the stored credential. Your installation key is kept. | No. Ask for a fresh credential offer, start with it, and the existing key rebinds. |
-| `license reset --include-installation-key --confirm` | Also discards the installation key.                           | **Yes.** walt.id has to unbind the installation.                                   |
-
-```bash
-docker compose run --rm waltid-enterprise license reset --confirm
-```
-
-Prefer the first form. walt.id binds an installation key to a license permanently, so once you
-discard
-yours the license still points at it and activation keeps failing until walt.id unbinds it. Use
-`--include-installation-key` only when you are discarding the environment, or when the stored state
-can
-no longer be decrypted because `LICENSE_STATE_ENCRYPTION_KEY` was lost - in that case the
-installation
-key is encrypted with the same secret and cannot be kept anyway.
-
-### DEV vs PROD licenses
-
-`config/_features.conf` enables `dev-mode`, which exposes debug endpoints and therefore requires a
-**DEV** license. A PROD license refuses to start while `dev-mode` is enabled, and vice versa. Remove
-`dev-mode` from `enabledFeatures` before using a PROD license.
-
-With `dev-mode` enabled, its `/v1/dev/*` endpoints (used by the CLI's `--recreate`/`--init-system`)
-additionally require a matching `X-Dev-Mode-Token` header, configured via `config/dev-mode-access.conf`'s
-`accessToken` - see [Set a dev-mode access token](#use-docker-compose) above; the server refuses to start
-at all with the value it ships with. The CLI reads that same file automatically; override it with the
-`DEV_MODE_TOKEN` environment variable if you point the CLI at a different server.
-
-### Kubernetes / Helm
-
-The Helm chart reads license material from one pre-provisioned Secret, named by
-`license.secretName` in `helm/values.yaml`. It needs either `seed-credential` (online) or
-`offline-license.waltlicense` with `license.offline: true` (offline). `state-encryption-key` is
-optional: when the key is absent the API generates its own secret and shares it between replicas
-through MongoDB. The fleet private key is created in Mongo by the `license.installationRequest` Job.
-walt.id does not issue `installation-key.json`.
+Offline and air-gapped activation, credential lifetime and renewal, disaster recovery, resetting
+license state, Kubernetes, monitoring and license troubleshooting are in
+[LICENSING.md](LICENSING.md).
 
 ## 1. Docker-Compose: Run The Enterprise Stack
 
@@ -222,6 +73,10 @@ If you skip this, `docker compose up` will bring up every other container, but t
 container will exit with an error - check `docker compose ps -a` and `docker compose logs waltid-enterprise`
 if that happens. Caddy still answers on port 80 in that state, so requests fail with `502 Bad Gateway`.
 After fixing the file, `docker compose up -d` restarts the exited container.
+
+The `/v1/dev/*` endpoints that `dev-mode` adds (used by the CLI's `--recreate`/`--init-system`)
+require a matching `X-Dev-Mode-Token` header. The CLI reads `accessToken` from the same file; override
+it with the `DEV_MODE_TOKEN` environment variable if you point the CLI at a different server.
 
 **Run The Stack**
 
@@ -322,9 +177,8 @@ fresh MongoDB. Activate with an online offer as usual:
 LICENSE_SEED_CREDENTIAL="openid-credential-offer://..." docker compose -f docker-compose-documentdb.yml up
 ```
 
-A license binds to one installation at a time, so activating it here invalidates the MongoDB
-installation it was bound to. Talk to walt.id support before switching an existing installation to
-DocumentDB.
+To move an existing installation from MongoDB to DocumentDB, see
+[Moving to another database](LICENSING.md#moving-to-another-database).
 
 ## 2. Enterprise CLI
 
@@ -376,28 +230,13 @@ For detailed documentation, see **[cli/README.md](cli/README.md)**.
 
 ### Troubleshooting
 
-- Container exits during startup - the license was rejected. `docker compose logs waltid-enterprise`
-  states the reason (expired, not bound to this installation, DEV/PROD mismatch, missing seed,
-  `KeyTypeMissingException` from pointing `LICENSE_INSTALLATION_KEY_FILE` at the request file,
-  or `License fleet state integrity verification failed` from a different
-  `LICENSE_STATE_ENCRYPTION_KEY` or leftover `license_state` than the `license request` run).
-- Every endpoint returns `503 Enterprise API is unavailable because the license is not active` - the
-  process started but the license is not active. `GET /livez` still responds in this state.
+- License problems (container exits during startup, every endpoint returns `503 ... the license is
+  not active`, heartbeat `403 ... has no installation binding`): see
+  [LICENSING.md#troubleshooting](LICENSING.md#troubleshooting).
 - Enterprise API container exits at startup (all requests fail with `502 Bad Gateway` from Caddy), or `/v1/dev/*`
   returns `503` / `401` - `config/dev-mode-access.conf`
   still has the shipped placeholder `accessToken`, is unset, or doesn't match what the CLI sends. See
   [Set a dev-mode access token](#use-docker-compose) above.
-- `Heartbeat failed: ... 403 Forbidden: License '<id>' has no installation binding` - the license is
-  not bound to your installation. Either the installation key was discarded with
-  `license reset --include-installation-key` and walt.id has not unbound the license, or the license
-  is
-  bound to a different installation. Ask walt.id to unbind it, then start with a fresh credential
-  offer.
-  A license can only be bound to one installation at a time, so two stacks cannot share one license.
-- `GET /license/status` (superadmin auth) reports the restriction state, expiry countdown and any
-  warning message.
-- Only set the relevant environment variables for the license activation mode you are using. All of
-  them are provided as examples in the docker compose file.
 
 #### Harmless `ERROR` log lines
 
