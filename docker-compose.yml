@@ -151,7 +151,8 @@ services:
       - ./config:/config
       # Offline/air-gapped activation: hold the .waltlicense here, plus the public
       # installation-request.json from `license request`. The fleet private key stays in
-      # MongoDB; do not expect walt.id to return installation-key.json.
+      # MongoDB; do not expect walt.id to return installation-key.json. Put one here only if
+      # you generated it yourself (LICENSING.md: Disaster recovery with a pinned installation key).
       - ./license:/license
     networks:
       - mongodb_network
