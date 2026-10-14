@@ -122,7 +122,7 @@ walt.id sets the credential lifetime per license, in whole days:
 
 |                         | Online                                         | Offline                              |
 |-------------------------|------------------------------------------------|--------------------------------------|
-| Lifetime                | 4 to 14 days, default 4                        | 1 to 365 days                        |
+| Lifetime                | 4                                              | 90 days                              |
 | Renewal                 | Automatic, long before expiry                  | Manual, with a usage report          |
 | License server outage   | Keeps running until expiry, plus 24 h grace    | Not applicable                       |
 | After expiry            | 24 h grace, then restricted                    | Restricted immediately, no grace     |
