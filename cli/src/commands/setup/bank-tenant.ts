@@ -29,8 +29,11 @@ import {
   setupCreateDocumentSignerCertificate,
 } from './keys.js';
 
-/** Build x5c chain for mso_mdoc profiles (document signer + optional IACA) */
-async function buildMdocX5Chain(
+/**
+ * Certificate chain for the issuer signing key.
+ * The document signer leaf is created with that key as its subject key.
+ */
+async function buildIssuerSigningKeyX5Chain(
   ctx: CommandContext
 ): Promise<Array<{ type: string; pemEncodedCertificate: string }> | undefined> {
   if (!ctx.ctx.docSignerPem) {
@@ -121,6 +124,37 @@ export async function setupBankCreateVerifier(
   if (created) {
     console.log(`   [OK] Verifier2 created (baseUrl: ${bank.serviceBaseUrl})`);
   }
+
+  await setupBankTransactionDataProfiles(ctx);
+}
+
+/** Register the payment transaction types the transfer demo asks the wallet to sign. */
+async function setupBankTransactionDataProfiles(ctx: CommandContext): Promise<void> {
+  const profiles = [
+    {
+      type: 'urn:eudi:sca:payment:1',
+      displayName: 'SCA Payment',
+      fields: ['payload'],
+    },
+    {
+      type: 'payment_card',
+      displayName: 'Payment Card',
+      fields: ['merchant_name', 'amount'],
+    },
+  ];
+
+  for (const profile of profiles) {
+    const { created } = await ctx.tolerantCreate(
+      `Transaction data profile ${profile.type}`,
+      async () => ctx.orgClient.post(
+        `/v2/${ctx.tenantPath}.${RESOURCES.verifier2}/verifier-service-api/transaction-data-profiles`,
+        profile,
+      ),
+    );
+    if (created) {
+      console.log(`   [OK] Transaction data profile registered: ${profile.type}`);
+    }
+  }
 }
 
 /** Create issuer2 with EUDI PID and payment account configuration */
@@ -189,8 +223,10 @@ export async function setupBankCreateIssuerProfiles(ctx: CommandContext): Promis
           credentialData: credentialType.sampleCredentialData,
         };
 
-        if (credentialType.format === 'mso_mdoc') {
-          const x5Chain = await buildMdocX5Chain(ctx);
+        // mdoc and SCA both sign with the issuer key. Attach that key's certificate
+        // so verifiers can resolve the signer from x5c.
+        if (credentialType.format === 'mso_mdoc' || credentialType.profileSuffix === 'sca') {
+          const x5Chain = await buildIssuerSigningKeyX5Chain(ctx);
           if (!x5Chain) {
             throw new Error(
               `Document signer certificate required for ${credentialType.name} profile. ` +
@@ -198,6 +234,10 @@ export async function setupBankCreateIssuerProfiles(ctx: CommandContext): Promis
             );
           }
           request.x5Chain = x5Chain;
+        }
+
+        if (credentialType.profileSuffix === 'sca') {
+          request.authorizedTransactionDataTypes = ['urn:eudi:sca:payment:1', 'payment_card'];
         }
 
         ctx.saveJson(`create-bank-profile-${credentialType.profileSuffix}-request.json`, request, step);

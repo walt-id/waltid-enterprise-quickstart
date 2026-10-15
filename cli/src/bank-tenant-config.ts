@@ -470,6 +470,72 @@ export function buildBankIssuerServiceConfig(
       [PAYMENT_SCA_ID]: {
         name: 'Payment Account Attestation',
         description: 'SCA Attestation for a payment account.',
+        category: 'urn:eu:europa:ec:eudi:sua:sca',
+        transaction_data_types: {
+          'urn:eudi:sca:payment:1': {
+            schema: 'urn:eudi:sca:payment:1',
+            claims: [
+              {
+                path: ['transaction_id'],
+                visualisation: 3,
+                display: [
+                  { locale: 'en', label: 'Transaction ID' },
+                  { locale: 'de', label: 'Transaktions-ID' },
+                ],
+              },
+              {
+                path: ['payee', 'name'],
+                visualisation: 1,
+                display: [
+                  { locale: 'en', label: 'Payee' },
+                  { locale: 'de', label: 'Zahlungsempfänger' },
+                ],
+              },
+              {
+                path: ['payee', 'id'],
+                visualisation: 2,
+                display: [
+                  { locale: 'en', label: 'Payee ID' },
+                  { locale: 'de', label: 'Empfänger-ID' },
+                ],
+              },
+              {
+                path: ['currency'],
+                visualisation: 1,
+                display: [
+                  { locale: 'en', label: 'Currency' },
+                  { locale: 'de', label: 'Währung' },
+                ],
+              },
+              {
+                path: ['amount'],
+                visualisation: 1,
+                display: [
+                  { locale: 'en', label: 'Amount' },
+                  { locale: 'de', label: 'Betrag' },
+                ],
+              },
+            ],
+            ui_labels: {
+              affirmative_action_label: [
+                { lang: 'en', value: 'Confirm payment' },
+                { lang: 'de', value: 'Zahlung bestätigen' },
+              ],
+              denial_action_label: [
+                { lang: 'en', value: 'Cancel payment' },
+                { lang: 'de', value: 'Zahlung abbrechen' },
+              ],
+              transaction_title: [
+                { lang: 'en', value: 'Confirm this payment' },
+                { lang: 'de', value: 'Diese Zahlung bestätigen' },
+              ],
+              security_hint: [
+                { lang: 'en', value: 'Check the payee and amount before confirming.' },
+                { lang: 'de', value: 'Prüfen Sie Empfänger und Betrag vor der Bestätigung.' },
+              ],
+            },
+          },
+        },
       },
     }
   };
