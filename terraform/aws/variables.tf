@@ -122,8 +122,8 @@ variable "database_backend" {
   default     = "documentdb"
 
   validation {
-    condition     = contains(["documentdb", "mongodb", "external"], var.database_backend)
-    error_message = "Database backend must be either 'documentdb', 'mongodb', or 'external'."
+    condition     = contains(["documentdb", "mongodb", "postgres", "external"], var.database_backend)
+    error_message = "Database backend must be 'documentdb', 'mongodb', 'postgres', or 'external'."
   }
 }
 
@@ -241,7 +241,7 @@ variable "mongodb_data_volume_throughput" {
 }
 
 variable "documentdb_instance_class" {
-  description = "Instance class for DocumentDB"
+  description = "Instance class for DocumentDB, and for RDS PostgreSQL when database_backend = postgres"
   type        = string
   default     = "db.t3.medium"
 }
