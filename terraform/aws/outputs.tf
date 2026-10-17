@@ -4,6 +4,17 @@ output "mongodb_connection_string" {
   sensitive   = true
 }
 
+output "postgres_host" {
+  description = "RDS PostgreSQL endpoint. Empty unless database_backend = postgres."
+  value       = local.use_postgres ? aws_db_instance.postgres[0].address : ""
+}
+
+output "postgres_password" {
+  description = "RDS PostgreSQL password. Empty unless database_backend = postgres."
+  value       = local.use_postgres ? random_password.postgres[0].result : ""
+  sensitive   = true
+}
+
 output "ingress_lb_hostname" {
   value = local.ingress_lb_hostname
 }

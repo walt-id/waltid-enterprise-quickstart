@@ -28,6 +28,7 @@ locals {
   ] : []
 
   use_documentdb = var.database_backend == "documentdb"
+  use_postgres   = var.database_backend == "postgres"
 
   ingress_lb_hostname = data.kubernetes_service.traefik.status[0].load_balancer[0].ingress[0].hostname
   mongodb_connection_string = local.use_documentdb ? (
