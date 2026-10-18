@@ -180,6 +180,28 @@ LICENSE_SEED_CREDENTIAL="openid-credential-offer://..." docker compose -f docker
 To move an existing installation from MongoDB to DocumentDB, see
 [Moving to another database](LICENSING.md#moving-to-another-database).
 
+### PostgreSQL instead of MongoDB
+
+`docker-compose-postgresql.yml` runs the same stack against a plain PostgreSQL 16 container. This is
+the vanilla PostgreSQL backend (`databaseType = postgresql`), not DocumentDB: the API connects over
+JDBC and stores documents as JSONB. `config/database-postgresql.conf` is mounted over
+`config/database.conf`; its settings are described in
+[Database configuration](https://docs.walt.id/enterprise-stack/setup/configurations/config-files/database).
+It needs an Enterprise API image with PostgreSQL support:
+
+```bash
+ENTERPRISE_API_DOCKER_IMAGE_TAG=<tag> docker compose -f docker-compose-postgresql.yml up
+```
+
+As with DocumentDB there is no Caddy: the API is on `enterprise.localhost:7500`, so run the CLI with
+`PORT=7500`, and use `ENTERPRISE_API_PORT=7600` (and `PORT=7600`) to run it next to the MongoDB stack.
+The stack has its own docker project, network and volume (`waltid-enterprise-postgresql`,
+`postgresql-network`, `postgresql-data`). PostgreSQL listens on 5432, published on loopback only; the
+login is `POSTGRES_USERNAME` / `POSTGRES_PASSWORD` (see `.env.example`).
+
+A fresh database has no license state, so activate it as described for DocumentDB above. There is no
+migration from an existing MongoDB database.
+
 ## 2. Enterprise CLI
 
 A TypeScript CLI tool for setting up and testing the walt.id Enterprise Stack.

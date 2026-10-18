@@ -1,0 +1,80 @@
+# walt.id Enterprise Stack on vanilla PostgreSQL instead of MongoDB. Not DocumentDB: the API talks
+# JDBC, not the MongoDB wire protocol. Same as docker-compose-documentdb.yml otherwise, so there is no
+# Caddy and the API is reached directly on ENTERPRISE_API_PORT (default 7500); run the CLI with the
+# same PORT.
+#
+#   docker compose -f docker-compose-postgresql.yml up
+#
+# Needs an Enterprise API image with PostgreSQL support in ENTERPRISE_API_DOCKER_IMAGE_TAG.
+# Both stacks publish the API on 7500 by default; to run them together set e.g. ENTERPRISE_API_PORT=7600.
+
+name: waltid-enterprise-postgresql
+
+services:
+  postgres:
+    # The major version CI tests against. Override with POSTGRES_IMAGE.
+    image: ${POSTGRES_IMAGE:-postgres:16}
+    hostname: postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USERNAME:-waltid}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-waltid}
+      POSTGRES_DB: ${POSTGRES_DATABASE:-waltid_enterprise}
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - postgres_network
+    healthcheck:
+      test:
+        - "CMD-SHELL"
+        - "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""
+      interval: 5s
+      timeout: 5s
+      retries: 24
+      start_period: 10s
+    restart: unless-stopped
+
+  waltid-enterprise:
+    image: waltid/waltid-enterprise-api:${ENTERPRISE_API_DOCKER_IMAGE_TAG}
+    mem_limit: ${ENTERPRISE_MEM_LIMIT:-8g}
+    environment:
+      - JAVA_TOOL_OPTIONS=-XX:MaxRAMPercentage=${ENTERPRISE_MAX_RAM_PERCENTAGE:-70}
+      - LICENSE_STATE_ENCRYPTION_KEY
+      - LICENSE_SEED_CREDENTIAL
+      - LICENSE_SEED_CREDENTIAL_FILE
+      - LICENSE_INSTALLATION_KEY_FILE
+      - LICENSE_SERVER_URL
+      # Always the bundled database, built from the same login as the postgres service.
+      - POSTGRES_CONNECTION_STRING=jdbc:postgresql://postgres:5432/${POSTGRES_DATABASE:-waltid_enterprise}
+      - POSTGRES_USERNAME=${POSTGRES_USERNAME:-waltid}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-waltid}
+      # Without Caddy the listen port, the port in public URLs and the host port must be the same.
+      - ENTERPRISE_WEB_PORT=${ENTERPRISE_API_PORT:-7500}
+      - ENTERPRISE_BASE_PORT=${ENTERPRISE_API_PORT:-7500}
+    ports:
+      - "${ENTERPRISE_API_PORT:-7500}:${ENTERPRISE_API_PORT:-7500}"
+    volumes:
+      - ./config:/config
+      - ./config/database-postgresql.conf:/config/database.conf
+      - ./license:/license
+    networks:
+      postgres_network:
+        # The API calls its own public URLs, so these names must resolve to this container.
+        aliases:
+          - enterprise.localhost
+          - waltid.enterprise.localhost
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: "--log-level=error"
+
+volumes:
+  postgres-data:
+    driver: local
+    name: ${POSTGRES_DATA_VOLUME:-postgresql-data}
+
+networks:
+  postgres_network:
+    driver: bridge
+    name: ${POSTGRES_NETWORK:-postgresql-network}
