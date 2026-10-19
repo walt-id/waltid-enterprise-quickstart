@@ -74,7 +74,9 @@ services:
 volumes:
   postgres-data:
     driver: local
-    name: ${POSTGRES_DATA_VOLUME:-postgresql-data}
+    # Not postgresql-data: the PostgreSQL 16 version of this stack left its cluster at that volume's root,
+    # and the 18 image refuses to start on it.
+    name: ${POSTGRES_DATA_VOLUME:-postgresql18-data}
 
 networks:
   postgres_network:
