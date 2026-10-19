@@ -196,8 +196,10 @@ ENTERPRISE_API_DOCKER_IMAGE_TAG=<tag> docker compose -f docker-compose-postgresq
 As with DocumentDB there is no Caddy: the API is on `enterprise.localhost:7500`, so run the CLI with
 `PORT=7500`, and use `ENTERPRISE_API_PORT=7600` (and `PORT=7600`) to run it next to the MongoDB stack.
 The stack has its own docker project, network and volume (`waltid-enterprise-postgresql`,
-`postgresql-network`, `postgresql-data`). PostgreSQL listens on 5432, published on loopback only; the
-login is `POSTGRES_USERNAME` / `POSTGRES_PASSWORD` (see `.env.example`).
+`postgresql-network`, `postgresql18-data`). PostgreSQL listens on 5432, published on loopback only; the
+login is `POSTGRES_USERNAME` / `POSTGRES_PASSWORD` (see `.env.example`). The earlier PostgreSQL 16
+version of this stack used the volume `postgresql-data`, which PostgreSQL 18 cannot start on; it is
+left alone, and `docker volume rm postgresql-data` removes it once you no longer need it.
 
 A fresh database has no license state, so activate it as described for DocumentDB above. There is no
 migration from an existing MongoDB database.
