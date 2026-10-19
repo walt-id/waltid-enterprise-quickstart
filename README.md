@@ -182,7 +182,7 @@ To move an existing installation from MongoDB to DocumentDB, see
 
 ### PostgreSQL instead of MongoDB
 
-`docker-compose-postgresql.yml` runs the same stack against a plain PostgreSQL 16 container. This is
+`docker-compose-postgresql.yml` runs the same stack against a plain PostgreSQL 18 container. This is
 the vanilla PostgreSQL backend (`databaseType = postgresql`), not DocumentDB: the API connects over
 JDBC and stores documents as JSONB. `config/database-postgresql.conf` is mounted over
 `config/database.conf`; its settings are described in

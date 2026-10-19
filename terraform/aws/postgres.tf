@@ -25,13 +25,13 @@ resource "aws_db_subnet_group" "postgres" {
 data "aws_rds_engine_version" "postgres" {
   count              = local.use_postgres ? 1 : 0
   engine             = "postgres"
-  preferred_versions = ["16.12", "16.11", "16.10", "16.9", "16.8", "16.6", "16.4"]
+  preferred_versions = ["18.6", "18.4", "18.3", "18.1"]
 }
 
 resource "aws_db_parameter_group" "postgres" {
   count  = local.use_postgres ? 1 : 0
-  name   = "${var.cluster_name}-postgres16"
-  family = "postgres16"
+  name   = "${var.cluster_name}-postgres18"
+  family = "postgres18"
 
   # Static: applied at instance creation, so the first boot already has the higher limit.
   parameter {
@@ -46,7 +46,7 @@ resource "aws_db_parameter_group" "postgres" {
     apply_method = "pending-reboot"
   }
 
-  tags = merge(local.common_tags, { Name = "${var.cluster_name}-postgres16" })
+  tags = merge(local.common_tags, { Name = "${var.cluster_name}-postgres18" })
 }
 
 resource "random_password" "postgres" {
