@@ -3,12 +3,45 @@ import test from 'node:test';
 import { CERT_IDS, KEY_IDS, STATUS_CONFIG_IDS } from './config.js';
 import {
   ISSUER_VARIANT_IDS,
+  buildIssuerVariantCredentialConfigurations,
+  buildIssuerVariantSdJwtTypeMetadata,
   parseIssuerVariants,
+  variantCredentialConfigurationId,
   variantDocSignerCertId,
+  variantIssuerService,
   variantIssuerTarget,
   variantSigningKeyId,
   variantStatusConfigId,
 } from './issuer-variants-config.js';
+
+test('variants that share a service each get their own credential configuration', () => {
+  const variants = parseIssuerVariants('mdoc, mdoc+status, sdjwt, sdjwt+status, w3c, w3c+status');
+  // All six share issuer2-software, and an issuer binds each configuration to one profile only.
+  assert.equal(new Set(variants.map(variantIssuerService)).size, 1);
+  const ids = variants.map(variantCredentialConfigurationId);
+  assert.equal(new Set(ids).size, ids.length);
+  const configurations = buildIssuerVariantCredentialConfigurations();
+  for (const id of ids) assert.ok(configurations[id], `missing configuration ${id}`);
+});
+
+test('SD-JWT vct is served by the issuer, and type metadata covers both SD-JWT configurations', () => {
+  const configurations = buildIssuerVariantCredentialConfigurations() as Record<string, { vct?: string }>;
+  for (const status of [false, true]) {
+    const id = variantCredentialConfigurationId({ format: 'sdjwt', status });
+    // The issuer fetches the vct when creating an offer, so it must be a URL the issuer answers.
+    assert.match(configurations[id].vct ?? '', /^\{vctBaseURL\}\//);
+    assert.ok(buildIssuerVariantSdJwtTypeMetadata()[id]);
+  }
+});
+
+test('W3C configurations accept the did:jwk the default wallet holds', () => {
+  const configurations = buildIssuerVariantCredentialConfigurations() as Record<
+    string,
+    { cryptographic_binding_methods_supported?: string[] }
+  >;
+  const w3c = configurations[variantCredentialConfigurationId({ format: 'w3c', status: false })];
+  assert.ok(w3c.cryptographic_binding_methods_supported?.includes('did:jwk'));
+});
 
 test('parseIssuerVariants canonicalises toggle order and drops duplicates', () => {
   const variants = parseIssuerVariants(' mdoc , sdjwt+kms+status, SDJWT+status+kms ,w3c+signed');

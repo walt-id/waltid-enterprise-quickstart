@@ -61,14 +61,15 @@ export const ISSUER_VARIANT_IDS = {
   bitstringStatusListAwsKms: 'bitstring-status-list-aws-kms',
 } as const;
 
-/** Credential configuration ids on the variant issuers, besides the mdoc doctype */
-export const ISSUER_VARIANT_CREDENTIAL_IDS = {
-  sdjwt: 'identity_sdjwt',
-  w3c: 'IdentityCredential',
-} as const;
+/** W3C credential type issued by the w3c variants */
+export const ISSUER_VARIANT_W3C_TYPE = 'IdentityCredential';
 
-/** A URN rather than a URL, so a wallet has nothing to fetch for the type metadata. */
-export const ISSUER_VARIANT_SDJWT_VCT = 'urn:walt-cli:identity:1';
+/**
+ * SD-JWT VC type, served by the issuer itself: `{vctBaseURL}` resolves to the issuer's
+ * `.well-known/vct` endpoint. The issuer fetches the vct when it creates an offer, so it must be
+ * a URL that answers - a URN made that fetch fail with "Connection refused".
+ */
+export const ISSUER_VARIANT_SDJWT_VCT = '{vctBaseURL}/identity_sdjwt';
 
 /** Parse a comma-separated variant list. Throws on unknown formats or toggles. */
 export function parseIssuerVariants(value: string): IssuerVariant[] {
@@ -160,46 +161,74 @@ const PROOF_TYPES_ES256 = {
   },
 };
 
-/** Credential configurations shared by all variant issuers, one per format */
-export function buildIssuerVariantCredentialConfigurations(): Record<string, unknown> {
-  const mdoc = CREDENTIAL_TYPES[getCredentialType()];
-  return {
-    [mdoc.docType]: {
-      format: 'mso_mdoc',
-      doctype: mdoc.docType,
-      scope: mdoc.docType,
-      credential_signing_alg_values_supported: [-7, -9],
-      cryptographic_binding_methods_supported: ['cose_key'],
-      ...PROOF_TYPES_ES256,
-    },
-    [ISSUER_VARIANT_CREDENTIAL_IDS.sdjwt]: {
-      format: 'dc+sd-jwt',
-      scope: ISSUER_VARIANT_CREDENTIAL_IDS.sdjwt,
-      vct: ISSUER_VARIANT_SDJWT_VCT,
-      credential_signing_alg_values_supported: ['ES256'],
-      cryptographic_binding_methods_supported: ['jwk'],
-      ...PROOF_TYPES_ES256,
-    },
-    [ISSUER_VARIANT_CREDENTIAL_IDS.w3c]: {
-      format: 'jwt_vc_json',
-      scope: ISSUER_VARIANT_CREDENTIAL_IDS.w3c,
-      credential_signing_alg_values_supported: ['ES256'],
-      cryptographic_binding_methods_supported: ['did:key'],
-      ...PROOF_TYPES_ES256,
-      credential_definition: {
-        type: ['VerifiableCredential', ISSUER_VARIANT_CREDENTIAL_IDS.w3c],
-      },
-    },
-  };
+/**
+ * Credential configuration id a variant's profile issues, e.g. `identity_sdjwt_status`.
+ * An issuer binds each configuration to at most one profile, so variants that share a service
+ * (`mdoc` and `mdoc+status` both use the software key) need a configuration each.
+ */
+export function variantCredentialConfigurationId(variant: Pick<IssuerVariant, 'format' | 'status'>): string {
+  return `identity_${variant.format}${variant.status ? '_status' : ''}`;
 }
 
-/** Credential configuration id a variant's profile issues */
-export function variantCredentialConfigurationId(variant: IssuerVariant): string {
-  switch (variant.format) {
-    case 'mdoc': return CREDENTIAL_TYPES[getCredentialType()].docType;
-    case 'sdjwt': return ISSUER_VARIANT_CREDENTIAL_IDS.sdjwt;
-    case 'w3c': return ISSUER_VARIANT_CREDENTIAL_IDS.w3c;
+function credentialConfiguration(format: IssuerVariantFormat, scope: string): Record<string, unknown> {
+  switch (format) {
+    case 'mdoc': {
+      const docType = CREDENTIAL_TYPES[getCredentialType()].docType;
+      return {
+        format: 'mso_mdoc',
+        doctype: docType,
+        scope,
+        credential_signing_alg_values_supported: [-7, -9],
+        cryptographic_binding_methods_supported: ['cose_key'],
+        ...PROOF_TYPES_ES256,
+      };
+    }
+    case 'sdjwt':
+      return {
+        format: 'dc+sd-jwt',
+        scope,
+        vct: ISSUER_VARIANT_SDJWT_VCT,
+        credential_signing_alg_values_supported: ['ES256'],
+        cryptographic_binding_methods_supported: ['jwk'],
+        ...PROOF_TYPES_ES256,
+      };
+    case 'w3c':
+      return {
+        format: 'jwt_vc_json',
+        scope,
+        credential_signing_alg_values_supported: ['ES256'],
+        // did:jwk is what Wallet2 composable init creates (see tenant.ts); the wallet refuses a DID
+        // whose method the issuer does not list.
+        cryptographic_binding_methods_supported: ['did:jwk', 'did:key'],
+        ...PROOF_TYPES_ES256,
+        credential_definition: {
+          type: ['VerifiableCredential', ISSUER_VARIANT_W3C_TYPE],
+        },
+      };
   }
+}
+
+/** Credential configurations shared by all variant issuers: one per format, with and without status */
+export function buildIssuerVariantCredentialConfigurations(): Record<string, unknown> {
+  const configurations: Record<string, unknown> = {};
+  for (const format of FORMATS) {
+    for (const status of [false, true]) {
+      const id = variantCredentialConfigurationId({ format, status });
+      configurations[id] = credentialConfiguration(format, id);
+    }
+  }
+  return configurations;
+}
+
+/** Type metadata the issuer serves at the SD-JWT vct URL, for both SD-JWT configurations */
+export function buildIssuerVariantSdJwtTypeMetadata(): Record<string, unknown> {
+  const metadata = {
+    name: 'Identity Credential',
+    description: 'Sample identity credential issued by the walt.id CLI issuer variants.',
+  };
+  return Object.fromEntries(
+    [false, true].map((status) => [variantCredentialConfigurationId({ format: 'sdjwt', status }), metadata])
+  );
 }
 
 /** Sample subject data. The same person in every format, so payload size stays comparable. */
@@ -229,7 +258,7 @@ export function buildVariantCredentialData(variant: IssuerVariant): {
         credentialData: {
           '@context': ['https://www.w3.org/2018/credentials/v1'],
           id: 'urn:uuid:placeholder',
-          type: ['VerifiableCredential', ISSUER_VARIANT_CREDENTIAL_IDS.w3c],
+          type: ['VerifiableCredential', ISSUER_VARIANT_W3C_TYPE],
           issuanceDate: '2024-01-01T00:00:00Z',
           issuer: { id: 'did:placeholder:issuer' },
           credentialSubject: { id: 'did:placeholder:subject', ...SUBJECT },

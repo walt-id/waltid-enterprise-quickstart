@@ -28,6 +28,7 @@ import {
   IssuerVariant,
   ISSUER_VARIANT_IDS,
   buildIssuerVariantCredentialConfigurations,
+  buildIssuerVariantSdJwtTypeMetadata,
   buildVariantCredentialData,
   parseIssuerVariants,
   variantCredentialConfigurationId,
@@ -216,6 +217,7 @@ async function createVariantIssuer(
       tokenKeyId: kmsKeyRef(ctx, signer.keyId),
       kms: `${ctx.tenantPath}.${RESOURCES.kms}`,
       credentialConfigurations: buildIssuerVariantCredentialConfigurations(),
+      sdJwtVcTypeMetadataConfiguration: buildIssuerVariantSdJwtTypeMetadata(),
     };
 
     if (signedMetadata) {
