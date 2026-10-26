@@ -80,6 +80,8 @@ import {
   runGovServicesSetup,
   runEudiDemoSetup,
   runAcmeTenantSetup,
+  runIssuerVariantsSetup,
+  runIssuerVariantsTeardown,
 } from './commands/index.js';
 
 import { flowEtsiTrustLists, flowCredentialRevocation, flowGovTrust, flowTrustListAssurance } from './flows/index.js';
@@ -145,6 +147,8 @@ Setup Commands (create resources):
   --setup-eudi-pid-provider  Register a PID_Provider on the WRP Registry
   --setup-eudi-eaa-provider  Register a Non_Q_EAA_Provider on the WRP Registry
   --setup-acme-tenant     Set up acme tenant (Photo ID mDoc + Employee SD-JWT issuer, verifier)
+  --setup-issuer-variants  Set up one issuer profile per variant in ISSUER_VARIANTS (after --setup-all)
+  --teardown-issuer-variants  Schedule deletion of the AWS KMS signing key used by +kms variants
 
 Additional Setup Commands:
   --setup-create-trust-registry  Create trust registry service
@@ -190,6 +194,10 @@ Environment Variables:
   ADMIN_EMAIL             Admin user email (default: admin@walt.id)
   ADMIN_PASSWORD          Admin user password (default: admin123456)
   SUPERADMIN_TOKEN        Superadmin registration token (from config/superadmin-registration.conf)
+  CREDENTIAL_STATUS_S3_BUCKET  Publish status lists to this S3 bucket instead of in-memory (needed with
+                          more than one API replica, where in-memory lists are per instance)
+  CREDENTIAL_STATUS_S3_REGION  Region of that bucket (required with the bucket)
+  CREDENTIAL_STATUS_S3_ACCESS_KEY_ID / CREDENTIAL_STATUS_S3_SECRET_KEY  Optional; otherwise the AWS default chain
 
 General CLI settings (cli/walt.env — copy from walt.env.example):
   HOST_ALIAS_DOMAIN       Custom domain for host alias (used by --recreate / --init-system)
@@ -223,6 +231,15 @@ Acme tenant (cli/acme-tenant.env — copy from acme-tenant.env.example):
   KEYCLOAK_*                    Keycloak OIDC settings for issuer auth
   ACME_ISSUER_DISPLAY_*         Issuer display name, locale, and logo
   ACME_VERIFIER_*               Verifier client name and logo
+
+Issuer variants (--setup-issuer-variants):
+  ISSUER_VARIANTS               Comma-separated variants, each a format (mdoc, sdjwt, w3c) plus any of
+                                +status, +kms, +signed (default: mdoc). Example: "mdoc, sdjwt+status+kms"
+  ISSUER_VARIANTS_FILE          Output TSV of variant, format, issuer target (default: cli/issuer-variants.tsv)
+  AWS_KMS_ACCESS_KEY_ID         AWS credentials for the +kms signing key (required only for +kms variants)
+  AWS_KMS_SECRET_ACCESS_KEY
+  AWS_KMS_REGION
+  AWS_KMS_KEYS_FILE             Where the AWS key id is recorded (default: cli/aws-kms-keys.json)
 
 Examples:
   # Full setup and run (default)
@@ -301,6 +318,7 @@ async function main(): Promise<void> {
     '--setup-eudi-pid-provider',
     '--setup-eudi-eaa-provider',
     '--setup-acme-tenant',
+    '--setup-issuer-variants', '--teardown-issuer-variants',
     '--setup-create-trust-registry', '--setup-etsi-trust-registry', '--setup-import-trust-list',
     '--setup-create-superadmin', '--setup-create-organization',
     '--setup-create-admin-role', '--setup-create-admin-account',
@@ -473,6 +491,8 @@ async function main(): Promise<void> {
       '--setup-etsi-trust-registry': () => setupEtsiTrustRegistry(ctx),
       '--setup-create-oidc-bridge': () => setupCreateOidcBridge(ctx),
       '--clear-wallet-credentials': () => clearWalletCredentials(ctx),
+      '--setup-issuer-variants': () => runIssuerVariantsSetup(ctx),
+      '--teardown-issuer-variants': () => runIssuerVariantsTeardown(ctx),
     };
 
     for (const [flag, fn] of Object.entries(setupCommands)) {

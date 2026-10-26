@@ -74,3 +74,6 @@ export { runEudiDemoSetup } from './eudi-demo.js';
 
 // Acme tenant
 export { runAcmeTenantSetup } from './acme-tenant.js';
+
+// Issuer variants (format, status, signing key, signed metadata)
+export { runIssuerVariantsSetup, runIssuerVariantsTeardown } from './issuer-variants.js';

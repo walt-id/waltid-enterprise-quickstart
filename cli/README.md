@@ -121,6 +121,45 @@ Certificates are written under `cli/certs/` as `eudi-rp-*`, `eudi-pid-provider-*
 and `eudi-eaa-provider-*`. Registering as PID_Provider or Non_Q_EAA_Provider does
 not by itself make the EUDI reference wallet accept credentials from this issuer.
 
+### Issuer Variants
+
+Sets up the same issuance in several issuer configurations, so you can compare them. Run it
+after `--setup-all`. It creates one issuer profile per variant in `ISSUER_VARIANTS`.
+A variant is a format (`mdoc`, `sdjwt`, `w3c`) plus any of these toggles:
+
+- `+status`: each issued credential gets a status list entry
+- `+kms`: an AWS KMS key signs the access token, the credential, its status list and
+  the signed metadata, instead of the software key
+- `+signed`: the issuer publishes signed metadata
+
+```bash
+ISSUER_VARIANTS="mdoc, sdjwt+status, w3c+kms+signed" \
+  npx tsx walt.ts --setup-issuer-variants
+```
+
+Each variant lives on an issuer chosen by its signing key and metadata signing
+(`issuer2-software`, `issuer2-aws-kms`, `issuer2-software-signed-metadata`,
+`issuer2-aws-kms-signed-metadata`), in a profile named after its format and status
+(for example `sdjwt-status`). The targets are written to `issuer-variants.tsv` as
+`<variant> <format> <issuer target>`, one line per variant.
+
+`+kms` also needs `AWS_KMS_ACCESS_KEY_ID`, `AWS_KMS_SECRET_ACCESS_KEY` and
+`AWS_KMS_REGION`. The AWS key ID is recorded in `aws-kms-keys.json`. The CLI's HTTP log
+in `cli/logs` contains these credentials, so treat it as secret.
+
+Status lists are kept in memory by default, and each API instance keeps its own copy.
+With more than one API replica, set `CREDENTIAL_STATUS_S3_BUCKET` and
+`CREDENTIAL_STATUS_S3_REGION` before `--setup-all`, and optionally
+`CREDENTIAL_STATUS_S3_ACCESS_KEY_ID` and `CREDENTIAL_STATUS_S3_SECRET_KEY`.
+The lists are then published to S3 instead.
+
+To schedule deletion of the AWS key, run the command below. AWS keeps a deleted key
+for at least 7 days.
+
+```bash
+npx tsx walt.ts --teardown-issuer-variants
+```
+
 
 ## Advanced Usage
 
