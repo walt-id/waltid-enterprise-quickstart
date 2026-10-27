@@ -11,7 +11,7 @@
  * The AWS key is meant to be temporary: --teardown-issuer-variants schedules its deletion.
  */
 
-import { writeFileSync } from 'fs';
+import { existsSync, readFileSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import { CommandContext } from '../../context.js';
 import {
@@ -55,7 +55,7 @@ function statusConfigRef(ctx: CommandContext, configId: string): string {
 }
 
 /** Load a certificate that --setup-all must already have created */
-async function requireStoredCertificatePem(ctx: CommandContext, certId: string): Promise<string> {
+export async function requireStoredCertificatePem(ctx: CommandContext, certId: string): Promise<string> {
   const pem = await getStoredCertificatePem(ctx, certId);
   if (!pem) {
     throw new Error(`Certificate '${certId}' not found. Run --setup-all before --setup-issuer-variants.`);
@@ -74,15 +74,16 @@ function awsKmsAuthFromEnv(): { accessKeyId: string; secretAccessKey: string; re
 }
 
 /**
- * Generate the AWS KMS signing key through the Enterprise KMS service and record its AWS key id,
- * so it can still be deleted directly in AWS if --teardown-issuer-variants never runs.
+ * Generate an AWS KMS key through the Enterprise KMS service and record its AWS key id in
+ * AWS_KMS_KEYS_FILE, so it can still be deleted directly in AWS if the teardown command never runs.
+ * The file is shared with --setup-verifier-variants, so keys are added to it rather than replacing it.
  */
-async function generateAwsKmsSigningKey(ctx: CommandContext): Promise<void> {
+export async function generateAwsKmsKey(ctx: CommandContext, keyId: string, prefix: string): Promise<void> {
   const step = ctx.nextStep();
-  ctx.log('Generate AWS KMS signing key', PREFIX);
+  ctx.log(`Generate AWS KMS key ${keyId}`, prefix);
 
   const auth = awsKmsAuthFromEnv();
-  const keyRef = kmsKeyRef(ctx, ISSUER_VARIANT_IDS.awsKmsSigningKey);
+  const keyRef = kmsKeyRef(ctx, keyId);
   // Not saved with saveJson: the request and the response both carry the access key. The HTTP log
   // (walt-http-log.json) still records them, so treat cli/logs as secret after this command.
   const response = await ctx.orgClient.post(`/v1/${keyRef}/kms-service-api/keys/generate`, {
@@ -96,10 +97,31 @@ async function generateAwsKmsSigningKey(ctx: CommandContext): Promise<void> {
     throw new Error(`AWS key generation for ${keyRef} returned no key id (key type: ${response.data?.key?.type})`);
   }
   const keysFile = process.env.AWS_KMS_KEYS_FILE || join(ctx.cliDir, 'aws-kms-keys.json');
-  writeFileSync(keysFile, JSON.stringify([{ keyReference: keyRef, awsKeyId, region: auth.region }], null, 2));
-  ctx.saveJson('generate-aws-kms-signing-key-response.json', { keyReference: keyRef, awsKeyId, status: response.status }, step);
+  const recorded: Array<{ keyReference: string }> = existsSync(keysFile) ? JSON.parse(readFileSync(keysFile, 'utf-8')) : [];
+  writeFileSync(
+    keysFile,
+    JSON.stringify(
+      [...recorded.filter((k) => k.keyReference !== keyRef), { keyReference: keyRef, awsKeyId, region: auth.region }],
+      null,
+      2
+    )
+  );
+  ctx.saveJson(`generate-${keyId}-response.json`, { keyReference: keyRef, awsKeyId, status: response.status }, step);
 
   console.log(`   [OK] AWS KMS key ${awsKeyId} ${response.status === 201 ? 'generated' : 'already present'} (${keyRef})`);
+}
+
+/** Schedule deletion of an AWS KMS key through the Enterprise KMS service. AWS keeps it for at least 7 days. */
+export async function deleteAwsKmsKey(ctx: CommandContext, keyId: string, prefix: string): Promise<void> {
+  ctx.log(`Schedule deletion of AWS KMS key ${keyId}`, prefix);
+  const keyRef = kmsKeyRef(ctx, keyId);
+  try {
+    await ctx.orgClient.delete(`/v1/${keyRef}/kms-service-api/keys/delete`);
+    console.log(`   [OK] Deletion scheduled for ${keyRef}`);
+  } catch (error: any) {
+    if (error.status !== 404) throw error;
+    console.log(`   [SKIP] No AWS KMS key at ${keyRef}`);
+  }
 }
 
 /** Document signer certificate for the AWS KMS key, issued by the CLI IACA */
@@ -132,7 +154,7 @@ async function createAwsKmsDocSignerCertificate(ctx: CommandContext): Promise<vo
 }
 
 /** DID service and store for W3C issuer DIDs (not part of --setup-all) */
-async function ensureDidService(ctx: CommandContext): Promise<void> {
+export async function ensureDidService(ctx: CommandContext): Promise<void> {
   ctx.log('Create DID service and store', PREFIX);
 
   for (const svc of [
@@ -160,7 +182,7 @@ async function ensureDidService(ctx: CommandContext): Promise<void> {
 }
 
 /** did:key for a KMS key, used as the W3C issuer and as the Bitstring status list issuer */
-async function createDid(ctx: CommandContext, keyId: string): Promise<string> {
+export async function createDid(ctx: CommandContext, keyId: string): Promise<string> {
   ctx.log(`Create did:key for ${keyId}`, PREFIX);
   const response = await ctx.orgClient.post(
     `/v1/${ctx.tenantPath}.${RESOURCES.didService}/did-service-api/dids/create/key`,
@@ -172,6 +194,33 @@ async function createDid(ctx: CommandContext, keyId: string): Promise<string> {
   }
   console.log(`   [OK] ${did}`);
   return did;
+}
+
+/**
+ * The status list a variant's profile points at, signed with the variant's key: by certificate for
+ * the token status lists, by the issuer DID for the Bitstring list. Skipped if it already exists.
+ */
+export async function createVariantStatusList(
+  ctx: CommandContext,
+  variant: Pick<IssuerVariant, 'format' | 'kms'>,
+  dids: Map<string, string>,
+  docSignerPems: Map<string, string>
+): Promise<void> {
+  const keyId = variantSigningKeyId(variant);
+  const signer: Record<string, unknown> = variant.format === 'w3c'
+    ? { did: dids.get(keyId) }
+    : { x5c: [docSignerPems.get(variantDocSignerCertId(variant))] };
+  const config = {
+    mdoc: { type: 'TokenStatusList', format: 'CWT' },
+    sdjwt: { type: 'TokenStatusList', format: 'JWT' },
+    w3c: { type: 'BitstringStatusList' },
+  }[variant.format];
+  await createStatusList(
+    ctx,
+    variantStatusConfigId(variant),
+    { keyReference: kmsKeyRef(ctx, keyId), ...signer, config },
+    `${config.type}${'format' in config ? ` ${config.format}` : ''} (${keyId})`
+  );
 }
 
 async function createStatusList(
@@ -201,7 +250,7 @@ async function createStatusList(
  * [signer] signs the access tokens and, with [signedMetadata], the metadata, which then
  * carries [signer]'s certificate.
  */
-async function createVariantIssuer(
+export async function createVariantIssuer(
   ctx: CommandContext,
   service: string,
   signer: { keyId: string; certId: string },
@@ -258,7 +307,7 @@ async function createVariantIssuer(
   if (created) console.log(`   [OK] Issuer ${service} created`);
 }
 
-async function linkIssuerToCredentialStatus(ctx: CommandContext, service: string): Promise<void> {
+export async function linkIssuerToCredentialStatus(ctx: CommandContext, service: string): Promise<void> {
   try {
     await ctx.addServiceDependency(
       `/v2/${ctx.tenantPath}.${service}/issuer-service-api/dependencies/add`,
@@ -332,7 +381,7 @@ export async function runIssuerVariantsSetup(ctx: CommandContext): Promise<void>
   // The AWS key's certificate is needed by every kms variant: it is the mdoc x5chain, and the x5c of the
   // status lists and signed metadata the AWS key signs.
   if (variants.some((v) => v.kms)) {
-    await generateAwsKmsSigningKey(ctx);
+    await generateAwsKmsKey(ctx, ISSUER_VARIANT_IDS.awsKmsSigningKey, PREFIX);
     await createAwsKmsDocSignerCertificate(ctx);
     docSignerPems.set(
       ISSUER_VARIANT_IDS.awsKmsDocSignerCert,
@@ -355,22 +404,8 @@ export async function runIssuerVariantsSetup(ctx: CommandContext): Promise<void>
     statusLists.set(variantStatusConfigId(variant), variant);
   }
   statusLists.delete(STATUS_CONFIG_IDS.tokenStatusListCwt);
-  for (const [configId, variant] of statusLists) {
-    const keyId = variantSigningKeyId(variant);
-    const signer: Record<string, unknown> = variant.format === 'w3c'
-      ? { did: dids.get(keyId) }
-      : { x5c: [docSignerPems.get(variantDocSignerCertId(variant))] };
-    const config = {
-      mdoc: { type: 'TokenStatusList', format: 'CWT' },
-      sdjwt: { type: 'TokenStatusList', format: 'JWT' },
-      w3c: { type: 'BitstringStatusList' },
-    }[variant.format];
-    await createStatusList(
-      ctx,
-      configId,
-      { keyReference: kmsKeyRef(ctx, keyId), ...signer, config },
-      `${config.type}${'format' in config ? ` ${config.format}` : ''} (${keyId})`
-    );
+  for (const variant of statusLists.values()) {
+    await createVariantStatusList(ctx, variant, dids, docSignerPems);
   }
 
   // One issuer per signing key and metadata signing. Every variant on a service shares both, so the
@@ -403,13 +438,5 @@ export async function runIssuerVariantsSetup(ctx: CommandContext): Promise<void>
  * AWS keeps a key for at least 7 days after this; it cannot be used in that time.
  */
 export async function runIssuerVariantsTeardown(ctx: CommandContext): Promise<void> {
-  ctx.log('Schedule deletion of the AWS KMS signing key', PREFIX);
-  const keyRef = kmsKeyRef(ctx, ISSUER_VARIANT_IDS.awsKmsSigningKey);
-  try {
-    await ctx.orgClient.delete(`/v1/${keyRef}/kms-service-api/keys/delete`);
-    console.log(`   [OK] Deletion scheduled for ${keyRef}`);
-  } catch (error: any) {
-    if (error.status !== 404) throw error;
-    console.log(`   [SKIP] No AWS KMS key at ${keyRef}`);
-  }
+  await deleteAwsKmsKey(ctx, ISSUER_VARIANT_IDS.awsKmsSigningKey, PREFIX);
 }

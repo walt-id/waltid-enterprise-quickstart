@@ -160,6 +160,43 @@ for at least 7 days.
 npx tsx walt.ts --teardown-issuer-variants
 ```
 
+### Verifier Variants
+
+Sets up the same presentation in several verifier configurations, so you can compare them.
+Run it after `--setup-all`. It writes one verification session request per variant in
+`VERIFIER_VARIANTS`. A variant is a format (`mdoc`, `sdjwt`, `w3c`) plus any of these toggles:
+
+- `+status`: the verifier checks the credential's status list entry
+- `+trust`: the verifier checks the issuer against the trust registry (`etsi-trust-list`)
+- `+signed`: the authorization request is a signed request object (`x509_hash` client ID)
+- `+encrypted`: the wallet encrypts its response (`direct_post.jwt`)
+- `+kms`: an AWS KMS key signs the request object instead of the software key; needs `+signed`
+- `+portrait`: mdoc only; the query also asks for a 250 KB portrait
+
+Every variant also verifies the issuer signature.
+
+```bash
+VERIFIER_VARIANTS="mdoc, sdjwt+status+trust, w3c+signed+encrypted+kms" \
+  npx tsx walt.ts --setup-verifier-variants
+```
+
+The command replaces the wallet's credentials with one per format the variants use. Each
+credential carries a status list entry and an x5c chain to the CLI IACA, so `+status` and
+`+trust` work for every format. The SD-JWT and W3C credentials come from their own issuer,
+`issuer2-verifier-credentials`.
+
+Each session request is written to `verifier-variants/<variant>.json`. The variants are listed in
+`verifier-variants.tsv` as `<variant> <format> <session request file>`, one line per variant. To
+use a request, post the file as-is to
+`/v2/<tenant>.verifier2/verifier-service-api/verification-session/create`.
+
+`+kms` needs the same `AWS_KMS_*` variables as the issuer variants, and records its key in the
+same `aws-kms-keys.json`. To schedule deletion of the AWS key:
+
+```bash
+npx tsx walt.ts --teardown-verifier-variants
+```
+
 
 ## Advanced Usage
 

@@ -11,3 +11,5 @@ eudi-demo.env
 certs/
 issuer-variants.tsv
 aws-kms-keys.json
+verifier-variants.tsv
+verifier-variants/

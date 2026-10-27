@@ -123,7 +123,7 @@ export function variantIssuerService(variant: IssuerVariant): string {
 }
 
 /** Profile name: format and status. The signing key and metadata signing come from the service. */
-export function variantProfileName(variant: IssuerVariant): string {
+export function variantProfileName(variant: Pick<IssuerVariant, 'format' | 'status'>): string {
   return variant.status ? `${variant.format}-status` : variant.format;
 }
 
@@ -133,12 +133,12 @@ export function variantIssuerTarget(tenantPath: string, variant: IssuerVariant):
 }
 
 /** KMS key id that signs everything in the variant: access token, credential, status list and metadata */
-export function variantSigningKeyId(variant: IssuerVariant): string {
+export function variantSigningKeyId(variant: Pick<IssuerVariant, 'kms'>): string {
   return variant.kms ? ISSUER_VARIANT_IDS.awsKmsSigningKey : KEY_IDS.issuerSigningKey;
 }
 
 /** Certificate for the variant's signing key: the mdoc x5chain, and the x5c of status lists and metadata */
-export function variantDocSignerCertId(variant: IssuerVariant): string {
+export function variantDocSignerCertId(variant: Pick<IssuerVariant, 'kms'>): string {
   return variant.kms ? ISSUER_VARIANT_IDS.awsKmsDocSignerCert : CERT_IDS.docSignerCert;
 }
 
@@ -147,7 +147,7 @@ export function variantDocSignerCertId(variant: IssuerVariant): string {
  * status re-signs its list, so a kms variant makes a second remote signature per credential.
  * The software mdoc list is the one --setup-all already created.
  */
-export function variantStatusConfigId(variant: IssuerVariant): string {
+export function variantStatusConfigId(variant: Pick<IssuerVariant, 'format' | 'kms'>): string {
   switch (variant.format) {
     case 'mdoc': return variant.kms ? ISSUER_VARIANT_IDS.tokenStatusListCwtAwsKms : STATUS_CONFIG_IDS.tokenStatusListCwt;
     case 'sdjwt': return variant.kms ? ISSUER_VARIANT_IDS.tokenStatusListJwtAwsKms : ISSUER_VARIANT_IDS.tokenStatusListJwt;
@@ -242,7 +242,7 @@ const SUBJECT = {
 };
 
 /** Profile `credentialData` (and `mapping` for W3C) for a variant */
-export function buildVariantCredentialData(variant: IssuerVariant): {
+export function buildVariantCredentialData(variant: Pick<IssuerVariant, 'format'>): {
   credentialData: Record<string, unknown>;
   mapping?: Record<string, unknown>;
 } {

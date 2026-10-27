@@ -82,6 +82,8 @@ import {
   runAcmeTenantSetup,
   runIssuerVariantsSetup,
   runIssuerVariantsTeardown,
+  runVerifierVariantsSetup,
+  runVerifierVariantsTeardown,
 } from './commands/index.js';
 
 import { flowEtsiTrustLists, flowCredentialRevocation, flowGovTrust, flowTrustListAssurance } from './flows/index.js';
@@ -149,6 +151,8 @@ Setup Commands (create resources):
   --setup-acme-tenant     Set up acme tenant (Photo ID mDoc + Employee SD-JWT issuer, verifier)
   --setup-issuer-variants  Set up one issuer profile per variant in ISSUER_VARIANTS (after --setup-all)
   --teardown-issuer-variants  Schedule deletion of the AWS KMS signing key used by +kms variants
+  --setup-verifier-variants  Seed the wallet and write one session request per variant in VERIFIER_VARIANTS (after --setup-all)
+  --teardown-verifier-variants  Schedule deletion of the AWS KMS request-signing key used by +kms variants
 
 Additional Setup Commands:
   --setup-create-trust-registry  Create trust registry service
@@ -241,6 +245,14 @@ Issuer variants (--setup-issuer-variants):
   AWS_KMS_REGION
   AWS_KMS_KEYS_FILE             Where the AWS key id is recorded (default: cli/aws-kms-keys.json)
 
+Verifier variants (--setup-verifier-variants):
+  VERIFIER_VARIANTS             Comma-separated variants, each a format (mdoc, sdjwt, w3c) plus any of
+                                +status, +trust, +signed, +encrypted, +kms (needs +signed), +portrait (mdoc only)
+                                (default: mdoc). Example: "mdoc+portrait, sdjwt+status+trust+signed"
+  VERIFIER_VARIANTS_DIR         Where the session requests are written (default: cli/verifier-variants)
+  VERIFIER_VARIANTS_FILE        Output TSV of variant, format, session request file (default: cli/verifier-variants.tsv)
+  AWS_KMS_*                     As for the issuer variants, required only for +kms variants
+
 Examples:
   # Full setup and run (default)
   npx tsx walt.ts
@@ -319,6 +331,7 @@ async function main(): Promise<void> {
     '--setup-eudi-eaa-provider',
     '--setup-acme-tenant',
     '--setup-issuer-variants', '--teardown-issuer-variants',
+    '--setup-verifier-variants', '--teardown-verifier-variants',
     '--setup-create-trust-registry', '--setup-etsi-trust-registry', '--setup-import-trust-list',
     '--setup-create-superadmin', '--setup-create-organization',
     '--setup-create-admin-role', '--setup-create-admin-account',
@@ -493,6 +506,8 @@ async function main(): Promise<void> {
       '--clear-wallet-credentials': () => clearWalletCredentials(ctx),
       '--setup-issuer-variants': () => runIssuerVariantsSetup(ctx),
       '--teardown-issuer-variants': () => runIssuerVariantsTeardown(ctx),
+      '--setup-verifier-variants': () => runVerifierVariantsSetup(ctx),
+      '--teardown-verifier-variants': () => runVerifierVariantsTeardown(ctx),
     };
 
     for (const [flag, fn] of Object.entries(setupCommands)) {
