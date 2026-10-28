@@ -58,6 +58,21 @@ resource "aws_iam_role_policy_attachment" "node_amazon_ec2_container_registry_re
   policy_arn = "arn:${data.aws_partition.current.partition}:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly"
 }
 
+# The CloudWatch Observability addon exports through the node role, and the OpenTelemetry Java agent it injects into
+# the API sends traces to X-Ray. Without these the exports fail for as long as the cluster runs: load test
+# 40514119052 was denied xray:PutTraceSegments and logs:PutLogEvents for its whole measured hour, retrying on every pod.
+resource "aws_iam_role_policy_attachment" "node_cloudwatch_agent" {
+  count      = var.enable_container_insights ? 1 : 0
+  role       = aws_iam_role.node.name
+  policy_arn = "arn:${data.aws_partition.current.partition}:iam::aws:policy/CloudWatchAgentServerPolicy"
+}
+
+resource "aws_iam_role_policy_attachment" "node_xray_write" {
+  count      = var.enable_container_insights ? 1 : 0
+  role       = aws_iam_role.node.name
+  policy_arn = "arn:${data.aws_partition.current.partition}:iam::aws:policy/AWSXrayWriteOnlyAccess"
+}
+
 resource "aws_iam_openid_connect_provider" "main" {
   client_id_list  = ["sts.amazonaws.com"]
   thumbprint_list = [data.tls_certificate.oidc.certificates[0].sha1_fingerprint]

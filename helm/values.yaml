@@ -57,6 +57,19 @@ licenseConf: |
   seedCredential = ${?LICENSE_SEED_CREDENTIAL}
   seedCredentialFile = ${?LICENSE_SEED_CREDENTIAL_FILE}
   installationKeyFile = ${?LICENSE_INSTALLATION_KEY_FILE}
+# Optional. With dev-mode enabled, /v1/dev/* refuses every request unless this sets an access token, which
+# callers send in the X-Dev-Mode-Token header. Use a per-deployment secret: the API refuses to start with the
+# placeholder from the documentation.
+#   devModeAccessConf: |
+#     accessToken = "<secret>"
+devModeAccessConf: ""
+# Optional, and only read when featConf enables debug-endpoints. Each /debug/* endpoint defaults to on only
+# when the API logs at DEBUG (TRACE for heapdump and memory), so with the default logging none is served
+# until it is switched on here, e.g.:
+#   debugEndpointsConf: |
+#     jvm = true
+#     ram = true
+debugEndpointsConf: ""
 
 license:
   # Pre-provisioned Secret holding all license material. Optional key:

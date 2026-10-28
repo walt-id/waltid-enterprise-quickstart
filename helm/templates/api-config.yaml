@@ -19,6 +19,12 @@ data:
   {{ if .Values.serviceResolutionConf }}
   service-resolution.conf: {{ .Values.serviceResolutionConf | toYaml | indent 1 }}
   {{ end }}
+  {{ if .Values.devModeAccessConf }}
+  dev-mode-access.conf: {{ .Values.devModeAccessConf | toYaml | indent 1 }}
+  {{ end }}
+  {{ if .Values.debugEndpointsConf }}
+  debug-endpoints.conf: {{ .Values.debugEndpointsConf | toYaml | indent 1 }}
+  {{ end }}
   {{ if .Values.loggingConf }}
   klogging.json: {{ .Values.loggingConf | toYaml | indent 1 }}
   {{ end }}

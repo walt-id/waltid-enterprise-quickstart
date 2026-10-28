@@ -274,5 +274,9 @@ resource "aws_eks_addon" "amazon_cloudwatch_observability" {
   cluster_name                = aws_eks_cluster.main.name
   addon_name                  = "amazon-cloudwatch-observability"
   resolve_conflicts_on_create = "OVERWRITE"
-  depends_on                  = [aws_eks_node_group.main]
+  depends_on = [
+    aws_eks_node_group.main,
+    aws_iam_role_policy_attachment.node_cloudwatch_agent,
+    aws_iam_role_policy_attachment.node_xray_write,
+  ]
 }
