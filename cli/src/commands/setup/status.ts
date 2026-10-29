@@ -10,29 +10,58 @@
 import { CommandContext } from '../../context.js';
 import { RESOURCES, KEY_IDS, CERT_IDS, STATUS_CONFIG_IDS } from '../../config.js';
 
+/**
+ * Where status lists are published. S3 when CREDENTIAL_STATUS_S3_BUCKET is set, otherwise in-memory.
+ *
+ * In-memory is per API instance: a list published by one pod is not visible to the others, so behind
+ * more than one replica a verifier's status fetch can miss it. Use S3 for any multi-replica deployment.
+ */
+export function credentialStatusRegistry(): Record<string, unknown> {
+  const bucketName = process.env.CREDENTIAL_STATUS_S3_BUCKET;
+  if (!bucketName) {
+    return { type: 'in-memory' };
+  }
+  const region = process.env.CREDENTIAL_STATUS_S3_REGION;
+  if (!region) {
+    throw new Error('CREDENTIAL_STATUS_S3_REGION is required when CREDENTIAL_STATUS_S3_BUCKET is set');
+  }
+  return {
+    type: 'aws',
+    bucketName,
+    region,
+    // Without keys the API falls back to the AWS SDK's default credential chain.
+    ...(process.env.CREDENTIAL_STATUS_S3_ACCESS_KEY_ID && {
+      accessKeyId: process.env.CREDENTIAL_STATUS_S3_ACCESS_KEY_ID,
+      secretKey: process.env.CREDENTIAL_STATUS_S3_SECRET_KEY,
+    }),
+  };
+}
+
+/** Copy of a request or response with the S3 secret key masked, for the saved JSON logs */
+function redactRegistrySecret(data: any): any {
+  return JSON.parse(JSON.stringify(data, (key, value) => (key === 'secretKey' && value ? '[redacted]' : value)));
+}
+
 /** Create credential status service */
 export async function setupCreateCredentialStatusService(ctx: CommandContext): Promise<void> {
   const step = ctx.nextStep();
-  ctx.log('Create credential status service', 'SETUP');
+  const registry = credentialStatusRegistry();
+  ctx.log(`Create credential status service (${registry.type} registry)`, 'SETUP');
 
   const { created } = await ctx.tolerantCreate(
     'Credential status service',
     async () => {
       const request = {
         type: 'credential-status',
-        config: {
-          registry: {
-            type: 'in-memory',
-          },
-        },
+        config: { registry },
       };
-      ctx.saveJson('create-credential-status-service-request.json', request, step);
+      ctx.saveJson('create-credential-status-service-request.json', redactRegistrySecret(request), step);
 
       const response = await ctx.orgClient.post(
         `/v1/${ctx.tenantPath}.${RESOURCES.credentialStatus}/resource-api/services/create`,
         request
       );
-      ctx.saveJson('create-credential-status-service-response.json', response.data, step);
+      ctx.saveJson('create-credential-status-service-response.json', redactRegistrySecret(response.data), step);
       return response;
     }
   );

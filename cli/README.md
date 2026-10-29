@@ -121,6 +121,82 @@ Certificates are written under `cli/certs/` as `eudi-rp-*`, `eudi-pid-provider-*
 and `eudi-eaa-provider-*`. Registering as PID_Provider or Non_Q_EAA_Provider does
 not by itself make the EUDI reference wallet accept credentials from this issuer.
 
+### Issuer Variants
+
+Sets up the same issuance in several issuer configurations, so you can compare them. Run it
+after `--setup-all`. It creates one issuer profile per variant in `ISSUER_VARIANTS`.
+A variant is a format (`mdoc`, `sdjwt`, `w3c`) plus any of these toggles:
+
+- `+status`: each issued credential gets a status list entry
+- `+kms`: an AWS KMS key signs the access token, the credential, its status list and
+  the signed metadata, instead of the software key
+- `+signed`: the issuer publishes signed metadata
+
+```bash
+ISSUER_VARIANTS="mdoc, sdjwt+status, w3c+kms+signed" \
+  npx tsx walt.ts --setup-issuer-variants
+```
+
+Each variant lives on an issuer chosen by its signing key and metadata signing
+(`issuer2-software`, `issuer2-aws-kms`, `issuer2-software-signed-metadata`,
+`issuer2-aws-kms-signed-metadata`), in a profile named after its format and status
+(for example `sdjwt-status`). The targets are written to `issuer-variants.tsv` as
+`<variant> <format> <issuer target>`, one line per variant.
+
+`+kms` also needs `AWS_KMS_ACCESS_KEY_ID`, `AWS_KMS_SECRET_ACCESS_KEY` and
+`AWS_KMS_REGION`. The AWS key ID is recorded in `aws-kms-keys.json`. The CLI's HTTP log
+in `cli/logs` contains these credentials, so treat it as secret.
+
+Status lists are kept in memory by default, and each API instance keeps its own copy.
+With more than one API replica, set `CREDENTIAL_STATUS_S3_BUCKET` and
+`CREDENTIAL_STATUS_S3_REGION` before `--setup-all`, and optionally
+`CREDENTIAL_STATUS_S3_ACCESS_KEY_ID` and `CREDENTIAL_STATUS_S3_SECRET_KEY`.
+The lists are then published to S3 instead.
+
+To schedule deletion of the AWS key, run the command below. AWS keeps a deleted key
+for at least 7 days.
+
+```bash
+npx tsx walt.ts --teardown-issuer-variants
+```
+
+### Verifier Variants
+
+Sets up the same presentation in several verifier configurations, so you can compare them.
+Run it after `--setup-all`. It writes one verification session request per variant in
+`VERIFIER_VARIANTS`. A variant is a format (`mdoc`, `sdjwt`, `w3c`) plus any of these toggles:
+
+- `+status`: the verifier checks the credential's status list entry
+- `+trust`: the verifier checks the issuer against the trust registry (`etsi-trust-list`)
+- `+signed`: the authorization request is a signed request object (`x509_hash` client ID)
+- `+encrypted`: the wallet encrypts its response (`direct_post.jwt`)
+- `+kms`: an AWS KMS key signs the request object instead of the software key; needs `+signed`
+- `+portrait`: mdoc only; the query also asks for a 250 KB portrait
+
+Every variant also verifies the issuer signature.
+
+```bash
+VERIFIER_VARIANTS="mdoc, sdjwt+status+trust, w3c+signed+encrypted+kms" \
+  npx tsx walt.ts --setup-verifier-variants
+```
+
+The command replaces the wallet's credentials with one per format the variants use. Each
+credential carries a status list entry and an x5c chain to the CLI IACA, so `+status` and
+`+trust` work for every format. The SD-JWT and W3C credentials come from their own issuer,
+`issuer2-verifier-credentials`.
+
+Each session request is written to `verifier-variants/<variant>.json`. The variants are listed in
+`verifier-variants.tsv` as `<variant> <format> <session request file>`, one line per variant. To
+use a request, post the file as-is to
+`/v2/<tenant>.verifier2/verifier-service-api/verification-session/create`.
+
+`+kms` needs the same `AWS_KMS_*` variables as the issuer variants, and records its key in the
+same `aws-kms-keys.json`. To schedule deletion of the AWS key:
+
+```bash
+npx tsx walt.ts --teardown-verifier-variants
+```
+
 
 ## Advanced Usage
 
