@@ -57,6 +57,46 @@ licenseConf: |
   seedCredential = ${?LICENSE_SEED_CREDENTIAL}
   seedCredentialFile = ${?LICENSE_SEED_CREDENTIAL_FILE}
   installationKeyFile = ${?LICENSE_INSTALLATION_KEY_FILE}
+paginationConf: |
+  {
+    "defaultLimit": 100,
+    "maxLimit": 1000
+  }
+eventsConf: |
+  # How long events (POST /v1/events/query) are kept, in days. MongoDB removes older ones with a TTL index.
+  # 0 keeps them forever. A change also applies to the events already stored.
+  retentionDays = 90
+
+  # Which event types are stored: IssuanceEvent, VerificationEvent, UsageEvent. Every stored event is a database write;
+  # leave types out (or set []) to trade the event log for throughput. Unset stores all. Metrics still count every event.
+  # storedTypes = [IssuanceEvent, VerificationEvent, UsageEvent]
+
+  # true: issuance and verification events are written before the request goes on (nothing lost if a pod dies, a failed
+  # write fails the request). false: written in the background, in batches.
+  synchronous = false
+networkFetchGuardConf: |
+  # Wallet-service endpoints fetch caller-supplied URLs server-side (issuer metadata, request_uri,
+  # credential_offer_uri, token/credential endpoints, ...). By default this refuses loopback and
+  # private-network (RFC1918 / IPv6 ULA) targets, in addition to link-local/cloud-metadata/multicast
+  # targets, which are never allowed and have no flag here.
+  #
+  # Set these to true only if this deployment's issuer/verifier/wallet services legitimately run as
+  # siblings on the same host or the same private network (a common topology) - otherwise leave both
+  # false so private/internal infrastructure stays unreachable even from a caller-supplied URL.
+  allowLoopback = false
+  allowPrivateNetworks = false
+
+  # Every organization's own hostname ({organizationId}.{baseDomain}, from enterprise.conf) is always
+  # trusted regardless of the flags above, to survive split-horizon/NAT-hairpin DNS. Add further
+  # hostnames (or their subdomains) here only if this deployment needs to trust something beyond its
+  # own base domain - most deployments should leave this empty.
+  additionalTrustedHostSuffixes = []
+devModeConf: |
+  enableDidWebResolverHttps = false
+eidasAuditConf: |
+  # true: every audit entry is written before the request goes on (a failed write fails the request, and nothing is
+  # lost if the pod dies right after). false: entries are written in the background, in order per organization.
+  synchronous = false
 
 license:
   # Pre-provisioned Secret holding all license material. Optional key:
