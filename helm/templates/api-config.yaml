@@ -13,6 +13,15 @@ data:
   web.conf: {{ .Values.webConfig.webConf | toYaml | indent 1 }}
   resource-access.conf: {{ .Values.resourceAccessConf | toYaml | indent 1 }}
   license.conf: {{ .Values.licenseConf | toYaml | indent 1 }}
+  pagination.conf: {{ .Values.paginationConf | toYaml | indent 1 }}
+  events.conf: {{ .Values.eventsConf | toYaml | indent 1 }}
+  network-fetch-guard.conf: {{ .Values.networkFetchGuardConf | toYaml | indent 1 }}
+  {{ if .Values.devModeConf }}
+  dev-mode.conf: {{ .Values.devModeConf | toYaml | indent 1 }}
+  {{ end }}
+  {{ if .Values.eidasAuditConf }}
+  eidas-audit.conf: {{ .Values.eidasAuditConf | toYaml | indent 1 }}
+  {{ end }}
   {{ if .Values.rateLimitConf }}
   rate-limit.conf: {{ .Values.rateLimitConf | toYaml | indent 1 }}
   {{ end }}
