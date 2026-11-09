@@ -16,6 +16,7 @@ data:
   pagination.conf: {{ .Values.paginationConf | toYaml | indent 1 }}
   events.conf: {{ .Values.eventsConf | toYaml | indent 1 }}
   network-fetch-guard.conf: {{ .Values.networkFetchGuardConf | toYaml | indent 1 }}
+  webhook-delivery.conf: {{ .Values.webhookDeliveryConf | toYaml | indent 1 }}
   {{ if .Values.devModeConf }}
   dev-mode.conf: {{ .Values.devModeConf | toYaml | indent 1 }}
   {{ end }}
