@@ -11,15 +11,14 @@ import { CommandContext } from '../../context.js';
 import { RESOURCES, KEY_IDS, CERT_IDS, STATUS_CONFIG_IDS } from '../../config.js';
 
 /**
- * Where status lists are published. S3 when CREDENTIAL_STATUS_S3_BUCKET is set, otherwise in-memory.
- *
- * In-memory is per API instance: a list published by one pod is not visible to the others, so behind
- * more than one replica a verifier's status fetch can miss it. Use S3 for any multi-replica deployment.
+ * Where status lists are published. S3 when CREDENTIAL_STATUS_S3_BUCKET is set, otherwise the
+ * enterprise database. Every API pod serves that list from /fetch, including after a restart.
+ * In-memory remains available for tests; it is not shared across pods.
  */
 export function credentialStatusRegistry(): Record<string, unknown> {
   const bucketName = process.env.CREDENTIAL_STATUS_S3_BUCKET;
   if (!bucketName) {
-    return { type: 'in-memory' };
+    return { type: 'database' };
   }
   const region = process.env.CREDENTIAL_STATUS_S3_REGION;
   if (!region) {

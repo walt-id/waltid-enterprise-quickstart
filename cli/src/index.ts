@@ -198,8 +198,8 @@ Environment Variables:
   ADMIN_EMAIL             Admin user email (default: admin@walt.id)
   ADMIN_PASSWORD          Admin user password (default: admin123456)
   SUPERADMIN_TOKEN        Superadmin registration token (from config/superadmin-registration.conf)
-  CREDENTIAL_STATUS_S3_BUCKET  Publish status lists to this S3 bucket instead of in-memory (needed with
-                          more than one API replica, where in-memory lists are per instance)
+  CREDENTIAL_STATUS_S3_BUCKET  Publish status lists to this S3 bucket. Without it, lists are stored in
+                          the enterprise database and served from /fetch.
   CREDENTIAL_STATUS_S3_REGION  Region of that bucket (required with the bucket)
   CREDENTIAL_STATUS_S3_ACCESS_KEY_ID / CREDENTIAL_STATUS_S3_SECRET_KEY  Optional; otherwise the AWS default chain
 
