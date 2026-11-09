@@ -257,6 +257,8 @@ For the SCA-card/DPC and SCA-User plus PID scenario, see [the SCA/PID guide](cli
 
 Superadmin credentials are read from `config/superadmin-registration.conf`.
 
+Dead-lettered Issuer2 and Verifier2 webhooks are kept for 30 days by default. Change that in `config/webhook-delivery.conf`.
+
 For detailed documentation, see **[cli/README.md](cli/README.md)**.
 
 
