@@ -152,11 +152,9 @@ Each variant lives on an issuer chosen by its signing key and metadata signing
 `AWS_KMS_REGION`. The AWS key ID is recorded in `aws-kms-keys.json`. The CLI's HTTP log
 in `cli/logs` contains these credentials, so treat it as secret.
 
-Status lists are kept in memory by default, and each API instance keeps its own copy.
-With more than one API replica, set `CREDENTIAL_STATUS_S3_BUCKET` and
-`CREDENTIAL_STATUS_S3_REGION` before `--setup-all`, and optionally
+Status lists are stored in the enterprise database by default. Every API replica serves the same list from `/fetch`, including after a restart.
+Set `CREDENTIAL_STATUS_S3_BUCKET` and `CREDENTIAL_STATUS_S3_REGION` before `--setup-all` to publish to S3 instead, and optionally
 `CREDENTIAL_STATUS_S3_ACCESS_KEY_ID` and `CREDENTIAL_STATUS_S3_SECRET_KEY`.
-The lists are then published to S3 instead.
 
 To schedule deletion of the AWS key, run the command below. AWS keeps a deleted key
 for at least 7 days.
