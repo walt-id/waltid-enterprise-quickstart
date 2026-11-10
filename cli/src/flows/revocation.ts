@@ -14,6 +14,11 @@
 import { mkdirSync } from 'fs';
 import { CommandContext } from '../context.js';
 import { RESOURCES, defaultWalletKeyReference } from '../config.js';
+import {
+  ensureRevocationJourneyStatusList,
+  REVOCATION_JOURNEY_STATUS_CONFIG_ID,
+  STATUS_LIST_TEST_TTL_SECONDS,
+} from '../commands/setup/status.js';
 import { setupLogin } from '../commands/setup/index.js';
 import {
   runCreateCredentialOffer,
@@ -62,7 +67,8 @@ export async function flowCredentialRevocation(ctx: CommandContext): Promise<voi
     await clearWalletCredentials(ctx);
     
     console.log('\n--- Step 2: Issue credential with status ---\n');
-    await runCreateCredentialOffer(ctx, true); // Enable status tracking
+    await ensureRevocationJourneyStatusList(ctx);
+    await runCreateCredentialOffer(ctx, true, REVOCATION_JOURNEY_STATUS_CONFIG_ID);
     await runWalletReceiveCredential(ctx);
     
     console.log('\n--- Step 3: Verify credential (should succeed) ---\n');
@@ -71,7 +77,8 @@ export async function flowCredentialRevocation(ctx: CommandContext): Promise<voi
     await runAssertFinalStatus(ctx);
     
     console.log('\n--- Step 4: Revoke credential ---\n');
-    await runRevokeCredential(ctx);
+    await runRevokeCredential(ctx, REVOCATION_JOURNEY_STATUS_CONFIG_ID);
+    await waitForStatusListFreshness();
     
     console.log('\n--- Step 5: Verify revoked credential (should fail) ---\n');
     await runCreateVerificationSession(ctx, true, false); // Status policy only, no VICAL
@@ -79,7 +86,8 @@ export async function flowCredentialRevocation(ctx: CommandContext): Promise<voi
     await runAssertFinalStatusFailed(ctx);
     
     console.log('\n--- Step 6: Unrevoke credential ---\n');
-    await runUnrevokeCredential(ctx);
+    await runUnrevokeCredential(ctx, REVOCATION_JOURNEY_STATUS_CONFIG_ID);
+    await waitForStatusListFreshness();
     
     console.log('\n--- Step 7: Verify unrevoked credential (should succeed) ---\n');
     await runCreateVerificationSession(ctx, true, false); // Status policy only, no VICAL
@@ -101,4 +109,9 @@ export async function flowCredentialRevocation(ctx: CommandContext): Promise<voi
     ctx.saveHttpLog();
     console.log(`\nLogs saved to: ${ctx.workdir}`);
   }
+}
+
+function waitForStatusListFreshness(): Promise<void> {
+  const milliseconds = (STATUS_LIST_TEST_TTL_SECONDS + 1) * 1000;
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }

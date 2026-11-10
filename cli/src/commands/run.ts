@@ -87,7 +87,8 @@ export async function waitForSessionInfo(
 /** Create credential offer */
 export async function runCreateCredentialOffer(
   ctx: CommandContext,
-  includeStatus: boolean = false
+  includeStatus: boolean = false,
+  statusConfigId: string = STATUS_CONFIG_IDS.tokenStatusListCwt,
 ): Promise<void> {
   const step = ctx.nextStep();
   ctx.log(`Create credential offer${includeStatus ? ' (with status)' : ''}`, 'RUN');
@@ -99,7 +100,7 @@ export async function runCreateCredentialOffer(
   if (includeStatus) {
     request.runtimeOverrides = {
       credentialStatus: {
-        statusCredentialConfig: `${ctx.tenantPath}.${RESOURCES.credentialStatus}.${STATUS_CONFIG_IDS.tokenStatusListCwt}`,
+        statusCredentialConfig: `${ctx.tenantPath}.${RESOURCES.credentialStatus}.${statusConfigId}`,
         initialStatus: '0x0', // VALID
       },
     };
@@ -300,7 +301,10 @@ export async function runAssertFinalStatusFailed(
 // ============================================================================
 
 /** Revoke credential (set status to INVALID) */
-export async function runRevokeCredential(ctx: CommandContext): Promise<void> {
+export async function runRevokeCredential(
+  ctx: CommandContext,
+  statusConfigId: string = STATUS_CONFIG_IDS.tokenStatusListCwt,
+): Promise<void> {
   const step = ctx.nextStep();
   ctx.log('Revoke credential (set status to INVALID)', 'RUN');
 
@@ -315,7 +319,7 @@ export async function runRevokeCredential(ctx: CommandContext): Promise<void> {
   ctx.saveJson('revoke-credential-request.json', request, step);
 
   const response = await ctx.orgClient.put(
-    `/v1/${ctx.tenantPath}.${RESOURCES.credentialStatus}.${STATUS_CONFIG_IDS.tokenStatusListCwt}/credential-status-service-api/status-credential/status/update`,
+    `/v1/${ctx.tenantPath}.${RESOURCES.credentialStatus}.${statusConfigId}/credential-status-service-api/status-credential/status/update`,
     request
   );
   ctx.saveJson('revoke-credential-response.json', response.data, step);
@@ -324,7 +328,10 @@ export async function runRevokeCredential(ctx: CommandContext): Promise<void> {
 }
 
 /** Unrevoke credential (reset status to VALID) */
-export async function runUnrevokeCredential(ctx: CommandContext): Promise<void> {
+export async function runUnrevokeCredential(
+  ctx: CommandContext,
+  statusConfigId: string = STATUS_CONFIG_IDS.tokenStatusListCwt,
+): Promise<void> {
   const step = ctx.nextStep();
   ctx.log('Unrevoke credential (reset status to VALID)', 'RUN');
 
@@ -339,7 +346,7 @@ export async function runUnrevokeCredential(ctx: CommandContext): Promise<void> 
   ctx.saveJson('unrevoke-credential-request.json', request, step);
 
   const response = await ctx.orgClient.put(
-    `/v1/${ctx.tenantPath}.${RESOURCES.credentialStatus}.${STATUS_CONFIG_IDS.tokenStatusListCwt}/credential-status-service-api/status-credential/status/update`,
+    `/v1/${ctx.tenantPath}.${RESOURCES.credentialStatus}.${statusConfigId}/credential-status-service-api/status-credential/status/update`,
     request
   );
   ctx.saveJson('unrevoke-credential-response.json', response.data, step);
