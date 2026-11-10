@@ -85,6 +85,9 @@ export async function setupCreateCredentialStatusService(ctx: CommandContext): P
   }
 }
 
+/** Seconds a relying party may cache the quickstart status list. The revocation journey waits this out. */
+export const STATUS_LIST_TEST_TTL_SECONDS = 2;
+
 /** Create TokenStatusList CWT configuration */
 export async function setupCreateStatusConfiguration(ctx: CommandContext): Promise<void> {
   const step = ctx.nextStep();
@@ -112,6 +115,8 @@ export async function setupCreateStatusConfiguration(ctx: CommandContext): Promi
         config: {
           type: 'TokenStatusList',
           format: 'CWT',
+          // Short enough that the revocation journey can wait out Cache-Control before it checks again.
+          ttl: STATUS_LIST_TEST_TTL_SECONDS,
         },
       };
       ctx.saveJson('create-status-configuration-request.json', request, step);

@@ -14,6 +14,7 @@
 import { mkdirSync } from 'fs';
 import { CommandContext } from '../context.js';
 import { RESOURCES, defaultWalletKeyReference } from '../config.js';
+import { STATUS_LIST_TEST_TTL_SECONDS } from '../commands/setup/status.js';
 import { setupLogin } from '../commands/setup/index.js';
 import {
   runCreateCredentialOffer,
@@ -72,6 +73,7 @@ export async function flowCredentialRevocation(ctx: CommandContext): Promise<voi
     
     console.log('\n--- Step 4: Revoke credential ---\n');
     await runRevokeCredential(ctx);
+    await waitForStatusListFreshness();
     
     console.log('\n--- Step 5: Verify revoked credential (should fail) ---\n');
     await runCreateVerificationSession(ctx, true, false); // Status policy only, no VICAL
@@ -80,6 +82,7 @@ export async function flowCredentialRevocation(ctx: CommandContext): Promise<voi
     
     console.log('\n--- Step 6: Unrevoke credential ---\n');
     await runUnrevokeCredential(ctx);
+    await waitForStatusListFreshness();
     
     console.log('\n--- Step 7: Verify unrevoked credential (should succeed) ---\n');
     await runCreateVerificationSession(ctx, true, false); // Status policy only, no VICAL
@@ -101,4 +104,9 @@ export async function flowCredentialRevocation(ctx: CommandContext): Promise<voi
     ctx.saveHttpLog();
     console.log(`\nLogs saved to: ${ctx.workdir}`);
   }
+}
+
+function waitForStatusListFreshness(): Promise<void> {
+  const milliseconds = (STATUS_LIST_TEST_TTL_SECONDS + 1) * 1000;
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
