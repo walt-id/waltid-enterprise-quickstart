@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { credentialStatusRegistry } from './status.js';
+import { credentialStatusRegistry, findStatusListTtl, statusListAction, STATUS_LIST_TEST_TTL_SECONDS } from './status.js';
 
 test('credentialStatusRegistry uses the database when no S3 bucket is set', () => {
   const bucket = process.env.CREDENTIAL_STATUS_S3_BUCKET;
@@ -36,6 +36,17 @@ test('credentialStatusRegistry publishes to S3 when the bucket and region are se
     restore('CREDENTIAL_STATUS_S3_ACCESS_KEY_ID', accessKey);
     restore('CREDENTIAL_STATUS_S3_SECRET_KEY', secret);
   }
+});
+
+test('an existing status configuration is replaced unless its ttl is already short', () => {
+  assert.equal(statusListAction(null), 'create');
+  assert.equal(statusListAction(STATUS_LIST_TEST_TTL_SECONDS), 'reuse');
+  assert.equal(statusListAction(43_200), 'recreate');
+  assert.equal(findStatusListTtl({ config: { type: 'TokenStatusList', format: 'CWT' } }), 43_200);
+  assert.equal(
+    findStatusListTtl({ config: { type: 'TokenStatusList', format: 'CWT', ttl: STATUS_LIST_TEST_TTL_SECONDS } }),
+    STATUS_LIST_TEST_TTL_SECONDS,
+  );
 });
 
 function restore(name: string, value: string | undefined) {

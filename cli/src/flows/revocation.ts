@@ -14,7 +14,7 @@
 import { mkdirSync } from 'fs';
 import { CommandContext } from '../context.js';
 import { RESOURCES, defaultWalletKeyReference } from '../config.js';
-import { STATUS_LIST_TEST_TTL_SECONDS } from '../commands/setup/status.js';
+import { ensureShortTtlStatusConfiguration, STATUS_LIST_TEST_TTL_SECONDS } from '../commands/setup/status.js';
 import { setupLogin } from '../commands/setup/index.js';
 import {
   runCreateCredentialOffer,
@@ -63,6 +63,7 @@ export async function flowCredentialRevocation(ctx: CommandContext): Promise<voi
     await clearWalletCredentials(ctx);
     
     console.log('\n--- Step 2: Issue credential with status ---\n');
+    await ensureShortTtlStatusConfiguration(ctx);
     await runCreateCredentialOffer(ctx, true); // Enable status tracking
     await runWalletReceiveCredential(ctx);
     

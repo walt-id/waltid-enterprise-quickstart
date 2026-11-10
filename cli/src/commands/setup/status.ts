@@ -88,51 +88,120 @@ export async function setupCreateCredentialStatusService(ctx: CommandContext): P
 /** Seconds a relying party may cache the quickstart status list. The revocation journey waits this out. */
 export const STATUS_LIST_TEST_TTL_SECONDS = 2;
 
+const DEFAULT_STATUS_LIST_TTL_SECONDS = 43_200;
+
+/** What the revocation journey must do with a status configuration it may be reusing. */
+export function statusListAction(existingTtl: number | null): 'create' | 'reuse' | 'recreate' {
+  if (existingTtl == null) return 'create';
+  return existingTtl === STATUS_LIST_TEST_TTL_SECONDS ? 'reuse' : 'recreate';
+}
+
+/** TTL stored on a Token Status List, or the product default when the field was omitted. */
+export function findStatusListTtl(body: unknown): number | null {
+  if (Array.isArray(body)) {
+    for (const item of body) {
+      const found = findStatusListTtl(item);
+      if (found != null) return found;
+    }
+    return null;
+  }
+  if (!body || typeof body !== 'object') return null;
+  const record = body as Record<string, unknown>;
+  if (record.type === 'TokenStatusList') {
+    return typeof record.ttl === 'number' ? record.ttl : DEFAULT_STATUS_LIST_TTL_SECONDS;
+  }
+  for (const value of Object.values(record)) {
+    const found = findStatusListTtl(value);
+    if (found != null) return found;
+  }
+  return null;
+}
+
+function statusConfigurationRequest(ctx: CommandContext): Record<string, unknown> {
+  return {
+    kid: `${ctx.tenantPath}.${RESOURCES.kms}.${KEY_IDS.issuerSigningKey}`,
+    x5Chain: [ctx.ctx.docSignerPem],
+    config: {
+      type: 'TokenStatusList',
+      format: 'CWT',
+      ttl: STATUS_LIST_TEST_TTL_SECONDS,
+    },
+  };
+}
+
+async function loadDocumentSignerPem(ctx: CommandContext): Promise<void> {
+  if (ctx.ctx.docSignerPem) return;
+  try {
+    const certResponse = await ctx.orgClient.get(
+      `/v1/${ctx.tenantPath}.${RESOURCES.x509Store}.${CERT_IDS.docSignerCert}/x509-store-api/certificates`
+    );
+    ctx.ctx.docSignerPem = certResponse.data.data?.pem || certResponse.data.certificatePem || certResponse.data.pem;
+    console.log(`   [INFO] Retrieved document signer certificate from x509-store`);
+  } catch {
+    throw new Error('Document signer certificate not found. Run setup-create-document-signer-certificate first.');
+  }
+}
+
+function httpStatus(error: unknown): number | undefined {
+  const candidate = error as { status?: number; response?: { status?: number } };
+  return candidate.status ?? candidate.response?.status;
+}
+
+async function readExistingStatusListTtl(ctx: CommandContext, target: string): Promise<number | null> {
+  try {
+    const response = await ctx.orgClient.get(`/v1/${target}`);
+    return findStatusListTtl(response.data) ?? DEFAULT_STATUS_LIST_TTL_SECONDS;
+  } catch (error) {
+    if (httpStatus(error) === 404) return null;
+    return DEFAULT_STATUS_LIST_TTL_SECONDS;
+  }
+}
+
+async function deleteStatusConfiguration(ctx: CommandContext, target: string): Promise<void> {
+  try {
+    await ctx.orgClient.delete(
+      `/v1/${target}/credential-status-service-api/status-credential/delete`
+    );
+  } catch (error) {
+    if (httpStatus(error) !== 404) throw error;
+  }
+}
+
+async function createStatusConfiguration(ctx: CommandContext, target: string): Promise<void> {
+  const step = ctx.nextStep();
+  const request = statusConfigurationRequest(ctx);
+  ctx.saveJson('create-status-configuration-request.json', request, step);
+  const response = await ctx.orgClient.post(
+    `/v1/${target}/credential-status-service-api/status-credential/create`,
+    request
+  );
+  ctx.saveJson('create-status-configuration-response.json', response.data, step);
+}
+
+/**
+ * The revocation journey publishes through this configuration. An existing list keeps its old TTL,
+ * so a reused 12-hour list is replaced before a credential is issued against it.
+ */
+export async function ensureShortTtlStatusConfiguration(ctx: CommandContext): Promise<void> {
+  await loadDocumentSignerPem(ctx);
+  const target = statusConfigRef(ctx, STATUS_CONFIG_IDS.tokenStatusListCwt);
+  const action = statusListAction(await readExistingStatusListTtl(ctx, target));
+  if (action === 'reuse') {
+    console.log(`   [SKIP] Status configuration already uses a ${STATUS_LIST_TEST_TTL_SECONDS}s TTL`);
+    return;
+  }
+  if (action === 'recreate') {
+    console.log('   [INFO] Replacing status configuration so the revocation journey uses a short TTL');
+    await deleteStatusConfiguration(ctx, target);
+  }
+  await createStatusConfiguration(ctx, target);
+  console.log(`   [OK] TokenStatusList CWT configuration uses a ${STATUS_LIST_TEST_TTL_SECONDS}s TTL`);
+}
+
 /** Create TokenStatusList CWT configuration */
 export async function setupCreateStatusConfiguration(ctx: CommandContext): Promise<void> {
-  const step = ctx.nextStep();
   ctx.log('Create TokenStatusList CWT configuration', 'SETUP');
-
-  // Ensure we have the document signer certificate
-  if (!ctx.ctx.docSignerPem) {
-    try {
-      const certResponse = await ctx.orgClient.get(
-        `/v1/${ctx.tenantPath}.${RESOURCES.x509Store}.${CERT_IDS.docSignerCert}/x509-store-api/certificates`
-      );
-      ctx.ctx.docSignerPem = certResponse.data.data?.pem || certResponse.data.certificatePem || certResponse.data.pem;
-      console.log(`   [INFO] Retrieved document signer certificate from x509-store`);
-    } catch (e) {
-      throw new Error('Document signer certificate not found. Run setup-create-document-signer-certificate first.');
-    }
-  }
-
-  const { created } = await ctx.tolerantCreate(
-    'Status configuration',
-    async () => {
-      const request = {
-        kid: `${ctx.tenantPath}.${RESOURCES.kms}.${KEY_IDS.issuerSigningKey}`,
-        x5Chain: [ctx.ctx.docSignerPem],
-        config: {
-          type: 'TokenStatusList',
-          format: 'CWT',
-          // Short enough that the revocation journey can wait out Cache-Control before it checks again.
-          ttl: STATUS_LIST_TEST_TTL_SECONDS,
-        },
-      };
-      ctx.saveJson('create-status-configuration-request.json', request, step);
-
-      const response = await ctx.orgClient.post(
-        `/v1/${ctx.tenantPath}.${RESOURCES.credentialStatus}.${STATUS_CONFIG_IDS.tokenStatusListCwt}/credential-status-service-api/status-credential/create`,
-        request
-      );
-      ctx.saveJson('create-status-configuration-response.json', response.data, step);
-      return response;
-    }
-  );
-
-  if (created) {
-    console.log(`   [OK] TokenStatusList CWT configuration created`);
-  }
+  await ensureShortTtlStatusConfiguration(ctx);
 }
 
 /** Target of a status list configuration in the tenant's credential status service */
