@@ -1,6 +1,13 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { credentialStatusRegistry, findStatusListTtl, statusListAction, STATUS_LIST_TEST_TTL_SECONDS } from './status.js';
+import {
+  createRevocationJourneyStatusList,
+  credentialStatusRegistry,
+  REVOCATION_JOURNEY_STATUS_CONFIG_ID,
+  revocationJourneyCreatePath,
+  revocationJourneyStatusRequest,
+  STATUS_LIST_TEST_TTL_SECONDS,
+} from './status.js';
 
 test('credentialStatusRegistry uses the database when no S3 bucket is set', () => {
   const bucket = process.env.CREDENTIAL_STATUS_S3_BUCKET;
@@ -38,14 +45,30 @@ test('credentialStatusRegistry publishes to S3 when the bucket and region are se
   }
 });
 
-test('an existing status configuration is replaced unless its ttl is already short', () => {
-  assert.equal(statusListAction(null), 'create');
-  assert.equal(statusListAction(STATUS_LIST_TEST_TTL_SECONDS), 'reuse');
-  assert.equal(statusListAction(43_200), 'recreate');
-  assert.equal(findStatusListTtl({ config: { type: 'TokenStatusList', format: 'CWT' } }), 43_200);
-  assert.equal(
-    findStatusListTtl({ config: { type: 'TokenStatusList', format: 'CWT', ttl: STATUS_LIST_TEST_TTL_SECONDS } }),
-    STATUS_LIST_TEST_TTL_SECONDS,
+test('the revocation journey creates its own short-TTL list and leaves an existing one in place', async () => {
+  const request = revocationJourneyStatusRequest({
+    tenantPath: 'waltid.waltid-tenant01',
+    ctx: { docSignerPem: 'cert' },
+  } as never);
+  assert.equal((request.config as { ttl: number }).ttl, STATUS_LIST_TEST_TTL_SECONDS);
+  assert.equal(request.config && (request.config as { type: string }).type, 'TokenStatusList');
+  const target = `waltid.waltid-tenant01.credential-status.${REVOCATION_JOURNEY_STATUS_CONFIG_ID}`;
+  assert.equal(revocationJourneyCreatePath(target).includes(REVOCATION_JOURNEY_STATUS_CONFIG_ID), true);
+  assert.equal(revocationJourneyCreatePath(target).includes('token-status-list-cwt/'), false);
+
+  const calls: string[] = [];
+  const conflict = await createRevocationJourneyStatusList(async (path) => {
+    calls.push(path);
+    throw Object.assign(new Error('already exists'), { status: 409 });
+  }, target, request);
+  assert.equal(conflict, 'exists');
+  assert.deepEqual(calls, [revocationJourneyCreatePath(target)]);
+
+  await assert.rejects(
+    createRevocationJourneyStatusList(async () => {
+      throw Object.assign(new Error('unavailable'), { status: 503 });
+    }, target, request),
+    /unavailable/,
   );
 });
 
