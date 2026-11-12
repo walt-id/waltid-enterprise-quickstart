@@ -11,15 +11,14 @@ import { CommandContext } from '../../context.js';
 import { RESOURCES, KEY_IDS, CERT_IDS, STATUS_CONFIG_IDS } from '../../config.js';
 
 /**
- * Where status lists are published. S3 when CREDENTIAL_STATUS_S3_BUCKET is set, otherwise in-memory.
- *
- * In-memory is per API instance: a list published by one pod is not visible to the others, so behind
- * more than one replica a verifier's status fetch can miss it. Use S3 for any multi-replica deployment.
+ * Where status lists are published. S3 when CREDENTIAL_STATUS_S3_BUCKET is set, otherwise the
+ * enterprise database. Every API pod serves that list from /fetch, including after a restart.
+ * In-memory remains available for tests; it is not shared across pods.
  */
 export function credentialStatusRegistry(): Record<string, unknown> {
   const bucketName = process.env.CREDENTIAL_STATUS_S3_BUCKET;
   if (!bucketName) {
-    return { type: 'in-memory' };
+    return { type: 'database' };
   }
   const region = process.env.CREDENTIAL_STATUS_S3_REGION;
   if (!region) {
@@ -86,48 +85,109 @@ export async function setupCreateCredentialStatusService(ctx: CommandContext): P
   }
 }
 
+/** Seconds a relying party may cache the revocation journey's own status list. */
+export const STATUS_LIST_TEST_TTL_SECONDS = 2;
+
+/** Separate from the issued quickstart list, so the journey never rewrites that list's TTL. */
+export const REVOCATION_JOURNEY_STATUS_CONFIG_ID = 'token-status-list-cwt-revocation';
+
+export function revocationJourneyCreatePath(target: string): string {
+  return `/v1/${target}/credential-status-service-api/status-credential/create`;
+}
+
+export function revocationJourneyStatusRequest(ctx: CommandContext): Record<string, unknown> {
+  return {
+    kid: `${ctx.tenantPath}.${RESOURCES.kms}.${KEY_IDS.issuerSigningKey}`,
+    x5Chain: [ctx.ctx.docSignerPem],
+    config: {
+      type: 'TokenStatusList',
+      format: 'CWT',
+      ttl: STATUS_LIST_TEST_TTL_SECONDS,
+    },
+  };
+}
+
+/** Creates the journey list. An existing list is left untouched, including when create reports a conflict. */
+export async function createRevocationJourneyStatusList(
+  post: (path: string, body: Record<string, unknown>) => Promise<unknown>,
+  target: string,
+  request: Record<string, unknown>,
+): Promise<'created' | 'exists'> {
+  try {
+    await post(revocationJourneyCreatePath(target), request);
+    return 'created';
+  } catch (error) {
+    if (httpStatus(error) === 409 || alreadyExists(error)) return 'exists';
+    throw error;
+  }
+}
+
+async function loadDocumentSignerPem(ctx: CommandContext): Promise<void> {
+  if (ctx.ctx.docSignerPem) return;
+  try {
+    const certResponse = await ctx.orgClient.get(
+      `/v1/${ctx.tenantPath}.${RESOURCES.x509Store}.${CERT_IDS.docSignerCert}/x509-store-api/certificates`
+    );
+    ctx.ctx.docSignerPem = certResponse.data.data?.pem || certResponse.data.certificatePem || certResponse.data.pem;
+    console.log(`   [INFO] Retrieved document signer certificate from x509-store`);
+  } catch {
+    throw new Error('Document signer certificate not found. Run setup-create-document-signer-certificate first.');
+  }
+}
+
+function httpStatus(error: unknown): number | undefined {
+  const candidate = error as { status?: number; response?: { status?: number } };
+  return candidate.status ?? candidate.response?.status;
+}
+
+function alreadyExists(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : '';
+  const responseMessage = (error as { response?: { data?: { message?: string } } }).response?.data?.message ?? '';
+  return message.includes('already exists') || responseMessage.includes('already exists');
+}
+
+/** Create the journey's own short-TTL list. A read failure is not used, and an existing list is not deleted. */
+export async function ensureRevocationJourneyStatusList(ctx: CommandContext): Promise<void> {
+  await loadDocumentSignerPem(ctx);
+  const target = statusConfigRef(ctx, REVOCATION_JOURNEY_STATUS_CONFIG_ID);
+  const outcome = await createRevocationJourneyStatusList(
+    (path, body) => ctx.orgClient.post(path, body),
+    target,
+    revocationJourneyStatusRequest(ctx),
+  );
+  if (outcome === 'exists') {
+    console.log('   [SKIP] Revocation journey status list already exists');
+    return;
+  }
+  console.log(`   [OK] Revocation journey status list uses a ${STATUS_LIST_TEST_TTL_SECONDS}s TTL`);
+}
+
 /** Create TokenStatusList CWT configuration */
 export async function setupCreateStatusConfiguration(ctx: CommandContext): Promise<void> {
   const step = ctx.nextStep();
   ctx.log('Create TokenStatusList CWT configuration', 'SETUP');
+  await loadDocumentSignerPem(ctx);
 
-  // Ensure we have the document signer certificate
-  if (!ctx.ctx.docSignerPem) {
-    try {
-      const certResponse = await ctx.orgClient.get(
-        `/v1/${ctx.tenantPath}.${RESOURCES.x509Store}.${CERT_IDS.docSignerCert}/x509-store-api/certificates`
-      );
-      ctx.ctx.docSignerPem = certResponse.data.data?.pem || certResponse.data.certificatePem || certResponse.data.pem;
-      console.log(`   [INFO] Retrieved document signer certificate from x509-store`);
-    } catch (e) {
-      throw new Error('Document signer certificate not found. Run setup-create-document-signer-certificate first.');
-    }
-  }
-
-  const { created } = await ctx.tolerantCreate(
-    'Status configuration',
-    async () => {
-      const request = {
-        kid: `${ctx.tenantPath}.${RESOURCES.kms}.${KEY_IDS.issuerSigningKey}`,
-        x5Chain: [ctx.ctx.docSignerPem],
-        config: {
-          type: 'TokenStatusList',
-          format: 'CWT',
-        },
-      };
-      ctx.saveJson('create-status-configuration-request.json', request, step);
-
-      const response = await ctx.orgClient.post(
-        `/v1/${ctx.tenantPath}.${RESOURCES.credentialStatus}.${STATUS_CONFIG_IDS.tokenStatusListCwt}/credential-status-service-api/status-credential/create`,
-        request
-      );
-      ctx.saveJson('create-status-configuration-response.json', response.data, step);
-      return response;
-    }
-  );
+  const { created } = await ctx.tolerantCreate('Status configuration', async () => {
+    const request = {
+      kid: `${ctx.tenantPath}.${RESOURCES.kms}.${KEY_IDS.issuerSigningKey}`,
+      x5Chain: [ctx.ctx.docSignerPem],
+      config: {
+        type: 'TokenStatusList',
+        format: 'CWT',
+      },
+    };
+    ctx.saveJson('create-status-configuration-request.json', request, step);
+    const response = await ctx.orgClient.post(
+      `/v1/${ctx.tenantPath}.${RESOURCES.credentialStatus}.${STATUS_CONFIG_IDS.tokenStatusListCwt}/credential-status-service-api/status-credential/create`,
+      request
+    );
+    ctx.saveJson('create-status-configuration-response.json', response.data, step);
+    return response;
+  });
 
   if (created) {
-    console.log(`   [OK] TokenStatusList CWT configuration created`);
+    console.log('   [OK] TokenStatusList CWT configuration created');
   }
 }
 
