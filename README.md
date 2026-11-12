@@ -225,6 +225,8 @@ The issuer is only configured for one credential type at a time, so pair `CREDEN
 
 Superadmin credentials are read from `config/superadmin-registration.conf`.
 
+In MongoDB-backed deployments, dead-lettered Issuer2 and Verifier2 webhooks expire after 30 days by default. Set `deadLetterRetention` in `config/webhook-delivery.conf` to change the retention period.
+
 For detailed documentation, see **[cli/README.md](cli/README.md)**.
 
 
