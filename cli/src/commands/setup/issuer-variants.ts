@@ -28,6 +28,7 @@ import {
 import {
   IssuerVariant,
   ISSUER_VARIANT_IDS,
+  armSuffix,
   buildIssuerVariantCredentialConfigurations,
   buildIssuerVariantSdJwtTypeMetadata,
   buildVariantCredentialData,
@@ -223,7 +224,8 @@ export async function createVariantStatusList(
   ctx: CommandContext,
   variant: Pick<IssuerVariant, 'format' | 'kms'>,
   dids: Map<string, string>,
-  docSignerPems: Map<string, string>
+  docSignerPems: Map<string, string>,
+  configId = variantStatusConfigId(variant)
 ): Promise<void> {
   const keyId = variantSigningKeyId(variant);
   const signer: Record<string, unknown> = variant.format === 'w3c'
@@ -236,7 +238,7 @@ export async function createVariantStatusList(
   }[variant.format];
   await createStatusList(
     ctx,
-    variantStatusConfigId(variant),
+    configId,
     { keyReference: kmsKeyRef(ctx, keyId), ...signer, config },
     `${config.type}${'format' in config ? ` ${config.format}` : ''} (${keyId})`
   );
@@ -336,10 +338,46 @@ export async function createVariantIssuer(
   if (created) console.log(`   [OK] Issuer ${service} created`);
 }
 
+type VariantCertificates = { iacaPem: string; docSignerPems: Map<string, string> };
+
+/** The variant's profile, with its status entries on [statusConfigId] when the variant has +status */
+function buildVariantProfileRequest(
+  ctx: CommandContext,
+  variant: IssuerVariant,
+  certificates: VariantCertificates,
+  dids: Map<string, string>,
+  statusConfigId = variantStatusConfigId(variant)
+): Record<string, unknown> {
+  const { credentialData, mapping } = buildVariantCredentialData(variant);
+  const request: Record<string, unknown> = {
+    name: variantProfileName(variant),
+    credentialConfigurationId: variantCredentialConfigurationId(variant),
+    issuerKeyId: kmsKeyRef(ctx, variantSigningKeyId(variant)),
+    credentialData,
+  };
+  if (mapping) request.mapping = mapping;
+
+  if (variant.format === 'mdoc') {
+    request.x5Chain = [certificates.docSignerPems.get(variantDocSignerCertId(variant))!, certificates.iacaPem].map(
+      (pem) => ({ type: 'pem-encoded-x509-certificate-descriptor', pemEncodedCertificate: pem })
+    );
+  }
+  if (variant.format === 'w3c') {
+    request.issuerDid = dids.get(variantSigningKeyId(variant));
+  }
+  if (variant.status) {
+    request.credentialStatus = {
+      statusCredentialConfig: statusConfigRef(ctx, statusConfigId),
+      initialStatus: '0x0',
+    };
+  }
+  return request;
+}
+
 async function createVariantProfile(
   ctx: CommandContext,
   variant: IssuerVariant,
-  certificates: { iacaPem: string; docSignerPems: Map<string, string> },
+  certificates: VariantCertificates,
   dids: Map<string, string>
 ): Promise<void> {
   const step = ctx.nextStep();
@@ -348,30 +386,7 @@ async function createVariantProfile(
   ctx.log(`Create profile for variant ${variant.name}`, PREFIX);
 
   const { created } = await ctx.tolerantCreate(`Profile ${target}`, async () => {
-    const { credentialData, mapping } = buildVariantCredentialData(variant);
-    const request: Record<string, unknown> = {
-      name: profile,
-      credentialConfigurationId: variantCredentialConfigurationId(variant),
-      issuerKeyId: kmsKeyRef(ctx, variantSigningKeyId(variant)),
-      credentialData,
-    };
-    if (mapping) request.mapping = mapping;
-
-    if (variant.format === 'mdoc') {
-      request.x5Chain = [certificates.docSignerPems.get(variantDocSignerCertId(variant))!, certificates.iacaPem].map(
-        (pem) => ({ type: 'pem-encoded-x509-certificate-descriptor', pemEncodedCertificate: pem })
-      );
-    }
-    if (variant.format === 'w3c') {
-      request.issuerDid = dids.get(variantSigningKeyId(variant));
-    }
-    if (variant.status) {
-      request.credentialStatus = {
-        statusCredentialConfig: statusConfigRef(ctx, variantStatusConfigId(variant)),
-        initialStatus: '0x0',
-      };
-    }
-
+    const request = buildVariantProfileRequest(ctx, variant, certificates, dids);
     const logName = `${variantIssuerService(variant)}-${profile}`;
     ctx.saveJson(`create-profile-${logName}-request.json`, request, step);
     const response = await ctx.orgClient.post(`/v2/${target}/issuer-service-api/credentials/profiles`, request);
@@ -379,6 +394,30 @@ async function createVariantProfile(
     return response;
   });
   if (created) console.log(`   [OK] Profile created: ${target}`);
+}
+
+/**
+ * Points the variant's existing profile at [statusConfigId]. An issuer allows one profile per credential
+ * configuration, so an arm cannot get a second profile of its own; the update replaces the whole profile
+ * with what --setup-issuer-variants created, apart from the status list.
+ */
+async function updateVariantProfileStatusList(
+  ctx: CommandContext,
+  variant: IssuerVariant,
+  certificates: VariantCertificates,
+  dids: Map<string, string>,
+  statusConfigId: string
+): Promise<void> {
+  const step = ctx.nextStep();
+  const target = variantIssuerTarget(ctx.tenantPath, variant);
+  ctx.log(`Point profile ${target} at status list ${statusConfigId}`, PREFIX);
+
+  const request = buildVariantProfileRequest(ctx, variant, certificates, dids, statusConfigId);
+  const logName = `${variantIssuerService(variant)}-${variantProfileName(variant)}`;
+  ctx.saveJson(`update-profile-${logName}-request.json`, request, step);
+  const response = await ctx.orgClient.put(`/v2/${target}/issuer-service-api/credentials/profiles`, request);
+  ctx.saveJson(`update-profile-${logName}-response.json`, response.data, step);
+  console.log(`   [OK] Profile updated: ${target}`);
 }
 
 /**
@@ -451,6 +490,45 @@ export async function runIssuerVariantsSetup(ctx: CommandContext): Promise<void>
     variants.map((v) => `${v.name}\t${v.format}\t${variantIssuerTarget(ctx.tenantPath, v)}\n`).join('')
   );
   console.log(`\n[${PREFIX}] ${variants.length} variant(s) ready, targets written to ${targetsFile}`);
+}
+
+/**
+ * Give one load-test arm of a +status variant its own status list: create a new list and point the variant's
+ * profile at it. The profile's target does not change. Run after --setup-issuer-variants, and before each
+ * arm: the profile keeps the last arm's list.
+ *
+ * A status list holds at most 32000 entries, and the variant's profile shares one list across all its arms.
+ * Run 43007166974 issued 31500 credentials into one list over three arms; the fourth then needed thousands of
+ * database writes per credential to find a free entry, and its requests ran into the wallet's 30 s limit.
+ *
+ * ISSUER_VARIANT is the variant (e.g. `mdoc+status`), ISSUER_ARM the arm's label (e.g. `mdoc+status-s200`).
+ */
+export async function runIssuerArmStatusListSetup(ctx: CommandContext): Promise<void> {
+  const variants = parseIssuerVariants(process.env.ISSUER_VARIANT || '');
+  if (variants.length !== 1) {
+    throw new Error(`ISSUER_VARIANT must name one variant (got '${process.env.ISSUER_VARIANT ?? ''}')`);
+  }
+  const [variant] = variants;
+  if (!variant.status) throw new Error(`Variant '${variant.name}' has no +status, so it has no status list`);
+  const suffix = armSuffix(process.env.ISSUER_ARM || '');
+  console.log(`\n=== Status list for arm ${process.env.ISSUER_ARM} (${variant.name}) ===\n`);
+
+  const docSignerCertId = variantDocSignerCertId(variant);
+  const docSignerPems = new Map([[docSignerCertId, await requireStoredCertificatePem(ctx, docSignerCertId)]]);
+  // did:key is derived from the key, so creating it again returns the DID the variant setup made.
+  const dids = new Map<string, string>();
+  if (variant.format === 'w3c') {
+    const keyId = variantSigningKeyId(variant);
+    dids.set(keyId, await createDid(ctx, keyId));
+  }
+
+  const statusConfigId = `${variantStatusConfigId(variant)}-${suffix}`;
+  await createVariantStatusList(ctx, variant, dids, docSignerPems, statusConfigId);
+  const iacaPem = await requireStoredCertificatePem(ctx, CERT_IDS.vicalIacaCert);
+  await updateVariantProfileStatusList(ctx, variant, { iacaPem, docSignerPems }, dids, statusConfigId);
+  console.log(
+    `\n[${PREFIX}] Arm ${process.env.ISSUER_ARM} issues from ${variantIssuerTarget(ctx.tenantPath, variant)} on status list ${statusConfigId}`
+  );
 }
 
 /**

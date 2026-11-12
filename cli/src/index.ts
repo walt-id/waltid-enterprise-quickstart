@@ -80,6 +80,7 @@ import {
   runGovServicesSetup,
   runEudiDemoSetup,
   runAcmeTenantSetup,
+  runIssuerArmStatusListSetup,
   runIssuerVariantsSetup,
   runIssuerVariantsTeardown,
   runVerifierVariantsSetup,
@@ -151,6 +152,7 @@ Setup Commands (create resources):
   --setup-acme-tenant     Set up acme tenant (Photo ID mDoc + Employee SD-JWT issuer, verifier)
   --setup-issuer-variants  Set up one issuer profile per variant in ISSUER_VARIANTS (after --setup-all)
   --teardown-issuer-variants  Schedule deletion of the AWS KMS signing key used by +kms variants
+  --setup-issuer-arm-status-list  Point a +status variant's profile at a new status list for one load-test arm
   --setup-verifier-variants  Seed the wallet and write one session request per variant in VERIFIER_VARIANTS (after --setup-all)
   --teardown-verifier-variants  Schedule deletion of the AWS KMS request-signing key used by +kms variants
 
@@ -245,6 +247,10 @@ Issuer variants (--setup-issuer-variants):
   AWS_KMS_REGION
   AWS_KMS_KEYS_FILE             Where the AWS key id is recorded (default: cli/aws-kms-keys.json)
 
+Issuer arm status list (--setup-issuer-arm-status-list, after --setup-issuer-variants):
+  ISSUER_VARIANT                One +status variant, e.g. "mdoc+status"
+  ISSUER_ARM                    The arm's label, e.g. "mdoc+status-s200"; names the new list
+
 Verifier variants (--setup-verifier-variants):
   VERIFIER_VARIANTS             Comma-separated variants, each a format (mdoc, sdjwt, w3c) plus any of
                                 +status, +trust, +signed, +encrypted, +kms (needs +signed), +portrait (mdoc only)
@@ -330,7 +336,7 @@ async function main(): Promise<void> {
     '--setup-eudi-pid-provider',
     '--setup-eudi-eaa-provider',
     '--setup-acme-tenant',
-    '--setup-issuer-variants', '--teardown-issuer-variants',
+    '--setup-issuer-variants', '--teardown-issuer-variants', '--setup-issuer-arm-status-list',
     '--setup-verifier-variants', '--teardown-verifier-variants',
     '--setup-create-trust-registry', '--setup-etsi-trust-registry', '--setup-import-trust-list',
     '--setup-create-superadmin', '--setup-create-organization',
@@ -506,6 +512,7 @@ async function main(): Promise<void> {
       '--clear-wallet-credentials': () => clearWalletCredentials(ctx),
       '--setup-issuer-variants': () => runIssuerVariantsSetup(ctx),
       '--teardown-issuer-variants': () => runIssuerVariantsTeardown(ctx),
+      '--setup-issuer-arm-status-list': () => runIssuerArmStatusListSetup(ctx),
       '--setup-verifier-variants': () => runVerifierVariantsSetup(ctx),
       '--teardown-verifier-variants': () => runVerifierVariantsTeardown(ctx),
     };

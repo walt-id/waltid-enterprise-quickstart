@@ -145,6 +145,16 @@ export function variantIssuerTarget(tenantPath: string, variant: IssuerVariant):
   return `${tenantPath}.${variantIssuerService(variant)}.${variantProfileName(variant)}`;
 }
 
+/**
+ * Id suffix for one load-test arm's own status list, e.g. `arm-mdoc-status-s200` for the arm
+ * `mdoc+status-s200`, so the list is `token-status-list-cwt-arm-mdoc-status-s200`.
+ */
+export function armSuffix(label: string): string {
+  const slug = label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  if (!slug) throw new Error(`Arm label '${label}' has no letters or digits`);
+  return `arm-${slug}`;
+}
+
 /** KMS key id that signs everything in the variant: access token, credential, status list and metadata */
 export function variantSigningKeyId(variant: Pick<IssuerVariant, 'kms'>): string {
   return variant.kms ? ISSUER_VARIANT_IDS.awsKmsSigningKey : KEY_IDS.issuerSigningKey;
