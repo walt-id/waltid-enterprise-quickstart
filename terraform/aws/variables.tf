@@ -241,9 +241,27 @@ variable "mongodb_data_volume_throughput" {
 }
 
 variable "documentdb_instance_class" {
-  description = "Instance class for DocumentDB, and for RDS PostgreSQL when database_backend = postgres"
+  description = "Instance class for DocumentDB"
   type        = string
   default     = "db.t3.medium"
+}
+
+variable "postgres_instance_class" {
+  description = "Instance class for RDS PostgreSQL (database_backend = postgres)"
+  type        = string
+  default     = "db.t3.medium"
+}
+
+variable "postgres_major_version" {
+  description = "RDS PostgreSQL major version (database_backend = postgres). The parameter group family follows it."
+  type        = string
+  default     = "18"
+
+  # The majors with community support; the Enterprise schema needs 13 or later.
+  validation {
+    condition     = contains(["15", "16", "17", "18"], var.postgres_major_version)
+    error_message = "PostgreSQL major version must be one of 15, 16, 17, 18."
+  }
 }
 
 variable "documentdb_parameter_group_family" {

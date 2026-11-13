@@ -1,3 +1,8 @@
+locals {
+  # Set on the parameter group below; outputs.tf exports it so a client can size its connection pools.
+  postgres_max_connections = 5000
+}
+
 resource "aws_security_group" "postgres" {
   count       = local.use_postgres ? 1 : 0
   name        = "${var.cluster_name}-postgres-sg"
@@ -22,21 +27,15 @@ resource "aws_db_subnet_group" "postgres" {
   tags = merge(local.common_tags, { Name = "${var.cluster_name}-postgres" })
 }
 
-data "aws_rds_engine_version" "postgres" {
-  count              = local.use_postgres ? 1 : 0
-  engine             = "postgres"
-  preferred_versions = ["18.6", "18.4", "18.3", "18.1"]
-}
-
 resource "aws_db_parameter_group" "postgres" {
   count  = local.use_postgres ? 1 : 0
-  name   = "${var.cluster_name}-postgres18"
-  family = "postgres18"
+  name   = "${var.cluster_name}-postgres${var.postgres_major_version}"
+  family = "postgres${var.postgres_major_version}"
 
   # Static: applied at instance creation, so the first boot already has the higher limit.
   parameter {
     name         = "max_connections"
-    value        = "5000"
+    value        = tostring(local.postgres_max_connections)
     apply_method = "pending-reboot"
   }
 
@@ -46,7 +45,7 @@ resource "aws_db_parameter_group" "postgres" {
     apply_method = "pending-reboot"
   }
 
-  tags = merge(local.common_tags, { Name = "${var.cluster_name}-postgres18" })
+  tags = merge(local.common_tags, { Name = "${var.cluster_name}-postgres${var.postgres_major_version}" })
 }
 
 resource "random_password" "postgres" {
@@ -59,8 +58,10 @@ resource "aws_db_instance" "postgres" {
   count                  = local.use_postgres ? 1 : 0
   identifier             = "${var.cluster_name}-pg"
   engine                 = "postgres"
-  engine_version         = data.aws_rds_engine_version.postgres[0].version
-  instance_class         = var.documentdb_instance_class
+  # A major version alone: RDS creates the instance on that major's default minor and, with
+  # auto_minor_version_upgrade (the default), keeps it current. engine_version_actual has the minor.
+  engine_version         = var.postgres_major_version
+  instance_class         = var.postgres_instance_class
   allocated_storage      = 100
   storage_type           = "gp3"
   db_name                = "waltid_enterprise"

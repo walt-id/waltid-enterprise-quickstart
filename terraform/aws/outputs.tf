@@ -15,6 +15,16 @@ output "postgres_password" {
   sensitive   = true
 }
 
+output "postgres_engine_version" {
+  description = "RDS PostgreSQL version running, including the minor. Empty unless database_backend = postgres."
+  value       = local.use_postgres ? aws_db_instance.postgres[0].engine_version_actual : ""
+}
+
+output "postgres_max_connections" {
+  description = "max_connections of the RDS PostgreSQL parameter group. 0 unless database_backend = postgres."
+  value       = local.use_postgres ? local.postgres_max_connections : 0
+}
+
 output "ingress_lb_hostname" {
   value = local.ingress_lb_hostname
 }
