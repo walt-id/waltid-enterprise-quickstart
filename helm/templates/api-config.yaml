@@ -34,6 +34,9 @@ data:
   {{ if .Values.debugEndpointsConf }}
   debug-endpoints.conf: {{ .Values.debugEndpointsConf | toYaml | indent 1 }}
   {{ end }}
+  {{ if .Values.httpClientConf }}
+  httpclient.conf: {{ .Values.httpClientConf | toYaml | indent 1 }}
+  {{ end }}
   {{ if .Values.loggingConf }}
   klogging.json: {{ .Values.loggingConf | toYaml | indent 1 }}
   {{ end }}

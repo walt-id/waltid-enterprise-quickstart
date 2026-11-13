@@ -110,6 +110,16 @@ devModeAccessConf: ""
 #     jvm = true
 #     ram = true
 debugEndpointsConf: ""
+# Optional. Outbound HTTP client settings, per fetcher under `service`. A wallet refuses to POST a request_uri
+# over plain HTTP unless its fetcher allows it, so a deployment without TLS (baseSsl = false) cannot present to
+# a signed request without this. Development and load-test clusters only; production keeps HTTPS:
+#   httpClientConf: |
+#     service = {
+#       OPENID4VP_WALLET_RESOLVE_AUTHORIZATIONREQUEST = {
+#         url = { protocols = { allowHttp = true } }
+#       }
+#     }
+httpClientConf: ""
 
 license:
   # Pre-provisioned Secret holding all license material. Optional key:
