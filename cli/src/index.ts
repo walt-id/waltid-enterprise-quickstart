@@ -202,6 +202,8 @@ Environment Variables:
                           the enterprise database and served from /fetch.
   CREDENTIAL_STATUS_S3_REGION  Region of that bucket (required with the bucket)
   CREDENTIAL_STATUS_S3_ACCESS_KEY_ID / CREDENTIAL_STATUS_S3_SECRET_KEY  Optional; otherwise the AWS default chain
+  CREDENTIAL_STATUS_AUTO_ROLLOVER  "true" starts a new status list when the active one is 95% full
+                          (default: off). Applies when the credential status service is created
 
 General CLI settings (cli/walt.env — copy from walt.env.example):
   HOST_ALIAS_DOMAIN       Custom domain for host alias (used by --recreate / --init-system)
