@@ -122,8 +122,8 @@ variable "database_backend" {
   default     = "documentdb"
 
   validation {
-    condition     = contains(["documentdb", "mongodb", "external"], var.database_backend)
-    error_message = "Database backend must be either 'documentdb', 'mongodb', or 'external'."
+    condition     = contains(["documentdb", "mongodb", "postgres", "external"], var.database_backend)
+    error_message = "Database backend must be 'documentdb', 'mongodb', 'postgres', or 'external'."
   }
 }
 
@@ -244,6 +244,24 @@ variable "documentdb_instance_class" {
   description = "Instance class for DocumentDB"
   type        = string
   default     = "db.t3.medium"
+}
+
+variable "postgres_instance_class" {
+  description = "Instance class for RDS PostgreSQL (database_backend = postgres)"
+  type        = string
+  default     = "db.t3.medium"
+}
+
+variable "postgres_major_version" {
+  description = "RDS PostgreSQL major version (database_backend = postgres). The parameter group family follows it."
+  type        = string
+  default     = "18"
+
+  # The majors with community support; the Enterprise schema needs 13 or later.
+  validation {
+    condition     = contains(["15", "16", "17", "18"], var.postgres_major_version)
+    error_message = "PostgreSQL major version must be one of 15, 16, 17, 18."
+  }
 }
 
 variable "documentdb_parameter_group_family" {
