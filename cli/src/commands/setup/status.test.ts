@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   createRevocationJourneyStatusList,
+  credentialStatusCapacity,
   credentialStatusRegistry,
   REVOCATION_JOURNEY_STATUS_CONFIG_ID,
   revocationJourneyCreatePath,
@@ -42,6 +43,22 @@ test('credentialStatusRegistry publishes to S3 when the bucket and region are se
     restore('CREDENTIAL_STATUS_S3_REGION', region);
     restore('CREDENTIAL_STATUS_S3_ACCESS_KEY_ID', accessKey);
     restore('CREDENTIAL_STATUS_S3_SECRET_KEY', secret);
+  }
+});
+
+test('credentialStatusCapacity turns on auto-rollover only when CREDENTIAL_STATUS_AUTO_ROLLOVER is true', () => {
+  const value = process.env.CREDENTIAL_STATUS_AUTO_ROLLOVER;
+  try {
+    delete process.env.CREDENTIAL_STATUS_AUTO_ROLLOVER;
+    assert.equal(credentialStatusCapacity(), undefined);
+    process.env.CREDENTIAL_STATUS_AUTO_ROLLOVER = 'false';
+    assert.equal(credentialStatusCapacity(), undefined);
+    process.env.CREDENTIAL_STATUS_AUTO_ROLLOVER = 'true';
+    assert.deepEqual(credentialStatusCapacity(), { autoRollover: true });
+    process.env.CREDENTIAL_STATUS_AUTO_ROLLOVER = 'yes';
+    assert.throws(() => credentialStatusCapacity(), /must be 'true' or 'false'/);
+  } finally {
+    restore('CREDENTIAL_STATUS_AUTO_ROLLOVER', value);
   }
 });
 
