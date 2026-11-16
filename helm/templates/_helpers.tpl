@@ -60,3 +60,25 @@ Create the name of the service account to use
 {{- default "default" .Values.serviceAccount.name }}
 {{- end }}
 {{- end }}
+
+{{/* One image identity and configuration source for the API and license bootstrap. */}}
+{{- define "enterprise-stack.apiImage" -}}
+{{- if .Values.api.image.digest -}}
+{{- if not (regexMatch "^sha256:[a-f0-9]{64}$" .Values.api.image.digest) -}}
+{{- fail "api.image.digest must be a sha256 digest" -}}
+{{- end -}}
+{{- printf "%s@%s" .Values.api.image.repository .Values.api.image.digest -}}
+{{- else -}}
+{{- printf "%s:%s" .Values.api.image.repository (.Values.api.image.tag | default .Chart.AppVersion) -}}
+{{- end -}}
+{{- end -}}
+
+{{- define "enterprise-stack.configVolume" -}}
+{{- if .Values.api.existingConfigSecret }}
+secret:
+  secretName: {{ .Values.api.existingConfigSecret | quote }}
+{{- else }}
+configMap:
+  name: {{ include "enterprise-stack.fullname" . }}-api-config
+{{- end }}
+{{- end -}}

@@ -258,3 +258,7 @@ npx tsx walt.ts --setup-all
 ```
 
 **⚠️ Warning:** `NODE_TLS_REJECT_UNAUTHORIZED=0` disables certificate validation and should only be used for testing/development systems with self-signed certificates.
+
+## SCA/PID evaluation
+
+See [SCA-PID.md](SCA-PID.md) for the explicit setup and scoped flow commands, registered trust inputs, callback behavior and deployment prerequisites.
