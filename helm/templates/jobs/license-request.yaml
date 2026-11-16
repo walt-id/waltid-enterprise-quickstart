@@ -48,7 +48,7 @@ spec:
         - name: {{ .Values.api.image.pullSecrets }}
       containers:
         - name: license-request
-          image: {{ .Values.api.image.repository }}:{{ .Values.api.image.tag | default .Chart.AppVersion }}
+          image: {{ include "enterprise-stack.apiImage" . | quote }}
           imagePullPolicy: {{ .Values.api.image.imagePullPolicy }}
           args:
             - license
@@ -72,12 +72,28 @@ spec:
                   # Must match the API deployment. When the key is absent both leave the variable
                   # unset, and the API reads the secret this Job generated in MongoDB.
                   optional: true
+            {{- if .Values.license.provisionInstallationKeyFile }}
+            - name: LICENSE_INSTALLATION_KEY_FILE
+              value: /license/installation-key.json
+            {{- end }}
           volumeMounts:
             - name: waltid-enterprise-api-config
               mountPath: /config
               readOnly: true
+            {{- if .Values.license.provisionInstallationKeyFile }}
+            - name: installation-key
+              mountPath: /license
+              readOnly: true
+            {{- end }}
       volumes:
         - name: waltid-enterprise-api-config
-          configMap:
-            name: {{ include "enterprise-stack.fullname" . }}-api-config
+          {{- include "enterprise-stack.configVolume" . | nindent 10 }}
+        {{- if .Values.license.provisionInstallationKeyFile }}
+        - name: installation-key
+          secret:
+            secretName: {{ .Values.license.secretName }}
+            items:
+              - key: installation-key.json
+                path: installation-key.json
+        {{- end }}
 {{- end }}

@@ -8,10 +8,12 @@
  * - Load key files and other resources
  */
 
-import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync } from 'fs';
+import assert from 'node:assert/strict';
+import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync, lstatSync, renameSync, unlinkSync } from 'fs';
 import { join, dirname } from 'path';
+import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'url';
-import { HttpClient, HttpLogEntry } from './http/index.js';
+import { HttpClient } from './http/index.js';
 import {
   Config,
   WaltContext,
@@ -56,7 +58,7 @@ export class CommandContext {
   /** HTTP client for admin operations */
   readonly adminClient: HttpClient;
 
-  constructor(config: Config, cliDir: string) {
+  constructor(config: Config, cliDir: string, readonly sensitive = false) {
     this.config = config;
     this.cliDir = cliDir;
     
@@ -79,15 +81,18 @@ export class CommandContext {
       orgUrl
     );
 
-    this.client = new HttpClient(clientUrl);
-    this.orgClient = new HttpClient(orgUrl);
-    this.systemClient = new HttpClient(orgUrl);
-    this.adminClient = new HttpClient(clientUrl);
+    const httpOptions = sensitive ? { logging: 'none' as const, strictTransport: true, timeoutMs: 60_000 } : {};
+    this.client = new HttpClient(clientUrl, httpOptions);
+    this.orgClient = new HttpClient(orgUrl, httpOptions);
+    this.systemClient = new HttpClient(orgUrl, httpOptions);
+    this.adminClient = new HttpClient(clientUrl, httpOptions);
     
+    if (!sensitive) {
     console.log(`\n[CONFIG] Base URL: ${clientUrl}`);
     console.log(`[CONFIG] Org URL: ${orgUrl}`);
     console.log(`[CONFIG] Organization: ${config.organization}`);
     console.log(`[CONFIG] Tenant: ${config.tenant}`);
+    }
   }
 
   // --------------------------------------------------------------------------
@@ -96,6 +101,7 @@ export class CommandContext {
 
   /** Log a message with optional prefix */
   log(message: string, prefix?: string): void {
+    if (this.sensitive) return;
     const time = new Date().toLocaleTimeString('en-US', { hour12: false });
     const prefixStr = prefix ? `[${prefix}] ` : '';
     console.log(`\n${prefixStr}>> ${message}`);
@@ -109,6 +115,7 @@ export class CommandContext {
 
   /** Save JSON data to a file in the workdir */
   saveJson(filename: string, data: any, stepNum?: string): void {
+    if (this.sensitive) return;
     mkdirSync(this.ctx.workdir, { recursive: true });
     const prefix = stepNum || String(this.ctx.stepCounter).padStart(3, '0');
     const path = join(this.ctx.workdir, `${prefix}-${filename}`);
@@ -117,6 +124,7 @@ export class CommandContext {
 
   /** Save request details to a file */
   saveRequest(filename: string, method: string, endpoint: string, body: any, stepNum?: string): void {
+    if (this.sensitive) return;
     mkdirSync(this.ctx.workdir, { recursive: true });
     const prefix = stepNum || String(this.ctx.stepCounter).padStart(3, '0');
     const path = join(this.ctx.workdir, `${prefix}-${filename}`);
@@ -137,6 +145,7 @@ export class CommandContext {
 
   /** Save response details to a file */
   saveResponse(filename: string, status: number, data: any, stepNum?: string): void {
+    if (this.sensitive) return;
     mkdirSync(this.ctx.workdir, { recursive: true });
     const prefix = stepNum || String(this.ctx.stepCounter).padStart(3, '0');
     const path = join(this.ctx.workdir, `${prefix}-${filename}`);
@@ -153,6 +162,7 @@ export class CommandContext {
 
   /** Save combined HTTP log from all clients */
   saveHttpLog(): void {
+    if (this.sensitive) return;
     mkdirSync(this.ctx.workdir, { recursive: true });
     const combinedLog = [
       ...this.client.getHttpLog(),
@@ -185,6 +195,29 @@ export class CommandContext {
   // --------------------------------------------------------------------------
   // Tolerant Operations
   // --------------------------------------------------------------------------
+
+  async listResources(parent: string): Promise<Array<Record<string, any>>> {
+    const result: Array<Record<string, any>> = [];
+    for (let offset = 0; ; offset += 100) {
+      const { data } = await this.orgClient.get<Array<Record<string, any>>>(
+        `/v1/${parent}/resource-api/resources/list?limit=100&offset=${offset}`
+      );
+      assert(Array.isArray(data), 'Expected a resource list');
+      result.push(...data);
+      if (data.length < 100) return result;
+    }
+  }
+
+  /** Reuse only matching owned configuration; never treat an arbitrary 409 as success. */
+  async ensureResource(parent: string, id: string, body: Record<string, unknown>, kind = 'services', createIfMissing = true): Promise<void> {
+    const target = `${parent}.${id}`;
+    const existing = (await this.listResources(parent)).find(node => node._id === target);
+    if (existing) assertConfigurationSubset(existing, body);
+    else {
+      assert(createIfMissing, 'Existing installation is incomplete; repair it explicitly');
+      await this.orgClient.post(`/v1/${target}/resource-api/${kind}/create`, body);
+    }
+  }
 
   /**
    * Execute a create operation that may fail if resource already exists.
@@ -270,4 +303,28 @@ export class CommandContext {
   ensureWorkdir(): void {
     mkdirSync(this.ctx.workdir, { recursive: true });
   }
+}
+
+/** Ignore server-owned fields while checking every configured value, including array contents. */
+export function assertConfigurationSubset(actual: any, expected: any): void {
+  if (Array.isArray(expected)) {
+    assert(Array.isArray(actual) && actual.length === expected.length, 'Existing configuration differs');
+    expected.forEach((value, index) => assertConfigurationSubset(actual[index], value));
+  } else if (expected !== null && typeof expected === 'object') {
+    assert(actual && typeof actual === 'object', 'Existing configuration is missing');
+    for (const [key, value] of Object.entries(expected)) assertConfigurationSubset(actual[key], value);
+  } else assert.deepEqual(actual, expected, 'Existing configuration differs');
+}
+
+/** Replace a result atomically without following a pre-existing file symlink. */
+export function writePrivateReceipt(path: string, value: Record<string, unknown>): void {
+  const directory = dirname(path);
+  mkdirSync(directory, { recursive: true, mode: 0o700 });
+  const stat = lstatSync(directory);
+  assert(stat.isDirectory() && !(stat.mode & 0o077), 'Receipt directory must be private and must not be a symlink');
+  const temporary = join(directory, `.${randomUUID()}.tmp`);
+  try {
+    writeFileSync(temporary, JSON.stringify(value, null, 2) + '\n', { flag: 'wx', mode: 0o600 });
+    renameSync(temporary, path);
+  } finally { if (existsSync(temporary)) unlinkSync(temporary); }
 }

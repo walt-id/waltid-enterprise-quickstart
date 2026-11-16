@@ -19,7 +19,10 @@ import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 
 import { createConfig } from './config.js';
-import { CommandContext } from './context.js';
+import { CommandContext, writePrivateReceipt } from './context.js';
+import { readScaPidConfig, scaPidContext } from './sca-pid-config.js';
+import { setupScaPid } from './commands/setup/sca-pid.js';
+import { flowScaPid } from './flows/sca-pid.js';
 import { loadWaltEnv } from './env.js';
 import { loadBankTenantEnv, createBankTenantConfig } from './bank-tenant-config.js';
 import { loadGovServicesEnv, createGovServicesConfig } from './gov-services-config.js';
@@ -119,6 +122,10 @@ System Commands:
   --setup-create-organization  Create organization
   --setup-create-admin-role  Create organization admin role
   --setup-create-admin-account  Create admin user account and assign role
+
+SCA/PID evaluation (explicit configuration and SCA_PID_API_TOKEN required):
+  --setup-sca-pid <file>  Provision an evaluation tenant using operator credentials
+  --flow-sca-pid <file>   Issue and jointly present both profiles using scoped access
 
 Setup Commands (create resources):
   --setup-all             Run all setup commands
@@ -313,6 +320,28 @@ async function main(): Promise<void> {
   }
 
   // Check for unknown commands
+  if (args.includes('--setup-sca-pid') || args.includes('--flow-sca-pid')) {
+    const receipt = process.env.SCA_PID_RESULT_FILE;
+    try {
+      if (receipt) writePrivateReceipt(receipt, { outcome: 'running' });
+      if (args.length !== 2 || !['--setup-sca-pid', '--flow-sca-pid'].includes(args[0]) || args[1].startsWith('-')) {
+        throw new Error('Use one scenario command and one configuration file');
+      }
+      const scenario = readScaPidConfig(args[1]);
+      const context = scaPidContext(scenario, process.env.SCA_PID_API_TOKEN ?? '', cliDir);
+      const result = args[0] === '--setup-sca-pid'
+        ? (await setupScaPid(context, scenario), { outcome: 'successful', operation: 'setup' })
+        : await flowScaPid(context, scenario);
+      if (receipt) writePrivateReceipt(receipt, result);
+      console.log('SCA/PID command completed. Only synthetic or explicitly configured trust was used.');
+    } catch {
+      if (receipt) { try { writePrivateReceipt(receipt, { outcome: 'failed' }); } catch {} }
+      console.error('SCA/PID command failed. Check configuration, scoped access and private server diagnostics. No payloads or credentials are printed.');
+      process.exitCode = 1;
+    }
+    return;
+  }
+
   const knownArgs = [
     '--help', '-h',
     '--recreate', '--init-system',
