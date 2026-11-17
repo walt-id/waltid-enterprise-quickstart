@@ -170,6 +170,20 @@ test('profile assertions preserve disclosure and credential-audience boundaries'
   assert.throws(() => assertProfilePresentation('sca-card-dpc', compact(common, [...disclosures, ['salt', 'card_id', 'hidden']])));
 });
 
+test('local SCA metadata uses the standard category and payment schema URNs', () => {
+  const root = (scaTypeMetadata(config().branding) as Record<string, any>)['sca-payment-base'];
+  assert.equal(root.category, 'urn:eu:europa:ec:eudi:sua:sca');
+  const payment = root.transaction_data_types['urn:eudi:sca:payment:1'];
+  assert.equal(payment.schema, 'urn:eudi:sca:payment:1');
+  assert.equal(payment.schema_uri, undefined);
+  assert.deepEqual(payment.claims.map((c: any) => c.path), [
+    ['transaction_id'], ['payee', 'name'], ['payee', 'id'], ['currency'], ['amount'],
+    ['recurrence', 'frequency'], ['recurrence', 'number'],
+  ]);
+  assert(payment.claims.every((c: any) => c.display[0].locale === 'en' && c.display[0].label));
+  assert.deepEqual(payment.ui_labels.affirmative_action_label, [{ lang: 'en', value: 'Confirm payment' }]);
+});
+
 test('branding remains configurable and published parent integrity remains pinned', () => {
   const c = config();
   c.branding = { name: 'Sample Credit Union', background: '#123456', text: '#abcdef', logo: 'https://brand.example.org/logo.svg' };

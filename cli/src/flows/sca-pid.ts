@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
 import { CommandContext } from '../context.js';
-import { ScaPidConfig, ScaProfileId, SCA_PROFILE_IDS, SIGNER_ROLES, scaProfile, PID, holderKeyReference } from '../sca-pid-config.js';
+import { ScaPidConfig, ScaProfileId, SCA_PROFILE_IDS, SCA_PAYMENT_TYPE, SIGNER_ROLES, scaProfile, PID, holderKeyReference } from '../sca-pid-config.js';
 import { RESOURCES } from '../config.js';
 import { SCA_PID_SAMPLE } from '../fixtures/sca-pid.js';
 import { trustPolicy } from '../commands/setup/sca-pid.js';
@@ -80,7 +80,7 @@ export function assertProfilePresentation(id: ScaProfileId, compact: string): Re
 }
 
 export function payment(kind: 'immediate' | 'recurring') {
-  return { type: 'urn:eudi:sca:payment:1', credential_ids: ['sca'], require_cryptographic_holder_binding: true, transaction_data_hashes_alg: ['sha-256'],
+  return { type: SCA_PAYMENT_TYPE, credential_ids: ['sca'], require_cryptographic_holder_binding: true, transaction_data_hashes_alg: ['sha-256'],
     payload: { transaction_id: randomUUID(),
       ...SCA_PID_SAMPLE.payment,
       ...(kind === 'recurring' && { recurrence: SCA_PID_SAMPLE.recurrence }) } };

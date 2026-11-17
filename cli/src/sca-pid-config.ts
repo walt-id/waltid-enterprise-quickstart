@@ -7,6 +7,7 @@ import type { CertificateRequirements } from './commands/setup/certificates.js';
 import { SCA_PID_SAMPLE } from './fixtures/sca-pid.js';
 
 export const SCA_PROFILE_IDS = ['sca-card-dpc', 'sca-user'] as const;
+export const SCA_PAYMENT_TYPE = 'urn:eudi:sca:payment:1';
 export type ScaProfileId = typeof SCA_PROFILE_IDS[number];
 export const SIGNER_ROLES = ['sca', 'pid', 'verifier', 'provider'] as const;
 export type SignerRole = typeof SIGNER_ROLES[number];
@@ -158,7 +159,17 @@ export function scaProfile(id: ScaProfileId, brand: ScaPidConfig['branding']) {
 }
 
 export function scaTypeMetadata(brand: ScaPidConfig['branding'], parents?: ScaPidConfig['typeParents']) {
-  const metadata: Record<string, unknown> = parents ? {} : { 'sca-payment-base': { name: 'SCA base', schema: { type: 'object', properties: common } } };
+  const metadata: Record<string, unknown> = parents ? {} : { 'sca-payment-base': {
+    name: 'SCA base', schema: { type: 'object', properties: common },
+    category: 'urn:eu:europa:ec:eudi:sua:sca',
+    transaction_data_types: { [SCA_PAYMENT_TYPE]: {
+      schema: SCA_PAYMENT_TYPE,
+      claims: Object.entries({ transaction_id: 'Transaction ID', 'payee.name': 'Payee', 'payee.id': 'Payee ID',
+        currency: 'Currency', amount: 'Amount', 'recurrence.frequency': 'Frequency', 'recurrence.number': 'Number of payments',
+      }).map(([path, label]) => ({ path: path.split('.'), display: [{ locale: 'en', label }] })),
+      ui_labels: { affirmative_action_label: [{ lang: 'en', value: 'Confirm payment' }] },
+    } },
+  } };
   for (const id of SCA_PROFILE_IDS) {
     const profile = scaProfile(id, brand);
     metadata[id] = { extends: `{vctBaseURL}/${id}-base`, schema: profile.schema };
