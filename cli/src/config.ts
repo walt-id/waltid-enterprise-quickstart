@@ -30,6 +30,7 @@ export const RESOURCES = {
   didStore: 'did-store',
   /** Dedicated KMS for wallet keys (separate from issuer/x509 KMS) */
   walletKms: 'wallet-kms',
+  walletProvider: 'wallet-provider',
   walletDidService: 'wallet-did-service',
   walletDidStore: 'wallet-didstore',
   walletCredentialStore: 'wallet-credentialstore',

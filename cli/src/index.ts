@@ -19,8 +19,9 @@ import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 
 import { createConfig } from './config.js';
-import { CommandContext, writePrivateReceipt } from './context.js';
-import { readScaPidConfig, scaPidContext } from './sca-pid-config.js';
+import { CommandContext } from './context.js';
+import { readScaPidInput, scaPidContext } from './sca-pid-config.js';
+import { invalidateResult, writePrivateResult, resultProvenance, safeErrorCategory } from './result.js';
 import { setupScaPid } from './commands/setup/sca-pid.js';
 import { flowScaPid } from './flows/sca-pid.js';
 import { loadWaltEnv } from './env.js';
@@ -123,8 +124,8 @@ System Commands:
   --setup-create-admin-role  Create organization admin role
   --setup-create-admin-account  Create admin user account and assign role
 
-SCA/PID evaluation (explicit configuration and SCA_PID_API_TOKEN required):
-  --setup-sca-pid <file>  Provision an evaluation tenant using operator credentials
+SCA/PID setup and flows (explicit configuration and SCA_PID_API_TOKEN required):
+  --setup-sca-pid <file>  Provision an SCA/PID tenant using operator credentials
   --flow-sca-pid <file>   Issue and jointly present both profiles using scoped access
 
 Setup Commands (create resources):
@@ -322,21 +323,45 @@ async function main(): Promise<void> {
   // Check for unknown commands
   if (args.includes('--setup-sca-pid') || args.includes('--flow-sca-pid')) {
     const receipt = process.env.SCA_PID_RESULT_FILE;
+    const operation = args[0] === '--setup-sca-pid' ? 'setup' : 'flow';
+    const provenance = resultProvenance(operation, cliDir);
+    let inputSha256: string | undefined;
+    let stage = 'result initialization';
+    let initialized = false;
+    console.log(`SCA/PID run ${provenance.runId}`);
     try {
-      if (receipt) writePrivateReceipt(receipt, { outcome: 'running' });
-      if (args.length !== 2 || !['--setup-sca-pid', '--flow-sca-pid'].includes(args[0]) || args[1].startsWith('-')) {
-        throw new Error('Use one scenario command and one configuration file');
+      if (receipt) {
+        invalidateResult(receipt);
+        writePrivateResult(receipt, { ...provenance, outcome: 'running' });
       }
-      const scenario = readScaPidConfig(args[1]);
-      const context = scaPidContext(scenario, process.env.SCA_PID_API_TOKEN ?? '', cliDir);
-      const result = args[0] === '--setup-sca-pid'
-        ? (await setupScaPid(context, scenario), { outcome: 'successful', operation: 'setup' })
-        : await flowScaPid(context, scenario);
-      if (receipt) writePrivateReceipt(receipt, result);
-      console.log('SCA/PID command completed. Only synthetic or explicitly configured trust was used.');
-    } catch {
-      if (receipt) { try { writePrivateReceipt(receipt, { outcome: 'failed' }); } catch {} }
-      console.error('SCA/PID command failed. Check configuration, scoped access and private server diagnostics. No payloads or credentials are printed.');
+      initialized = true;
+      stage = 'configuration';
+      if (args.length !== 2 || !['--setup-sca-pid', '--flow-sca-pid'].includes(args[0]) || args[1].startsWith('-')) {
+        throw new SyntaxError('Use one scenario command and one configuration file');
+      }
+      const input = readScaPidInput(args[1]);
+      inputSha256 = input.sha256;
+      stage = 'authentication';
+      const context = scaPidContext(input.config, process.env.SCA_PID_API_TOKEN ?? '', cliDir);
+      stage = operation;
+      const result = operation === 'setup'
+        ? (await setupScaPid(context, input.config), { outcome: 'successful' })
+        : await flowScaPid(context, input.config);
+      stage = 'result writing';
+      if (receipt) writePrivateResult(receipt, { ...result, ...provenance, inputSha256, finishedAt: new Date().toISOString() });
+      console.log(`SCA/PID run ${provenance.runId} completed.`);
+    } catch (error) {
+      const category = safeErrorCategory(error);
+      if (receipt) {
+        try {
+          invalidateResult(receipt);
+          if (initialized) writePrivateResult(receipt, { ...provenance, inputSha256, finishedAt: new Date().toISOString(), outcome: 'failed', stage, category });
+          else console.error('Result initialization failed; no result was written.');
+        } catch {
+          console.error('Result could not be invalidated or replaced; discard any previous result at the configured destination.');
+        }
+      }
+      console.error(`SCA/PID run ${provenance.runId} failed during ${stage}: ${category}. Check private server diagnostics for details.`);
       process.exitCode = 1;
     }
     return;

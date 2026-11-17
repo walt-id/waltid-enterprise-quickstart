@@ -266,9 +266,15 @@ The Helm chart reads license material from one pre-provisioned Secret, named by
 optional, as described above. For offline activation, the `license.installationRequest` Job creates
 the installation key in the database and prints the request.
 
-The chart does not support the pinned-key recovery yet: the `installationRequest` Job does not mount
-`installation-key.json`, so it would create a different key than the one the API loads. Leave
-`license.provisionInstallationKeyFile` at `false`.
+For [pinned-key recovery](#disaster-recovery-with-a-pinned-installation-key), put the existing
+`installation-key.json` in that Secret and set `license.provisionInstallationKeyFile: true`.
+Both the API and the installation-request Job mount the same key and set
+`LICENSE_INSTALLATION_KEY_FILE`, for online or offline activation. The Job does not require an
+offline bundle before it has been issued. Leave the option `false` to keep the database-owned key.
+Never replace an existing installation key during an upgrade.
+
+`api.image.digest` and `api.existingConfigSecret` apply to both workloads, keeping their image and
+complete `/config` input aligned. See [Helm deployment options](README.md#helm-deployment-options).
 
 ## Monitoring
 
