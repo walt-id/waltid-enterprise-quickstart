@@ -26,7 +26,7 @@ test('sensitive HTTP transport retains no bodies or identifiers on success or fa
     assert.deepEqual(client.getHttpLog(), []);
     globalThis.fetch = async () => Response.json({ secret: 'failure-sentinel' }, { status: 403 });
     await assert.rejects(client.get('/private'),
-      error => !JSON.stringify(error).includes('failure-sentinel') && (error as any).status === 403);
+      (error: any) => error.message === 'HTTP 403' && error.status === 403 && error.response === undefined);
     assert.deepEqual(client.getHttpLog(), []);
   } finally { globalThis.fetch = original; }
 });

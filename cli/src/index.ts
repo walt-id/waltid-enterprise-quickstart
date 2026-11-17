@@ -21,8 +21,6 @@ import { fileURLToPath } from 'url';
 import { createConfig } from './config.js';
 import { CommandContext } from './context.js';
 import { readScaPidConfig, scaPidContext } from './sca-pid-config.js';
-import { setupScaPid } from './commands/setup/sca-pid.js';
-import { flowScaPid } from './flows/sca-pid.js';
 import { loadWaltEnv } from './env.js';
 import { loadBankTenantEnv, createBankTenantConfig } from './bank-tenant-config.js';
 import { loadGovServicesEnv, createGovServicesConfig } from './gov-services-config.js';
@@ -62,6 +60,7 @@ import {
   setupEtsiTrustRegistry,
   setupImportTrustList,
   setupCreateOidcBridge,
+  setupScaPid,
   
   // Run commands
   runCreateCredentialOffer,
@@ -89,7 +88,7 @@ import {
   runVerifierVariantsTeardown,
 } from './commands/index.js';
 
-import { flowEtsiTrustLists, flowCredentialRevocation, flowGovTrust, flowTrustListAssurance } from './flows/index.js';
+import { flowEtsiTrustLists, flowCredentialRevocation, flowGovTrust, flowTrustListAssurance, flowScaPid } from './flows/index.js';
 
 // ============================================================================
 // CLI Setup
@@ -319,7 +318,7 @@ async function main(): Promise<void> {
     return;
   }
 
-  // Check for unknown commands
+  // Explicit scenario credentials must be handled before the default administrator setup.
   if (args.includes('--setup-sca-pid') || args.includes('--flow-sca-pid')) {
     const operation = args[0] === '--setup-sca-pid' ? 'setup' : 'flow';
     let stage = 'configuration';
@@ -343,6 +342,7 @@ async function main(): Promise<void> {
     return;
   }
 
+  // Check for unknown commands
   const knownArgs = [
     '--help', '-h',
     '--recreate', '--init-system',

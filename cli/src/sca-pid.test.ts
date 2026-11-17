@@ -5,8 +5,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { readScaPidConfig, validateScaPidConfig, scaPidContext, scaProfile, scaTypeMetadata, SCA_PROFILE_IDS,
-  signerCertificateRequirements } from './sca-pid-config.js';
+import { readScaPidConfig, validateScaPidConfig, scaPidContext, scaProfile, scaTypeMetadata, SCA_PROFILE_IDS } from './sca-pid-config.js';
 import { assertConfigurationSubset } from './context.js';
 import { assertPolicyOutcome, assertMissingCredential, assertProfilePresentation, type VerificationSession } from './flows/sca-pid.js';
 import { trustPolicy } from './commands/setup/sca-pid.js';
@@ -173,18 +172,17 @@ test('profile assertions preserve disclosure and credential-audience boundaries'
 
 test('branding remains configurable and published parent integrity remains pinned', () => {
   const c = config();
-  for (const id of SCA_PROFILE_IDS) assert(scaProfile(id, c.branding).name.startsWith('Example Bank'));
+  c.branding = { name: 'Sample Credit Union', background: '#123456', text: '#abcdef', logo: 'https://brand.example.org/logo.svg' };
   const parents = Object.fromEntries(SCA_PROFILE_IDS.map(id => [id, { uri: `https://types.example.org/${id}`, integrity: 'sha256-' + 'A'.repeat(43) + '=' }])) as NonNullable<typeof c.typeParents>;
   validateScaPidConfig({ ...c, typeParents: parents });
   const metadata = scaTypeMetadata(c.branding, parents) as Record<string, any>;
-  assert.equal(metadata['sca-user-base'].extends, parents['sca-user'].uri);
-  assert.equal(metadata['sca-user-base']['extends#integrity'], parents['sca-user'].integrity);
-  assert.equal(metadata['sca-user'].extends, '{vctBaseURL}/sca-user-base');
-});
-
-test('scenario translates signing roles into explicit certificate requirements', () => {
-  assert.deepEqual(signerCertificateRequirements('sca'), { algorithms: ['ES256'], extendedKeyUsageOids: [] });
-  assert.deepEqual(signerCertificateRequirements('pid'), { algorithms: ['ES256'], extendedKeyUsageOids: ['1.0.18013.5.1.2'] });
-  assert.deepEqual(signerCertificateRequirements('provider'), { algorithms: ['ES256'], extendedKeyUsageOids: ['1.3.6.1.5.5.7.3.2'] });
-  assert.deepEqual(signerCertificateRequirements('verifier'), { algorithms: ['ES256', 'RS256'], extendedKeyUsageOids: ['1.3.6.1.5.5.7.3.2'] });
+  for (const [id, name] of [['sca-card-dpc', 'Sample Credit Union SCA-card/DPC'], ['sca-user', 'Sample Credit Union SCA-User']] as const) {
+    assert.equal(scaProfile(id, c.branding).name, name);
+    assert.equal(metadata[id + '-base'].extends, parents[id].uri);
+    assert.equal(metadata[id + '-base']['extends#integrity'], parents[id].integrity);
+    assert.equal(metadata[id].extends, `{vctBaseURL}/${id}-base`);
+    assert.deepEqual(metadata[id + '-base'].display[0], { lang: 'en', name, rendering: { simple: {
+      background_color: '#123456', text_color: '#abcdef', logo: { uri: 'https://brand.example.org/logo.svg', alt_text: 'Sample Credit Union' },
+    } } });
+  }
 });

@@ -28,12 +28,16 @@ test('API and offline bootstrap share immutable image, private config, encryptio
       { name: 'retained-license', key: 'state-encryption-key', optional: true });
     assert.equal(container.env.find((e: any) => e.name === 'LICENSE_INSTALLATION_KEY_FILE').value, '/license/installation-key.json');
     assert(pod.volumes.some((v: any) => v.secret?.secretName === 'retained-license' && v.secret.items.some((i: any) => i.key === 'installation-key.json')));
+    for (const path of ['/config', '/license']) assert(container.volumeMounts.some((m: any) => m.mountPath === path && m.readOnly));
   }
   const deployment = workloads.find(d => d.kind === 'Deployment');
   const hpa = docs.find(d => d.kind === 'HorizontalPodAutoscaler');
   assert.equal(hpa.spec.minReplicas, 1);
   assert.equal(hpa.spec.maxReplicas, 1);
   assert.equal(deployment.spec.strategy.type, 'Recreate');
+  assert.deepEqual(deployment.spec.template.spec.containers[0].env.find((e: any) => e.name === 'WALLET2_SCA_AUTHORITY_CONFIG'),
+    { name: 'WALLET2_SCA_AUTHORITY_CONFIG', value: '/authority/config.json' });
+  assert(deployment.spec.template.spec.containers[0].volumeMounts.some((m: any) => m.name === 'replay' && m.mountPath === '/replay'));
   assert.equal(deployment.spec.template.spec.volumes.find((v: any) => v.name === 'replay').persistentVolumeClaim.claimName, 'retained-replay');
   const job = workloads.find(d => d.kind === 'Job');
   assert(!job.spec.template.spec.volumes.some((v: any) => v.secret?.items?.some((i: any) => i.key === 'offline-license.waltlicense')), 'An unlicensed bootstrap must not require the returned bundle');
