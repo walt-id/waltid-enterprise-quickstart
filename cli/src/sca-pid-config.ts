@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { CommandContext } from './context.js';
 import { PID_DOC_TYPE, RESOURCES } from './config.js';
-import type { CertificateRequirements } from './commands/setup/certificates.js';
+import type { CertificateRequirements, SigningMaterialFiles } from './commands/setup/certificates.js';
 import { SCA_PID_SAMPLE } from './fixtures/sca-pid.js';
 
 export const SCA_PROFILE_IDS = ['sca-card-dpc', 'sca-user'] as const;
@@ -11,27 +11,26 @@ export const SCA_PAYMENT_TYPE = 'urn:eudi:sca:payment:1';
 export type ScaProfileId = typeof SCA_PROFILE_IDS[number];
 export const SIGNER_ROLES = ['sca', 'pid', 'verifier', 'provider'] as const;
 export type SignerRole = typeof SIGNER_ROLES[number];
-export type TrustConfiguration = { kind: 'fixture' } | {
-  kind: 'registered';
-  chainFile: string;
-  /** Optional when reusing an existing signer; required only when importing a new signing key. */
-  keyFile?: string;
-  anchorsFile: string;
-  sourceFile: string;
-  sourceSignerFile: string;
-  sourceUrl: string;
-  publicKeySha256: string;
+type CertificateTrust = SigningMaterialFiles & {
   /** Select only when the actual registration requires the RSA-2048 WRPAC profile. */
   certificateProfile?: 'wrpac';
   dnsName?: string;
-  entityType: string;
-  serviceType: string;
 };
+export type TrustConfiguration = { kind: 'fixture' } | CertificateTrust & (
+  { kind: 'roots' } | {
+    kind: 'registered';
+    sourceFile: string;
+    sourceSignerFile: string;
+    sourceUrl: string;
+    entityType: string;
+    serviceType: string;
+  }
+);
 export interface ScaPidConfig {
   baseUrl: string;
   organization: string;
   tenant: string;
-  /** HTTP is available only for explicitly selected local fixtures. */
+  /** HTTP is available only for explicitly selected local development. */
   transport: 'https' | 'local';
   branding: { name: string; background: string; text: string; logo?: string; logoIntegrity?: string };
   trust: Record<SignerRole, TrustConfiguration>;
@@ -60,7 +59,7 @@ export function validateScaPidConfig(value: unknown): ScaPidConfig {
   for (const id of [c.organization, c.tenant]) assert(typeof id === 'string' && /^[a-z][a-z0-9-]{2,50}$/.test(id), 'Invalid resource identifier');
   assert(c.transport === 'https' || c.transport === 'local', 'Select HTTPS or explicit local transport');
   if (c.transport === 'https') assert.equal(url.protocol, 'https:');
-  else assert(url.protocol === 'http:' && (url.hostname === 'localhost' || url.hostname.endsWith('.localhost')), 'Local transport requires a localhost name');
+  else assert(['http:', 'https:'].includes(url.protocol) && (url.hostname === 'localhost' || url.hostname.endsWith('.localhost')), 'Local transport requires a localhost name');
   assert(c.branding && typeof c.branding === 'object');
   nonempty(c.branding.name);
   for (const color of [c.branding.background, c.branding.text]) assert(/^#[0-9a-f]{6}$/i.test(color), 'Invalid branding colour');
@@ -71,22 +70,27 @@ export function validateScaPidConfig(value: unknown): ScaPidConfig {
   assert(c.trust && Object.keys(c.trust).sort().join() === [...SIGNER_ROLES].sort().join(), 'Configure every trust role explicitly');
   for (const role of SIGNER_ROLES) {
     const trust = c.trust[role];
-    assert(trust && (trust.kind === 'fixture' || trust.kind === 'registered'), 'Select fixture or registered trust');
+    assert(trust && ['fixture', 'roots', 'registered'].includes(trust.kind), 'Select fixture, roots or registered trust');
     if (trust.kind === 'fixture') assert.deepEqual(Object.keys(trust), ['kind'], 'Fixture trust cannot contain registration inputs');
     else {
-      for (const key of ['chainFile', 'anchorsFile', 'sourceFile', 'sourceSignerFile', 'entityType', 'serviceType'] as const) nonempty(trust[key]);
+      for (const key of ['chainFile', 'anchorsFile'] as const) nonempty(trust[key]);
       if (trust.keyFile !== undefined) nonempty(trust.keyFile);
-      httpsUrl(trust.sourceUrl);
       assert(/^[a-f0-9]{64}$/.test(trust.publicKeySha256), 'Pin the approved signing public key');
       if (trust.certificateProfile !== undefined) {
         assert(role === 'verifier' && trust.certificateProfile === 'wrpac', 'Unsupported certificate profile');
         assert(typeof trust.dnsName === 'string' && trust.dnsName.includes('.') && trust.dnsName.split('.').every(label => /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/i.test(label)), 'WRPAC requires the approved DNS name');
       }
-      assert(!new URL(trust.sourceUrl).hash, 'Trust source URL must not have a fragment');
-      const allowedEntities = { sca: ['TRUST_SERVICE_PROVIDER', 'ATTESTATION_PROVIDER'], pid: ['PID_PROVIDER'], verifier: ['RELYING_PARTY_PROVIDER', 'ACCESS_CERTIFICATE_PROVIDER'], provider: ['WALLET_PROVIDER'] };
-      assert(allowedEntities[role].includes(trust.entityType), 'Trust entity type does not match its role');
+      if (trust.kind === 'registered') {
+        for (const key of ['sourceFile', 'sourceSignerFile', 'entityType', 'serviceType'] as const) nonempty(trust[key]);
+        httpsUrl(trust.sourceUrl);
+        assert(!new URL(trust.sourceUrl).hash, 'Trust source URL must not have a fragment');
+        const allowedEntities = { sca: ['TRUST_SERVICE_PROVIDER', 'ATTESTATION_PROVIDER'], pid: ['PID_PROVIDER'], verifier: ['RELYING_PARTY_PROVIDER', 'ACCESS_CERTIFICATE_PROVIDER'], provider: ['WALLET_PROVIDER'] };
+        assert(allowedEntities[role].includes(trust.entityType), 'Trust entity type does not match its role');
+      } else assert(Object.keys(trust).every(k => ['kind', 'chainFile', 'anchorsFile', 'keyFile', 'publicKeySha256', 'certificateProfile', 'dnsName'].includes(k)), 'Roots trust cannot contain registration inputs');
     }
   }
+  const roots = Object.values(c.trust).filter(t => t.kind === 'roots').length;
+  assert(roots === 0 || roots === SIGNER_ROLES.length, 'Select roots trust for all four roles');
   if (c.typeParents) {
     assert.deepEqual(Object.keys(c.typeParents).sort(), [...SCA_PROFILE_IDS].sort());
     for (const id of SCA_PROFILE_IDS) {
@@ -104,10 +108,11 @@ export function validateScaPidConfig(value: unknown): ScaPidConfig {
 
 export function readScaPidConfig(path: string): ScaPidConfig {
   const c = validateScaPidConfig(JSON.parse(readFileSync(path, 'utf8')));
-  for (const trust of Object.values(c.trust)) if (trust.kind === 'registered') {
-    for (const key of ['chainFile', 'keyFile', 'anchorsFile', 'sourceFile', 'sourceSignerFile'] as const) {
+  for (const trust of Object.values(c.trust)) if (trust.kind !== 'fixture') {
+    for (const key of ['chainFile', 'keyFile', 'anchorsFile'] as const) {
       if (trust[key]) trust[key] = resolve(dirname(path), trust[key]);
     }
+    if (trust.kind === 'registered') for (const key of ['sourceFile', 'sourceSignerFile'] as const) trust[key] = resolve(dirname(path), trust[key]);
   }
   return c;
 }
@@ -118,7 +123,7 @@ export function holderKeyReference(tenant: string, profile: ScaProfileId, role: 
 }
 
 export function signerCertificateRequirements(role: SignerRole, trust?: TrustConfiguration): CertificateRequirements {
-  if (trust?.kind === 'registered' && trust.certificateProfile === 'wrpac') {
+  if (trust && trust.kind !== 'fixture' && trust.certificateProfile === 'wrpac') {
     return { algorithms: ['RS256'], rsaBits: 2048, dnsName: trust.dnsName, extendedKeyUsageOids: ['1.3.6.1.5.5.7.3.2'] };
   }
   return {

@@ -11,6 +11,7 @@ import { extractCertificatePem, proveSigningKey } from './keys.js';
 export interface SigningMaterialFiles {
   chainFile: string;
   anchorsFile: string;
+  /** Optional when reusing an existing signer; required only when importing a new signing key. */
   keyFile?: string;
   publicKeySha256: string;
 }

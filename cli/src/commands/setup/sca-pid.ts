@@ -19,8 +19,9 @@ const FIXTURE_TYPES = {
   verifier: ['EUWRPRCProvidersList', 'RELYING_PARTY_PROVIDER', 'urn:waltid:trust-service:relying-party'],
   provider: ['EUWalletProvidersList', 'WALLET_PROVIDER', 'urn:waltid:trust-service:wallet-provider'],
 } as const;
-export function trustPolicy(config: ScaPidConfig, role: SignerRole) {
+export async function trustPolicy(config: ScaPidConfig, role: SignerRole) {
   const trust = config.trust[role];
+  if (trust.kind === 'roots') return { policy: 'x509-trust', trustRoots: parseCertificates(await readFile(trust.anchorsFile, 'utf8')).map(c => c.toString()) };
   return { policy: 'etsi-trust-list', expectedEntityType: trust.kind === 'registered' ? trust.entityType : FIXTURE_TYPES[role][1],
     expectedServiceType: trust.kind === 'registered' ? trust.serviceType : FIXTURE_TYPES[role][2], requireAuthenticated: true, allowStaleSource: false };
 }
@@ -33,15 +34,21 @@ export async function setupScaPid(ctx: CommandContext, config: ScaPidConfig): Pr
   // Read supplied files and validate signing material before the first API mutation.
   for (const role of SIGNER_ROLES) {
     const trust = config.trust[role];
-    if (trust.kind !== 'registered') continue;
-    material[role] = await readSigningMaterial(trust, signerCertificateRequirements(role, trust));
+    if (trust.kind === 'fixture') continue;
+    const requirements = signerCertificateRequirements(role, trust);
+    if (role === 'sca' && trust.kind === 'roots') {
+      assert.equal(new URL(ctx.orgBaseUrl).protocol, 'https:', 'Roots-only SCA issuance requires an HTTPS issuer');
+      requirements.dnsName = new URL(ctx.orgBaseUrl).hostname;
+    }
+    material[role] = await readSigningMaterial(trust, requirements);
+    if (trust.kind === 'roots') continue;
     sources[role] = { content: await readFile(trust.sourceFile, 'utf8'), anchors: parseCertificates(await readFile(trust.sourceSignerFile, 'utf8')).map(c => c.toString()) };
     assert(sources[role]!.content.trim(), 'Trust source is empty');
   }
   const orgPath = `/v1/admin/organizations/${config.organization}`;
   const org = await ctx.client.get(orgPath, { allow: [404] });
   const existingTenant = org.status !== 404 && (await ctx.listResources(config.organization)).some(n => n._id === target);
-  for (const value of Object.values(material)) if (!existingTenant) assert(value.jwk, 'A new registered signer requires its private key input');
+  for (const value of Object.values(material)) if (!existingTenant) assert(value.jwk, 'A new supplied signer requires its private key input');
   const suppliedKeys = Object.values(material).map(value => value.chain[0].publicKey.export({ format: 'der', type: 'spki' }).toString('base64'));
   assert.equal(new Set(suppliedKeys).size, suppliedKeys.length, 'Signing roles must use distinct keys');
   const ensureResource = (parent: string, id: string, body: Record<string, unknown>, kind = 'services') => ctx.ensureResource(parent, id, body, kind, !existingTenant);
@@ -135,11 +142,13 @@ export async function setupScaPid(ctx: CommandContext, config: ScaPidConfig): Pr
   assert.equal(new Set(SIGNER_ROLES.map(role => new X509Certificate(chains[role][0]).publicKey.export({ format: 'der', type: 'spki' }).toString('base64'))).size, SIGNER_ROLES.length, 'Signing roles must use distinct keys');
 
   const registry = `${target}.${RESOURCES.trustRegistry}`;
+  const registryDependencies = config.trust.sca.kind === 'roots' ? [] : [registry];
   const sourceAnchors = [...new Set([...Object.values(sources).flatMap(s => s.anchors), ...(fixtureRoot ? [rootPem] : [])])];
-  await ensureResource(target, RESOURCES.trustRegistry, { type: 'trust-registry', validateSignaturesByDefault: true,
+  if (registryDependencies.length) await ensureResource(target, RESOURCES.trustRegistry, { type: 'trust-registry', validateSignaturesByDefault: true,
     sourceAcceptancePolicy: 'REQUIRE_AUTHENTICATED', trustedSourceSignerCertificates: sourceAnchors });
   for (const role of SIGNER_ROLES) {
     const trust = config.trust[role];
+    if (trust.kind === 'roots') continue;
     const sourceId = `sca-pid-${role}`;
     const existing = (await listTrustRegistrySources(ctx)).find(s => s.sourceId === sourceId);
     let content = sources[role]?.content;
@@ -161,7 +170,7 @@ export async function setupScaPid(ctx: CommandContext, config: ScaPidConfig): Pr
       const result = await loadTrustSource(ctx, { sourceId, sourceUrl, content, acceptancePolicy: 'REQUIRE_AUTHENTICATED', trustedSignerCertificates: sources[role]?.anchors ?? [rootPem] });
       assert(result.success && result.assurance?.accepted && result.assurance.authenticityState === 'AUTHENTICATED', 'Trust source was not authenticated');
     }
-    const policy = trustPolicy(config, role);
+    const policy = await trustPolicy(config, role);
     const decision = await resolveTrustCertificateChain(ctx, { certificateChainPemOrDer: chains[role], expectedEntityType: policy.expectedEntityType, expectedServiceType: policy.expectedServiceType });
     assert(decision.decision === 'TRUSTED' && decision.sourceFreshness === 'FRESH' && decision.sourceAssurance.authenticityState === 'AUTHENTICATED', 'Registration must be authenticated, fresh and trusted');
   }
@@ -180,12 +189,13 @@ export async function setupScaPid(ctx: CommandContext, config: ScaPidConfig): Pr
   await ensureResource(target, RESOURCES.walletProvider, { type: 'wallet-provider', signingKeyId: keyRef('provider'), profile: 'openid4vci', composition: 'wia_ka',
     wia: { ttlSeconds: 3600, walletName: config.branding.name }, ka: { ttlSeconds: 3600, keyStorage: ['software'] }, activationTrust: 'unverified-demo',
     dependencies: [`${target}.${RESOURCES.kms}`], x5Chain: chainDescriptors(chains.provider) });
-  await ensureResource(target, RESOURCES.wallet, { type: 'wallet2', dependencies: [`${target}.${RESOURCES.walletKms}`, `${target}.${RESOURCES.walletCredentialStore}`, `${target}.${RESOURCES.walletProvider}`, registry],
+  await ensureResource(target, RESOURCES.wallet, { type: 'wallet2', dependencies: [`${target}.${RESOURCES.walletKms}`, `${target}.${RESOURCES.walletCredentialStore}`, `${target}.${RESOURCES.walletProvider}`, ...registryDependencies],
     configuration: { requestObjectX509Trust: { x509TrustAnchorsPem: material.verifier?.anchors.map(c => c.toString()) ?? [rootPem] } } });
   await ensureResource(target, RESOURCES.verifier2, { type: 'verifier2', baseUrl: ctx.orgBaseUrl, clientId: x509HashClientId(chains.verifier[0]),
-    dependencies: [`${target}.${RESOURCES.kms}`, registry], x5c: chains.verifier.map(certificatePemToDerBase64) });
+    dependencies: [`${target}.${RESOURCES.kms}`, ...registryDependencies], x5c: chains.verifier.map(certificatePemToDerBase64) });
   const providerAnchors = material.provider?.anchors.map(c => c.toString()) ?? [rootPem];
-  const attestation = { verificationMethod: { type: 'x509-chain', trustedRootCertificatesPem: providerAnchors, expectedEntityType: 'WALLET_PROVIDER' } };
+  const attestation = { verificationMethod: { type: 'x509-chain', trustedRootCertificatesPem: providerAnchors,
+    ...(registryDependencies.length && { expectedEntityType: 'WALLET_PROVIDER' }) } };
   const proof = { jwt: { proof_signing_alg_values_supported: ['ES256'], key_attestations_required: { key_storage: ['software'] } } };
   const configurations: Record<string, unknown> = {};
   for (const id of [...SCA_PROFILE_IDS, ...SCA_PROFILE_IDS.map(id => id + '-base'), ...(!config.typeParents ? ['sca-payment-base'] : [])]) {
@@ -194,7 +204,7 @@ export async function setupScaPid(ctx: CommandContext, config: ScaPidConfig): Pr
   }
   configurations.pid = { format: 'mso_mdoc', doctype: PID, scope: 'pid', credential_signing_alg_values_supported: [-7], cryptographic_binding_methods_supported: ['cose_key'], proof_types_supported: proof };
   await ensureResource(target, RESOURCES.issuer, { type: 'issuer2', baseUrl: ctx.orgBaseUrl, kms: `${target}.${RESOURCES.kms}`, tokenKeyId: keyRef('sca'),
-    dependencies: [`${target}.${RESOURCES.kms}`, `${target}.${RESOURCES.credentialStatus}`, registry],
+    dependencies: [`${target}.${RESOURCES.kms}`, `${target}.${RESOURCES.credentialStatus}`, ...registryDependencies],
     issuerDisplayConfiguration: [{ name: config.branding.name, locale: 'en', ...(config.branding.logo && { logo: { uri: config.branding.logo, alt_text: config.branding.name } }) }],
     clientAuthenticationConfig: { supportedMethods: [{ type: 'client-attestation', config: attestation }] }, keyAttestationConfig: attestation,
     credentialConfigurations: configurations, sdJwtVcTypeMetadataConfiguration: scaTypeMetadata(config.branding, config.typeParents) });

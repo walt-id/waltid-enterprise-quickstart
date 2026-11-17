@@ -24,7 +24,7 @@ import { loadTrustSource, listTrustRegistrySources, resolveTrustCertificateChain
 /** Run explicitly against a disposable local API; never consumes customer registrations. */
 test('synthetic provisioning, scoped journeys, trust rejection and authenticated callbacks', async () => {
   const config = readScaPidConfig(process.env.SCA_PID_TEST_CONFIG!);
-  assert(config.transport === 'local' && Object.values(config.trust).every(t => t.kind === 'fixture'));
+  assert(config.transport === 'local' && Object.values(config.trust).every(t => t.kind === 'fixture' || t.kind === 'roots'));
   config.tenant = `test-${randomUUID()}`;
   const ctx = scaPidContext(config, process.env.SCA_PID_TEST_ADMIN_TOKEN!, process.cwd());
   // Exercise actual dispatch and safe console output, then verify idempotent setup.
@@ -44,29 +44,40 @@ test('synthetic provisioning, scoped journeys, trust rejection and authenticated
   await setupScaPid(ctx, config);
   const { orgClient: admin, tenantPath: target } = ctx;
   const certificate = async (id: string) => extractCertificatePem((await admin.get(`/v1/${target}.x509-store.${id}/x509-store-api/certificates`)).data)!;
-  const root = await certificate('iaca'), leaf = await certificate('sca');
-  await admin.post(`/v1/${target}.kms.unregistered/kms-service-api/keys/generate`, { backend: 'jwk', keyType: 'secp256r1' });
-  const unregisteredPem = await createGeneratedCertificate(ctx, 'unregistered', { storeRef: `${target}.x509-store`,
-    subjectKeyRef: `${target}.kms.unregistered`, issuerKeyRef: `${target}.kms.iaca`, issuerCertificateRef: `${target}.x509-store.iaca`,
-    subjectDn: 'C=AT,CN=Example unregistered signer', basicConstraintsCa: false, keyUsage: ['digitalSignature'],
-    extendedKeyUsageOids: ['1.3.6.1.5.5.7.3.2'], ...certificateValidityWindow(180),
-  }, 'unregistered', undefined, { createOnly: true });
-  await validateCertificateChain([new X509Certificate(unregisteredPem), new X509Certificate(root)], [new X509Certificate(root)], { algorithms: ['ES256'] });
-  await proveSigningKey(admin, `${target}.kms.unregistered`, new X509Certificate(unregisteredPem).publicKey);
-  const unregistered = await resolveTrustCertificateChain(ctx, { certificateChainPemOrDer: [unregisteredPem, root],
-    expectedEntityType: trustPolicy(config, 'sca').expectedEntityType, expectedServiceType: trustPolicy(config, 'sca').expectedServiceType });
-  assert.equal(unregistered.decision, 'NOT_TRUSTED', 'A valid signer absent from registrations must be rejected without a processing failure');
-  const lote = buildCertificateAnchorLote('unsigned', 'AT', [{ id: 'example', legalName: 'Example', country: 'AT', serviceName: 'Example',
-    serviceType: 'http://uri.etsi.org/TrstSvc/Svctype/EAA', certificatePem: leaf }]);
-  const unsigned = await loadTrustSource(ctx, { sourceId: 'unsigned-control', content: JSON.stringify(lote), acceptancePolicy: 'REQUIRE_AUTHENTICATED' });
-  assert.equal(unsigned.success, false);
-  assert(!unsigned.assurance?.accepted);
-  const wrongSigner = (await admin.post(`/v1/${target}.kms.verifier/kms-service-api/keys/sign`, {
-    format: 'jwt', plaintext: lote, headers: { x5c: [certificatePemToDerBase64(await certificate('verifier'))] },
-  })).data.jwt;
-  const rejected = await loadTrustSource(ctx, { sourceId: 'untrusted-source-control', content: wrongSigner, acceptancePolicy: 'REQUIRE_AUTHENTICATED', trustedSignerCertificates: [leaf] });
-  assert.equal(rejected.success, false);
-  assert(!(await listTrustRegistrySources(ctx)).some(s => ['unsigned-control', 'untrusted-source-control'].includes(s.sourceId)));
+  if (config.trust.sca.kind === 'roots') {
+    const resources = await ctx.listResources(target);
+    assert(!resources.some(r => r.type === 'trust-registry'), 'Roots-only setup must not create a registry');
+    for (const id of [RESOURCES.issuer, RESOURCES.wallet, RESOURCES.verifier2]) {
+      const service = resources.find(r => r._id === `${target}.${id}`);
+      assert(service);
+      assert(!JSON.stringify(service).includes(`${target}.${RESOURCES.trustRegistry}`), 'Roots-only services must not depend on a registry');
+    }
+  } else {
+    const root = await certificate('iaca'), leaf = await certificate('sca');
+    await admin.post(`/v1/${target}.kms.unregistered/kms-service-api/keys/generate`, { backend: 'jwk', keyType: 'secp256r1' });
+    const unregisteredPem = await createGeneratedCertificate(ctx, 'unregistered', { storeRef: `${target}.x509-store`,
+      subjectKeyRef: `${target}.kms.unregistered`, issuerKeyRef: `${target}.kms.iaca`, issuerCertificateRef: `${target}.x509-store.iaca`,
+      subjectDn: 'C=AT,CN=Example unregistered signer', basicConstraintsCa: false, keyUsage: ['digitalSignature'],
+      extendedKeyUsageOids: ['1.3.6.1.5.5.7.3.2'], ...certificateValidityWindow(180),
+    }, 'unregistered', undefined, { createOnly: true });
+    await validateCertificateChain([new X509Certificate(unregisteredPem), new X509Certificate(root)], [new X509Certificate(root)], { algorithms: ['ES256'] });
+    await proveSigningKey(admin, `${target}.kms.unregistered`, new X509Certificate(unregisteredPem).publicKey);
+    const policy = await trustPolicy(config, 'sca');
+    const unregistered = await resolveTrustCertificateChain(ctx, { certificateChainPemOrDer: [unregisteredPem, root],
+      expectedEntityType: policy.expectedEntityType, expectedServiceType: policy.expectedServiceType });
+    assert.equal(unregistered.decision, 'NOT_TRUSTED', 'A valid signer absent from registrations must be rejected without a processing failure');
+    const lote = buildCertificateAnchorLote('unsigned', 'AT', [{ id: 'example', legalName: 'Example', country: 'AT', serviceName: 'Example',
+      serviceType: 'http://uri.etsi.org/TrstSvc/Svctype/EAA', certificatePem: leaf }]);
+    const unsigned = await loadTrustSource(ctx, { sourceId: 'unsigned-control', content: JSON.stringify(lote), acceptancePolicy: 'REQUIRE_AUTHENTICATED' });
+    assert.equal(unsigned.success, false);
+    assert(!unsigned.assurance?.accepted);
+    const wrongSigner = (await admin.post(`/v1/${target}.kms.verifier/kms-service-api/keys/sign`, {
+      format: 'jwt', plaintext: lote, headers: { x5c: [certificatePemToDerBase64(await certificate('verifier'))] },
+    })).data.jwt;
+    const rejected = await loadTrustSource(ctx, { sourceId: 'untrusted-source-control', content: wrongSigner, acceptancePolicy: 'REQUIRE_AUTHENTICATED', trustedSignerCertificates: [leaf] });
+    assert.equal(rejected.success, false);
+    assert(!(await listTrustRegistrySources(ctx)).some(s => ['unsigned-control', 'untrusted-source-control'].includes(s.sourceId)));
+  }
 
   const reference = `${target}.test-access`, role = `/v1/${target}.journey-operator/roles-api/roles`;
   const key = (await admin.post(`/v1/${reference}/apikeys-api/api-keys/create`, { name: 'Disposable scenario test', expiration: '1h' })).data;

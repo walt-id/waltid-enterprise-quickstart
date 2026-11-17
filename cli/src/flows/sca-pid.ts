@@ -1,11 +1,13 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
+import { readFile } from 'node:fs/promises';
 import { setTimeout as delay } from 'node:timers/promises';
 import { CommandContext } from '../context.js';
 import { ScaPidConfig, ScaProfileId, SCA_PROFILE_IDS, SCA_PAYMENT_TYPE, SIGNER_ROLES, scaProfile, PID, holderKeyReference } from '../sca-pid-config.js';
 import { RESOURCES } from '../config.js';
 import { SCA_PID_SAMPLE } from '../fixtures/sca-pid.js';
 import { trustPolicy } from '../commands/setup/sca-pid.js';
+import { parseCertificates } from '../commands/setup/certificates.js';
 
 type Policy = { policy: string; [key: string]: unknown };
 const PRESENTATION_CHECKS = {
@@ -106,6 +108,10 @@ export async function flowScaPid(ctx: CommandContext, config: ScaPidConfig, auth
   const metadata = (await api.get(`/.well-known/openid-credential-issuer${issuer}/openid4vci`, { auth: false })).data;
   const outcomes: Array<{ profile: ScaProfileId; presentation: string; controls: number; payments: string[] }> = [];
   const holders = new Set<string>();
+  const trustPolicies = { sca: await trustPolicy(config, 'sca'), pid: await trustPolicy(config, 'pid') };
+  // A different role's leaf is a valid certificate, but cannot anchor either credential signer.
+  const wrongAnchor = config.trust.verifier.kind === 'roots'
+    ? parseCertificates(await readFile(config.trust.verifier.chainFile, 'utf8'))[0].toString() : undefined;
 
   for (const id of SCA_PROFILE_IDS) {
     const profile = scaProfile(id, config.branding);
@@ -139,8 +145,8 @@ export async function flowScaPid(ctx: CommandContext, config: ScaPidConfig, auth
     const received = (await api.get(`${wallet}/credentials/${ids.sca}`)).data;
     assert.equal(received.metadata?.credentialDisplay?.[0]?.name, profile.name);
     const policies: Record<string, Policy[]> = {
-      sca: [trustPolicy(config, 'sca'), { policy: 'expiration', requireField: true }, { policy: 'not-before', requireField: true }, { policy: 'vct-integrity' }, { policy: 'schema', schema: profile.schema }],
-      pid: [trustPolicy(config, 'pid')],
+      sca: [trustPolicies.sca, { policy: 'expiration', requireField: true }, { policy: 'not-before', requireField: true }, { policy: 'vct-integrity' }, { policy: 'schema', schema: profile.schema }],
+      pid: [trustPolicies.pid],
     };
     async function createSession(specific = policies, transactionData?: ReturnType<typeof payment>[]) {
       const session = (await api.post(`${verifier}/verification-session/create`, {
@@ -188,10 +194,11 @@ export async function flowScaPid(ctx: CommandContext, config: ScaPidConfig, auth
     const result = await send(positive, token);
     assertPolicyOutcome(result, policies);
     assert.deepEqual(Object.keys(result.presented_credentials ?? {}).sort(), ['pid', 'sca']);
-    for (const role of ['sca', 'pid']) {
+    for (const role of ['sca', 'pid'] as const) {
       const trust = result.policy_results!.specific_vc_policies![role].find(
-        p => p.policy.policy === 'etsi-trust-list')!.result;
-      assert(trust.trusted && trust.authenticity === 'AUTHENTICATED' && trust.sourceFreshness === 'FRESH');
+        p => p.policy.policy === trustPolicies[role].policy)!.result;
+      assert(trust.trusted);
+      if (config.trust[role].kind !== 'roots') assert(trust.authenticity === 'AUTHENTICATED' && trust.sourceFreshness === 'FRESH');
     }
     const integrity = result.policy_results!.specific_vc_policies!.sca.find(
       p => p.policy.policy === 'vct-integrity')!.result;
@@ -213,9 +220,10 @@ export async function flowScaPid(ctx: CommandContext, config: ScaPidConfig, auth
     controls++;
     for (const role of ['sca', 'pid']) {
       const changed = structuredClone(policies);
-      changed[role][0].expectedEntityType = role === 'sca' ? 'PID_PROVIDER' : 'WALLET_PROVIDER';
+      if (wrongAnchor) changed[role][0].trustRoots = [wrongAnchor];
+      else changed[role][0].expectedEntityType = role === 'sca' ? 'PID_PROVIDER' : 'WALLET_PROVIDER';
       const session = await createSession(changed);
-      assertPolicyOutcome(await send(session, await build(session)), changed, `${role}:etsi-trust-list`);
+      assertPolicyOutcome(await send(session, await build(session)), changed, `${role}:${changed[role][0].policy}`);
       controls++;
     }
     const original = await createSession();

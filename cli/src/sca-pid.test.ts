@@ -32,14 +32,34 @@ test('scenario validates every trust role and transport before context or I/O', 
   assert.throws(() => validateScaPidConfig({ ...local, baseUrl: 'http://localhost.example.org:17685' }));
 });
 
-test('registered trust requires independent inputs and the role-specific entity type', () => {
+test('registered trust requires independent inputs and the role-specific entity type', async () => {
   const c = config();
   c.trust.sca = { kind: 'registered', chainFile: 'chain.pem', anchorsFile: 'anchors.pem', sourceFile: 'source.xml', sourceSignerFile: 'signer.pem',
     sourceUrl: 'https://trust.example.org/list', publicKeySha256: 'a'.repeat(64), entityType: 'TRUST_SERVICE_PROVIDER', serviceType: 'http://uri.etsi.org/TrstSvc/Svctype/EAA' };
   validateScaPidConfig(c);
-  assert.deepEqual(trustPolicy(c, 'sca'), { policy: 'etsi-trust-list', expectedEntityType: 'TRUST_SERVICE_PROVIDER', expectedServiceType: 'http://uri.etsi.org/TrstSvc/Svctype/EAA', requireAuthenticated: true, allowStaleSource: false });
+  assert.deepEqual(await trustPolicy(c, 'sca'), { policy: 'etsi-trust-list', expectedEntityType: 'TRUST_SERVICE_PROVIDER', expectedServiceType: 'http://uri.etsi.org/TrstSvc/Svctype/EAA', requireAuthenticated: true, allowStaleSource: false });
   c.trust.sca.entityType = 'PID_PROVIDER';
   assert.throws(() => validateScaPidConfig(c), /does not match/);
+});
+
+test('roots-only trust requires all roles and refuses registration fields', () => {
+  const c = config();
+  const root = mkdtempSync(join(tmpdir(), 'sca-roots-config-'));
+  try {
+    for (const role of ['sca', 'pid', 'verifier', 'provider'] as const) c.trust[role] = {
+      kind: 'roots', chainFile: `${role}.pem`, anchorsFile: 'root.pem', publicKeySha256: 'a'.repeat(64),
+    };
+    const input = join(root, 'scenario.json');
+    writeFileSync(input, JSON.stringify(c));
+    assert.equal((readScaPidConfig(input).trust.sca as { chainFile: string }).chainFile, join(root, 'sca.pem'));
+    for (const field of ['sourceFile', 'sourceSignerFile', 'sourceUrl', 'entityType', 'serviceType']) {
+      const changed = structuredClone(c);
+      Object.assign(changed.trust.sca, { [field]: 'unused-registration' });
+      assert.throws(() => validateScaPidConfig(changed), /registration inputs/);
+    }
+    c.trust.provider = { kind: 'fixture' };
+    assert.throws(() => validateScaPidConfig(c), /all four roles/);
+  } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
 test('scoped scenario context never reads administrator credentials or writes body logs', () => {
