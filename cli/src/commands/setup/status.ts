@@ -36,6 +36,21 @@ export function credentialStatusRegistry(): Record<string, unknown> {
   };
 }
 
+/**
+ * Capacity settings for the status service. With CREDENTIAL_STATUS_AUTO_ROLLOVER=true the service
+ * starts a new list (`<id>-v2`, `-v3`, ...) once the active one reaches its critical threshold
+ * (95% of 32000 entries by default), and the profile keeps pointing at the base list. Read only when
+ * the service is created: an existing service keeps its configuration.
+ */
+export function credentialStatusCapacity(): Record<string, unknown> | undefined {
+  const value = process.env.CREDENTIAL_STATUS_AUTO_ROLLOVER;
+  if (!value) return undefined;
+  if (value !== 'true' && value !== 'false') {
+    throw new Error(`CREDENTIAL_STATUS_AUTO_ROLLOVER must be 'true' or 'false' (got '${value}')`);
+  }
+  return value === 'true' ? { autoRollover: true } : undefined;
+}
+
 /** Copy of a request or response with the S3 secret key masked, for the saved JSON logs */
 function redactRegistrySecret(data: any): any {
   return JSON.parse(JSON.stringify(data, (key, value) => (key === 'secretKey' && value ? '[redacted]' : value)));
@@ -45,14 +60,18 @@ function redactRegistrySecret(data: any): any {
 export async function setupCreateCredentialStatusService(ctx: CommandContext): Promise<void> {
   const step = ctx.nextStep();
   const registry = credentialStatusRegistry();
-  ctx.log(`Create credential status service (${registry.type} registry)`, 'SETUP');
+  const capacity = credentialStatusCapacity();
+  ctx.log(
+    `Create credential status service (${registry.type} registry${capacity ? ', auto-rollover' : ''})`,
+    'SETUP'
+  );
 
   const { created } = await ctx.tolerantCreate(
     'Credential status service',
     async () => {
       const request = {
         type: 'credential-status',
-        config: { registry },
+        config: { registry, ...(capacity && { capacity }) },
       };
       ctx.saveJson('create-credential-status-service-request.json', redactRegistrySecret(request), step);
 
