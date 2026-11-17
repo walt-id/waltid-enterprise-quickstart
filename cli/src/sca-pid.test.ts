@@ -1,13 +1,14 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { mkdtempSync, readFileSync, existsSync, mkdirSync, writeFileSync, symlinkSync, statSync, rmSync } from 'node:fs';
+import { mkdtempSync, existsSync, writeFileSync, rmSync } from 'node:fs';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { readScaPidConfig, validateScaPidConfig, scaPidContext, scaProfile, scaTypeMetadata, SCA_PROFILE_IDS,
   signerCertificateRequirements } from './sca-pid-config.js';
 import { assertConfigurationSubset } from './context.js';
 import { assertPolicyOutcome, assertMissingCredential, assertProfilePresentation, type VerificationSession } from './flows/sca-pid.js';
-import { writePrivateResult } from './result.js';
 import { trustPolicy } from './commands/setup/sca-pid.js';
 
 const config = () => readScaPidConfig(new URL('../sca-pid.example.json', import.meta.url).pathname);
@@ -72,23 +73,24 @@ test('existing resource drift fails before creation while matching server-owned 
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
-test('receipt reruns clear an earlier success and never follow an output symlink', () => {
-  const root = mkdtempSync(join(tmpdir(), 'sca-receipt-'));
+test('actual CLI fails safely without administrator fallback or confidential output', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'sca-cli-'));
+  const input = join(root, 'private-input-sentinel.json');
   try {
-    const receipt = join(root, 'receipt.json');
-    writePrivateResult(receipt, { outcome: 'successful' });
-    writePrivateResult(receipt, { outcome: 'running' });
-    assert.equal(JSON.parse(readFileSync(receipt, 'utf8')).outcome, 'running');
-    assert.equal(statSync(receipt).mode & 0o777, 0o600);
-    const other = join(root, 'untouched');
-    writeFileSync(other, 'unchanged');
-    const link = join(root, 'link.json');
-    symlinkSync(other, link);
-    writePrivateResult(link, { outcome: 'failed' });
-    assert.equal(readFileSync(other, 'utf8'), 'unchanged');
-    const directoryLink = join(root, 'directory-link');
-    symlinkSync(root, directoryLink);
-    assert.throws(() => writePrivateResult(join(directoryLink, 'result.json'), {}));
+    for (const operation of ['setup', 'flow']) {
+      for (const [value, token, stage] of [[{ secret: 'private-value-sentinel' }, 'token-sentinel', 'configuration'], [config(), '', 'authentication']] as const) {
+        writeFileSync(input, JSON.stringify(value));
+        await assert.rejects(promisify(execFile)(process.execPath,
+          ['--import', 'tsx', new URL('../walt.ts', import.meta.url).pathname, `--${operation}-sca-pid`, input], {
+            timeout: 10_000, env: { ...process.env, SCA_PID_API_TOKEN: token, ADMIN_PASSWORD: 'admin-secret-sentinel' },
+          }), (error: any) => {
+            assert.equal(error.code, 1);
+            assert.equal(error.stdout, '');
+            assert.equal(error.stderr.trim(), `SCA/PID ${operation} failed during ${stage}. Check private server diagnostics for details.`);
+            return true;
+          });
+      }
+    }
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 

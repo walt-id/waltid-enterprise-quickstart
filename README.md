@@ -186,7 +186,7 @@ The existing chart in `helm/` supports operator-managed configuration and storag
 
 - `api.image.digest` pins the API and license-request Job to the same immutable image; it takes precedence over `tag`.
 - `api.existingConfigSecret` mounts a pre-provisioned Secret as the complete `/config` directory for both workloads and suppresses the inline ConfigMap. Include their database, installation and native license configuration.
-- `api.hpa.enabled: false`, `api.replicaCount: 1` and `api.strategy.type: Recreate` configure a single writer. Defaults retain autoscaling and rolling updates.
+- `api.hpa.minReplicas: 1`, `api.hpa.maxReplicas: 1` and `api.strategy.type: Recreate` configure a single writer. Defaults retain autoscaling and rolling updates.
 - `api.extraEnv`, `api.extraVolumes` and `api.extraVolumeMounts` extend the API pod using existing configuration, Secrets and storage. These options do not create or replace storage.
 
 License identity and encryption material remain operator-owned; see [Kubernetes licensing](LICENSING.md#kubernetes--helm). Inspect rendered resources and retain the existing namespace, database, Secrets and volumes during upgrades.

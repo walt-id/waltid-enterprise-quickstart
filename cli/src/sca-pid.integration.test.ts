@@ -4,7 +4,7 @@ import { randomUUID, randomBytes } from 'node:crypto';
 import { createServer } from 'node:http';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { mkdtemp, readFile, writeFile, rm } from 'node:fs/promises';
+import { mkdtemp, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { once } from 'node:events';
@@ -27,21 +27,17 @@ test('synthetic provisioning, scoped journeys, trust rejection and authenticated
   assert(config.transport === 'local' && Object.values(config.trust).every(t => t.kind === 'fixture'));
   config.tenant = `test-${randomUUID()}`;
   const ctx = scaPidContext(config, process.env.SCA_PID_TEST_ADMIN_TOKEN!, process.cwd());
-  // Exercise actual dispatch and successful results, then verify idempotent setup.
+  // Exercise actual dispatch and safe console output, then verify idempotent setup.
   const directory = await mkdtemp(join(tmpdir(), 'sca-pid-integration-'));
   try {
-    const inputPath = join(directory, 'input.json'), resultPath = join(directory, 'result.json');
+    const inputPath = join(directory, 'input.json');
     await writeFile(inputPath, JSON.stringify(config), { mode: 0o600 });
     const { stdout } = await promisify(execFile)(process.execPath,
       ['--import', 'tsx', new URL('../walt.ts', import.meta.url).pathname, '--setup-sca-pid', inputPath], {
         timeout: 120_000,
-        env: { ...process.env, SCA_PID_API_TOKEN: process.env.SCA_PID_TEST_ADMIN_TOKEN, SCA_PID_RESULT_FILE: resultPath },
+        env: { ...process.env, SCA_PID_API_TOKEN: process.env.SCA_PID_TEST_ADMIN_TOKEN },
       });
-    const result = JSON.parse(await readFile(resultPath, 'utf8'));
-    assert.equal(result.outcome, 'successful');
-    assert.equal(result.operation, 'setup');
-    assert(stdout.includes(result.runId));
-    assert(Date.parse(result.finishedAt) >= Date.parse(result.startedAt));
+    assert.deepEqual(JSON.parse(stdout), { operation: 'setup', outcome: 'successful' });
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

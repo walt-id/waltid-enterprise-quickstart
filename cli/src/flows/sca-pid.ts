@@ -127,9 +127,10 @@ export async function flowScaPid(ctx: CommandContext, config: ScaPidConfig, auth
         const grant = document.grants['urn:ietf:params:oauth:grant-type:pre-authorized_code'];
         const unauthenticated = await api.request('POST', `${issuer}/openid4vci/token`, new URLSearchParams({
           grant_type: 'urn:ietf:params:oauth:grant-type:pre-authorized_code', 'pre-authorized_code': grant['pre-authorized_code'],
-        }).toString(), { auth: false, contentType: 'application/x-www-form-urlencoded', allow: [401], expectedError: 'Client authentication is required for this endpoint' });
+        }).toString(), { auth: false, contentType: 'application/x-www-form-urlencoded', allow: [401] });
         assert.equal(unauthenticated.status, 401);
         assert.equal(unauthenticated.data.error, 'invalid_client');
+        assert(JSON.stringify(unauthenticated.data).includes('Client authentication is required for this endpoint'));
       }
       const received = (await api.post(`${wallet}/credentials/receive/pre-authorized`, { offerUrl: offer.credentialOffer, keyReference: holderRefs[role] })).data;
       assert.equal(received.credentialIds?.length, 1);
@@ -163,8 +164,12 @@ export async function flowScaPid(ctx: CommandContext, config: ScaPidConfig, auth
     async function build(s: Session, grants?: Record<string, string>, expectedError?: string) {
       const result = await api.request('POST', `${wallet}/credentials/present/build-vp-token`, {
         requestUrl: s.fullAuthorizationRequestUrl, keyReference: holderRefs.pid, selectedCredentialIds: { sca: [ids.sca], pid: [ids.pid] }, ...(grants && { scaAuthorizations: grants }),
-      }, expectedError ? { allow: [400], expectedError } : {});
-      if (expectedError) { assert.equal(result.status, 400); return ''; }
+      }, expectedError ? { allow: [400] } : {});
+      if (expectedError) {
+        assert.equal(result.status, 400);
+        assert(JSON.stringify(result.data).includes(expectedError), 'Presentation failed for an unexpected reason');
+        return '';
+      }
       assert.deepEqual(Object.keys(JSON.parse(result.data.vpToken)).sort(), ['pid', 'sca']);
       return result.data.vpToken as string;
     }

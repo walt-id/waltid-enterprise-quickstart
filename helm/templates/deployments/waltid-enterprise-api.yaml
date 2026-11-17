@@ -3,9 +3,6 @@ kind: Deployment
 metadata:
   name: {{ include "enterprise-stack.fullname" . }}-api
 spec:
-  {{- if not .Values.api.hpa.enabled }}
-  replicas: {{ .Values.api.replicaCount }}
-  {{- end }}
   strategy:
     {{- toYaml .Values.api.strategy | nindent 4 }}
   selector:
