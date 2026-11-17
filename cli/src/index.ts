@@ -86,7 +86,14 @@ import {
   runVerifierVariantsTeardown,
 } from './commands/index.js';
 
-import { flowEtsiTrustLists, flowCredentialRevocation, flowGovTrust, flowTrustListAssurance } from './flows/index.js';
+import {
+  flowEtsiTrustLists,
+  flowCredentialRevocation,
+  flowGovTrust,
+  flowTrustListAssurance,
+  flowWalletProviderTrust,
+  flowWalletProviderTrustDemo,
+} from './flows/index.js';
 
 // ============================================================================
 // CLI Setup
@@ -181,6 +188,8 @@ Credential Revocation Commands:
 Flows (special use cases):
   --flow-etsi-trust-lists  Run ETSI trust lists verification flow
   --flow-trust-list-assurance  Test certificate paths, signed LoTE, and verifier integration
+  --flow-wallet-provider-trust  Test Issuer2 wallet provider trust via the Trust Registry (WPT_SCENARIOS=a,b to filter)
+  --demo-wallet-provider-trust  Demo: issue only to wallets whose provider is on the trust list
   --flow-credential-revocation  Run credential revocation flow
   --flow-gov-trust         Run government trust list validation flow (requires --setup-gov-services)
 
@@ -346,6 +355,7 @@ async function main(): Promise<void> {
     '--run-wallet-present', '--run-assert-final-status', '--run-assert-final-status-failed',
     '--run-revoke-credential', '--run-unrevoke-credential', '--run-update-credential-status',
     '--flow-etsi-trust-lists', '--flow-trust-list-assurance', '--flow-credential-revocation', '--flow-gov-trust',
+    '--flow-wallet-provider-trust', '--demo-wallet-provider-trust',
   ];
   
   for (const arg of args) {
@@ -592,6 +602,16 @@ async function main(): Promise<void> {
 
     if (args.includes('--flow-trust-list-assurance')) {
       await flowTrustListAssurance(ctx);
+      return;
+    }
+
+    if (args.includes('--flow-wallet-provider-trust')) {
+      await flowWalletProviderTrust(ctx);
+      return;
+    }
+
+    if (args.includes('--demo-wallet-provider-trust')) {
+      await flowWalletProviderTrustDemo(ctx);
       return;
     }
 
