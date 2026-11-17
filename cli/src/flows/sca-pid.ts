@@ -91,8 +91,8 @@ export interface ScaAuthorizationRequest {
   requestUrl: string;
   credentialId: string;
   referenceToken: string;
-  /** The authority resolves and authenticates the request itself; this is not factor evidence. */
 }
+/** The authority resolves and authenticates the request itself; request inputs are not factor evidence. */
 export type ScaAuthorizer = (request: ScaAuthorizationRequest) => Promise<Record<string, string>>;
 
 export async function flowScaPid(ctx: CommandContext, config: ScaPidConfig, authorize?: ScaAuthorizer) {

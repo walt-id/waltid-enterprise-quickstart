@@ -1,6 +1,6 @@
 /**
  * HTTP client for making requests to the walt.id Enterprise API.
- *
+ * 
  * Features:
  * - Bearer token authentication
  * - Request/response logging
@@ -60,7 +60,7 @@ export interface HttpRequestOptions {
 
 /**
  * HTTP client with authentication and logging support.
- *
+ * 
  * @example
  * ```typescript
  * const client = new HttpClient('http://api.example.com');

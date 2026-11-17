@@ -30,7 +30,7 @@ export async function setupScaPid(ctx: CommandContext, config: ScaPidConfig): Pr
   const { tenantPath: target, orgClient: api } = ctx;
   const material: Partial<Record<SignerRole, Awaited<ReturnType<typeof readSigningMaterial>>>> = {};
   const sources: Partial<Record<SignerRole, { content: string; anchors: string[] }>> = {};
-  // Read and validate every supplied item before the first API mutation.
+  // Read supplied files and validate signing material before the first API mutation.
   for (const role of SIGNER_ROLES) {
     const trust = config.trust[role];
     if (trust.kind !== 'registered') continue;
