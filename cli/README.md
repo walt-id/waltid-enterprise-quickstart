@@ -261,4 +261,4 @@ npx tsx walt.ts --setup-all
 
 ## SCA/PID setup and flows
 
-See [SCA-PID.md](SCA-PID.md) for the explicit setup and scoped flow commands, registered trust inputs, callback behavior and deployment prerequisites.
+See [the SCA/PID guide](docs/sca-pid.md) for the explicit setup and scoped flow commands, registered trust inputs, callback behavior and deployment prerequisites.
