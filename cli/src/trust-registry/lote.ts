@@ -2,6 +2,7 @@ export const MDL_ISSUER_SERVICE_TYPE = 'urn:waltid:trust-service:mdl-issuer';
 export const RELYING_PARTY_SERVICE_TYPE = 'urn:waltid:trust-service:relying-party';
 export const LOTE_TYPE_EU_PID_PROVIDERS = 'http://uri.etsi.org/19602/LoTEType/EUPIDProvidersList';
 export const LOTE_TYPE_EU_WRP_RC_PROVIDERS = 'http://uri.etsi.org/19602/LoTEType/EUWRPRCProvidersList';
+export const LOTE_TYPE_EU_WALLET_PROVIDERS = 'http://uri.etsi.org/19602/LoTEType/EUWalletProvidersList';
 
 export interface LoteEntityInput {
   id: string;
@@ -29,15 +30,19 @@ function multilingualUri(uriValue: string): object {
   return { lang: 'en', uriValue };
 }
 
-/** Build the normative ETSI TS 119 602 V1.1.1 Annex A.1 JSON binding. */
+/**
+ * Build the normative ETSI TS 119 602 V1.1.1 Annex A.1 JSON binding.
+ *
+ * `nextUpdate` defaults to one year from now; `null` omits it.
+ */
 export function buildCertificateAnchorLote(
   listId: string,
   territory: string,
   entities: LoteEntityInput[],
-  loteType: string = LOTE_TYPE_EU_PID_PROVIDERS
+  loteType: string = LOTE_TYPE_EU_PID_PROVIDERS,
+  nextUpdate: Date | null = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000)
 ): object {
   const issueDate = new Date();
-  const nextUpdate = new Date(issueDate.getTime() + 365 * 24 * 60 * 60 * 1000);
 
   return {
     LoTE: {
@@ -60,7 +65,7 @@ export function buildCertificateAnchorLote(
         SchemeTerritory: territory,
         StatusDeterminationApproach: 'urn:waltid:trust-status:quickstart',
         ListIssueDateTime: etsiDate(issueDate),
-        NextUpdate: etsiDate(nextUpdate),
+        ...(nextUpdate ? { NextUpdate: etsiDate(nextUpdate) } : {}),
       },
       TrustedEntitiesList: entities.map(entity => {
         const digitalIdentity: Record<string, unknown> = {};
