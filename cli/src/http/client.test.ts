@@ -22,12 +22,20 @@ test('sensitive HTTP transport retains no bodies or identifiers on success or fa
       assert(init?.signal);
       return Response.json({ credential: 'response-sentinel' });
     };
-    assert.equal((await client.post('/offer?secret=query-sentinel', { privateKey: 'request-sentinel' })).data.credential, 'response-sentinel');
+    assert.equal(
+      (await client.post('/offer?secret=query-sentinel', { privateKey: 'request-sentinel' })).data.credential,
+      'response-sentinel',
+    );
     assert.deepEqual(client.getHttpLog(), []);
     globalThis.fetch = async () => Response.json({ secret: 'failure-sentinel' }, { status: 403 });
-    await assert.rejects(client.get('/private'), error => !JSON.stringify(error).includes('failure-sentinel') && (error as any).status === 403);
+    await assert.rejects(
+      client.get('/private'),
+      (error) => !JSON.stringify(error).includes('failure-sentinel') && (error as any).status === 403,
+    );
     assert.deepEqual(client.getHttpLog(), []);
-  } finally { globalThis.fetch = original; }
+  } finally {
+    globalThis.fetch = original;
+  }
 });
 
 test('strict transport rejects cross-origin paths before fetch and supports anonymous management controls', async () => {
@@ -36,11 +44,18 @@ test('strict transport rejects cross-origin paths before fetch and supports anon
   const client = new HttpClient('https://api.example.org', { logging: 'none', strictTransport: true });
   client.setToken('not-for-anonymous-call');
   try {
-    globalThis.fetch = async (_url, init) => { calls++; assert(!('Authorization' in (init!.headers as object))); return new Response('', { status: 403 }); };
-    for (const path of ['//other.example.org', '/\\other.example.org', 'https://other.example.org']) await assert.rejects(client.get(path));
+    globalThis.fetch = async (_url, init) => {
+      calls++;
+      assert(!('Authorization' in (init!.headers as object)));
+      return new Response('', { status: 403 });
+    };
+    for (const path of ['//other.example.org', '/\\other.example.org', 'https://other.example.org'])
+      await assert.rejects(client.get(path));
     assert.equal(calls, 0);
     assert.equal((await client.request('POST', '/management', {}, { auth: false, allow: [403] })).status, 403);
-  } finally { globalThis.fetch = original; }
+  } finally {
+    globalThis.fetch = original;
+  }
 });
 
 test('expected rejection cannot be satisfied by a different failure or by success', async () => {
@@ -48,40 +63,107 @@ test('expected rejection cannot be satisfied by a different failure or by succes
   const client = new HttpClient('https://api.example.org', { logging: 'none' });
   try {
     globalThis.fetch = async () => new Response('another reason', { status: 400 });
-    await assert.rejects(client.request('POST', '/presentation', {}, { allow: [400], expectedError: 'missing evidence' }));
+    await assert.rejects(
+      client.request('POST', '/presentation', {}, { allow: [400], expectedError: 'missing evidence' }),
+    );
     globalThis.fetch = async () => new Response('missing evidence', { status: 400 });
-    assert.equal((await client.request('POST', '/presentation', {}, { allow: [400], expectedError: 'missing evidence' })).status, 400);
+    assert.equal(
+      (await client.request('POST', '/presentation', {}, { allow: [400], expectedError: 'missing evidence' })).status,
+      400,
+    );
     globalThis.fetch = async () => Response.json({ accepted: true });
-    await assert.rejects(client.request('POST', '/presentation', {}, { allow: [400], expectedError: 'missing evidence' }));
-  } finally { globalThis.fetch = original; }
+    await assert.rejects(
+      client.request('POST', '/presentation', {}, { allow: [400], expectedError: 'missing evidence' }),
+    );
+  } finally {
+    globalThis.fetch = original;
+  }
 });
 
 test('real HTTPS verifies certificates and refuses to send credentials to redirect targets', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'cli-https-'));
   const exec = promisify(execFile);
   let leaked = 0;
-  const sink = httpServer((_req, res) => { leaked++; res.end('unexpected'); });
+  const sink = httpServer((_req, res) => {
+    leaked++;
+    res.end('unexpected');
+  });
   let server: ReturnType<typeof httpsServer> | undefined;
   try {
-    const cert = join(directory, 'cert.pem'), key = join(directory, 'key.pem');
-    await exec('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-keyout', key, '-out', cert, '-days', '2',
-      '-subj', '/CN=localhost', '-addext', 'subjectAltName=DNS:localhost']);
-    sink.listen(0, '127.0.0.1'); await once(sink, 'listening');
+    const cert = join(directory, 'cert.pem'),
+      key = join(directory, 'key.pem');
+    await exec('openssl', [
+      'req',
+      '-x509',
+      '-newkey',
+      'rsa:2048',
+      '-nodes',
+      '-keyout',
+      key,
+      '-out',
+      cert,
+      '-days',
+      '2',
+      '-subj',
+      '/CN=localhost',
+      '-addext',
+      'subjectAltName=DNS:localhost',
+    ]);
+    sink.listen(0, '127.0.0.1');
+    await once(sink, 'listening');
     server = httpsServer({ cert: await readFile(cert), key: await readFile(key) }, (req, res) => {
-      if (req.url === '/redirect') res.writeHead(302, { Location: `http://127.0.0.1:${(sink.address() as AddressInfo).port}/` }).end();
-      else { assert.equal(req.headers.authorization, 'Bearer synthetic-token'); res.writeHead(200, { 'content-type': 'application/json' }).end('{"ok":true}'); }
+      if (req.url === '/redirect')
+        res.writeHead(302, { Location: `http://127.0.0.1:${(sink.address() as AddressInfo).port}/` }).end();
+      else {
+        assert.equal(req.headers.authorization, 'Bearer synthetic-token');
+        res.writeHead(200, { 'content-type': 'application/json' }).end('{"ok":true}');
+      }
     });
-    server.listen(0, '127.0.0.1'); await once(server, 'listening');
+    server.listen(0, '127.0.0.1');
+    await once(server, 'listening');
     const base = `https://localhost:${(server.address() as AddressInfo).port}`;
     await assert.rejects(new HttpClient(base, { strictTransport: true, logging: 'none' }).get('/ok'));
     const script = `import assert from 'node:assert/strict'; import { HttpClient } from ${JSON.stringify(new URL('./client.ts', import.meta.url).href)};
       const client = new HttpClient(${JSON.stringify(base)}, { strictTransport: true, logging: 'none', timeoutMs: 5000 });
       client.setToken('synthetic-token'); assert.deepEqual((await client.get('/ok')).data, {ok:true});
       await assert.rejects(client.get('/redirect')); assert.deepEqual(client.getHttpLog(), []);`;
-    await exec(process.execPath, ['--import', 'tsx', '--input-type=module', '-e', script], { timeout: 10000, env: { ...process.env, NODE_EXTRA_CA_CERTS: cert } });
+    await exec(process.execPath, ['--import', 'tsx', '--input-type=module', '-e', script], {
+      timeout: 10000,
+      env: { ...process.env, NODE_EXTRA_CA_CERTS: cert },
+    });
     assert.equal(leaked, 0);
   } finally {
-    for (const s of [server, sink]) if (s?.listening) { s.closeAllConnections(); await new Promise<void>(resolve => s.close(() => resolve())); }
+    for (const s of [server, sink])
+      if (s?.listening) {
+        s.closeAllConnections();
+        await new Promise<void>((resolve) => s.close(() => resolve()));
+      }
     await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('ordinary HTTP callers retain diagnostics, raw bodies and redacted logs; empty JSON responses are accepted', async () => {
+  const original = globalThis.fetch;
+  const client = new HttpClient('https://api.example.org');
+  client.setToken('private-token');
+  try {
+    globalThis.fetch = async (_url, options) => {
+      assert.equal(options?.body, 'resource.path');
+      assert.equal((options?.headers as Record<string, string>)['Content-Type'], 'text/plain');
+      return new Response(null, { status: 204, headers: { 'content-type': 'application/json' } });
+    };
+    assert.equal((await client.postRaw('/dependencies', 'resource.path', 'text/plain')).status, 204);
+    assert.equal(client.getHttpLog()[0].request.headers.Authorization, '[REDACTED]');
+    globalThis.fetch = async (_url, options) => {
+      assert.equal(options?.body, 'false');
+      return Response.json({ reason: 'ordinary diagnostic' }, { status: 409, statusText: 'Conflict' });
+    };
+    await assert.rejects(
+      client.post('/resource', false),
+      (error: any) => error.message === 'HTTP 409: Conflict' && error.response.data.reason === 'ordinary diagnostic',
+    );
+    assert.equal(client.getHttpLog().length, 2);
+  } finally {
+    globalThis.fetch = original;
   }
 });

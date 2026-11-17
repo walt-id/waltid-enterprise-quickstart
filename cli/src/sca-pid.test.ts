@@ -1,11 +1,34 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { mkdtempSync, readFileSync, existsSync, mkdirSync, writeFileSync, symlinkSync, statSync, rmSync } from 'node:fs';
+import {
+  mkdtempSync,
+  readFileSync,
+  existsSync,
+  mkdirSync,
+  writeFileSync,
+  symlinkSync,
+  statSync,
+  rmSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { readScaPidConfig, validateScaPidConfig, scaPidContext, scaProfile, scaTypeMetadata, SCA_PROFILE_IDS } from './sca-pid-config.js';
-import { assertConfigurationSubset, writePrivateReceipt } from './context.js';
-import { PRESENTATION_CHECKS, assertPolicyOutcome, assertMissingCredential, assertProfilePresentation, type VerificationSession } from './flows/sca-pid.js';
+import {
+  readScaPidConfig,
+  validateScaPidConfig,
+  scaPidContext,
+  scaProfile,
+  scaTypeMetadata,
+  SCA_PROFILE_IDS,
+  signerCertificateRequirements,
+} from './sca-pid-config.js';
+import { assertConfigurationSubset } from './context.js';
+import {
+  assertPolicyOutcome,
+  assertMissingCredential,
+  assertProfilePresentation,
+  type VerificationSession,
+} from './flows/sca-pid.js';
+import { writePrivateResult } from './result.js';
 import { trustPolicy } from './commands/setup/sca-pid.js';
 
 const config = () => readScaPidConfig(new URL('../sca-pid.example.json', import.meta.url).pathname);
@@ -13,18 +36,42 @@ const config = () => readScaPidConfig(new URL('../sca-pid.example.json', import.
 test('scenario validates every trust role and transport before context or I/O', () => {
   validateScaPidConfig(config());
   const invalid: Array<(c: any) => void> = [
-    c => { c.baseUrl = 'http://remote.example.org'; },
-    c => { c.baseUrl += '/path'; },
-    c => { c.baseUrl = 'https://user:password@example.org'; },
-    c => { c.tenant = '../another'; },
-    c => { delete c.trust.provider; },
-    c => { c.trust.sca = { kind: 'registered' }; },
-    c => { c.trust.sca = { kind: 'fixture', sourceFile: '/private/source.xml' }; },
-    c => { c.callbackUrl = 'http://remote.example.org/callback'; },
-    c => { c.branding.logo = 'http://remote.example.org/logo'; },
-    c => { c.token = 'never-in-config'; },
+    (c) => {
+      c.baseUrl = 'http://remote.example.org';
+    },
+    (c) => {
+      c.baseUrl += '/path';
+    },
+    (c) => {
+      c.baseUrl = 'https://user:password@example.org';
+    },
+    (c) => {
+      c.tenant = '../another';
+    },
+    (c) => {
+      delete c.trust.provider;
+    },
+    (c) => {
+      c.trust.sca = { kind: 'registered' };
+    },
+    (c) => {
+      c.trust.sca = { kind: 'fixture', sourceFile: '/private/source.xml' };
+    },
+    (c) => {
+      c.callbackUrl = 'http://remote.example.org/callback';
+    },
+    (c) => {
+      c.branding.logo = 'http://remote.example.org/logo';
+    },
+    (c) => {
+      c.token = 'never-in-config';
+    },
   ];
-  for (const mutate of invalid) { const c = config(); mutate(c); assert.throws(() => validateScaPidConfig(c)); }
+  for (const mutate of invalid) {
+    const c = config();
+    mutate(c);
+    assert.throws(() => validateScaPidConfig(c));
+  }
   const local = { ...config(), baseUrl: 'http://enterprise.localhost:17685', transport: 'local' as const };
   assert.equal(validateScaPidConfig(local).baseUrl, local.baseUrl);
   assert.throws(() => validateScaPidConfig({ ...local, baseUrl: 'http://localhost.example.org:17685' }));
@@ -32,10 +79,25 @@ test('scenario validates every trust role and transport before context or I/O', 
 
 test('registered trust requires independent inputs and the role-specific entity type', () => {
   const c = config();
-  c.trust.sca = { kind: 'registered', chainFile: 'chain.pem', anchorsFile: 'anchors.pem', sourceFile: 'source.xml', sourceSignerFile: 'signer.pem',
-    sourceUrl: 'https://trust.example.org/list', publicKeySha256: 'a'.repeat(64), entityType: 'TRUST_SERVICE_PROVIDER', serviceType: 'http://uri.etsi.org/TrstSvc/Svctype/EAA' };
+  c.trust.sca = {
+    kind: 'registered',
+    chainFile: 'chain.pem',
+    anchorsFile: 'anchors.pem',
+    sourceFile: 'source.xml',
+    sourceSignerFile: 'signer.pem',
+    sourceUrl: 'https://trust.example.org/list',
+    publicKeySha256: 'a'.repeat(64),
+    entityType: 'TRUST_SERVICE_PROVIDER',
+    serviceType: 'http://uri.etsi.org/TrstSvc/Svctype/EAA',
+  };
   validateScaPidConfig(c);
-  assert.deepEqual(trustPolicy(c, 'sca'), { policy: 'etsi-trust-list', expectedEntityType: 'TRUST_SERVICE_PROVIDER', expectedServiceType: 'http://uri.etsi.org/TrstSvc/Svctype/EAA', requireAuthenticated: true, allowStaleSource: false });
+  assert.deepEqual(trustPolicy(c, 'sca'), {
+    policy: 'etsi-trust-list',
+    expectedEntityType: 'TRUST_SERVICE_PROVIDER',
+    expectedServiceType: 'http://uri.etsi.org/TrstSvc/Svctype/EAA',
+    requireAuthenticated: true,
+    allowStaleSource: false,
+  });
   c.trust.sca.entityType = 'PID_PROVIDER';
   assert.throws(() => validateScaPidConfig(c), /does not match/);
 });
@@ -53,7 +115,9 @@ test('scoped scenario context never reads administrator credentials or writes bo
     ctx.saveHttpLog();
     assert(!existsSync(ctx.workdir));
     assert.throws(() => scaPidContext(config(), '', root));
-  } finally { rmSync(root, { recursive: true, force: true }); }
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test('existing resource drift fails before creation while matching server-owned additions are accepted', async () => {
@@ -61,59 +125,151 @@ test('existing resource drift fails before creation while matching server-owned 
   try {
     const ctx = scaPidContext(config(), 'fixture-token', root);
     let writes = 0;
-    Object.assign(ctx.orgClient, { get: async () => ({ data: [{ _id: 'example.evaluation.wallet', type: 'wallet2', configuration: { enabled: false }, createdAt: 'server-owned' }] }),
-      post: async () => { writes++; } });
-    await ctx.ensureResource('example.evaluation', 'wallet', { type: 'wallet2' });
-    await assert.rejects(ctx.ensureResource('example.evaluation', 'wallet', { type: 'wallet2', configuration: { enabled: true } }));
+    Object.assign(ctx.orgClient, {
+      get: async () => ({
+        data: [
+          {
+            _id: 'example.sca-pid.wallet',
+            type: 'wallet2',
+            configuration: { enabled: false },
+            createdAt: 'server-owned',
+          },
+        ],
+      }),
+      post: async () => {
+        writes++;
+      },
+    });
+    await ctx.ensureResource('example.sca-pid', 'wallet', { type: 'wallet2' });
+    await assert.rejects(
+      ctx.ensureResource('example.sca-pid', 'wallet', { type: 'wallet2', configuration: { enabled: true } }),
+    );
     assert.equal(writes, 0);
     assert.throws(() => assertConfigurationSubset({ dependencies: ['a', 'b'] }, { dependencies: ['a'] }));
-  } finally { rmSync(root, { recursive: true, force: true }); }
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test('receipt reruns clear an earlier success and never follow an output symlink', () => {
   const root = mkdtempSync(join(tmpdir(), 'sca-receipt-'));
   try {
     const receipt = join(root, 'receipt.json');
-    writePrivateReceipt(receipt, { outcome: 'successful' });
-    writePrivateReceipt(receipt, { outcome: 'running' });
+    writePrivateResult(receipt, { outcome: 'successful' });
+    writePrivateResult(receipt, { outcome: 'running' });
     assert.equal(JSON.parse(readFileSync(receipt, 'utf8')).outcome, 'running');
     assert.equal(statSync(receipt).mode & 0o777, 0o600);
     const other = join(root, 'untouched');
     writeFileSync(other, 'unchanged');
     const link = join(root, 'link.json');
     symlinkSync(other, link);
-    writePrivateReceipt(link, { outcome: 'failed' });
+    writePrivateResult(link, { outcome: 'failed' });
     assert.equal(readFileSync(other, 'utf8'), 'unchanged');
     const directoryLink = join(root, 'directory-link');
     symlinkSync(root, directoryLink);
-    assert.throws(() => writePrivateReceipt(join(directoryLink, 'result.json'), {}));
-  } finally { rmSync(root, { recursive: true, force: true }); }
+    assert.throws(() => writePrivateResult(join(directoryLink, 'result.json'), {}));
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
-const policies = { sca: [{ policy: 'etsi-trust-list' }, { policy: 'expiration' }, { policy: 'not-before' }, { policy: 'vct-integrity' }, { policy: 'schema' }], pid: [{ policy: 'etsi-trust-list' }] };
+// Independent contract: never construct expected evidence from the production inventory.
+const EXPECTED_CHECKS = {
+  sca: [
+    'dc+sd-jwt/audience-check',
+    'dc+sd-jwt/kb-jwt_signature',
+    'dc+sd-jwt/nonce-check',
+    'dc+sd-jwt/sd_hash-check',
+    'dc+sd-jwt/kb-jwt_iat-check',
+    'dc+sd-jwt/exp-check',
+    'dc+sd-jwt/nbf-check',
+    'dc+sd-jwt/transaction-data-hash-check',
+  ],
+  pid: [
+    'mso_mdoc/device-auth',
+    'mso_mdoc/device_key_auth',
+    'mso_mdoc/transaction-data-hash-check',
+    'mso_mdoc/issuer_auth',
+    'mso_mdoc/issuer_signed_integrity',
+    'mso_mdoc/mso',
+  ],
+};
+const policies = {
+  sca: [
+    { policy: 'etsi-trust-list' },
+    { policy: 'expiration' },
+    { policy: 'not-before' },
+    { policy: 'vct-integrity' },
+    { policy: 'schema' },
+  ],
+  pid: [{ policy: 'etsi-trust-list' }],
+};
 function session(): VerificationSession {
-  return { status: 'SUCCESSFUL', policy_results: {
-    vc_policies: ['pid', 'sca'].flatMap(query_id => ['credential-status', 'signature'].map(policy => ({ query_id, policy: { policy }, success: true }))),
-    specific_vc_policies: Object.fromEntries(Object.entries(policies).map(([query_id, ps]) => [query_id, ps.map(policy => ({ query_id, policy, success: true }))])),
-  }, presentation_validation_results: Object.fromEntries(Object.entries(PRESENTATION_CHECKS).map(([q, checks]) => [q, Object.fromEntries(checks.map(name => [name, { success: true }]))])) };
+  return {
+    status: 'SUCCESSFUL',
+    policy_results: {
+      vc_policies: ['pid', 'sca'].flatMap((query_id) =>
+        ['credential-status', 'signature'].map((policy) => ({ query_id, policy: { policy }, success: true })),
+      ),
+      specific_vc_policies: Object.fromEntries(
+        Object.entries(policies).map(([query_id, ps]) => [
+          query_id,
+          ps.map((policy) => ({ query_id, policy, success: true })),
+        ]),
+      ),
+    },
+    presentation_validation_results: Object.fromEntries(
+      Object.entries(EXPECTED_CHECKS).map(([q, checks]) => [
+        q,
+        Object.fromEntries(checks.map((name) => [name, { success: true }])),
+      ]),
+    ),
+  };
 }
 
 test('policy evidence rejects omitted checks, the wrong credential and cryptographic failure', () => {
   assertPolicyOutcome(session(), policies);
+  for (const query of ['sca', 'pid'] as const) {
+    for (const check of EXPECTED_CHECKS[query]) {
+      const missing = session();
+      delete missing.presentation_validation_results![query][check];
+      assert.throws(() => assertPolicyOutcome(missing, policies), `Must require ${check}`);
+      const failed = session();
+      failed.presentation_validation_results![query][check].success = false;
+      assert.throws(() => assertPolicyOutcome(failed, policies), `Must reject failed ${check}`);
+    }
+  }
   const invalid: Array<(s: VerificationSession) => void> = [
-    s => { s.policy_results!.vc_policies.pop(); },
-    s => { delete s.policy_results!.specific_vc_policies!.pid; },
-    s => { s.policy_results!.specific_vc_policies!.sca[0].query_id = 'pid'; },
-    s => { s.presentation_validation_results!.pid = {}; },
-    s => { s.presentation_validation_results!.pid['mso_mdoc/device-auth'].success = false; },
-    s => { s.policy_results!.vc_policies[0].success = false; },
+    (s) => {
+      s.policy_results!.vc_policies.pop();
+    },
+    (s) => {
+      delete s.policy_results!.specific_vc_policies!.pid;
+    },
+    (s) => {
+      s.policy_results!.specific_vc_policies!.sca[0].query_id = 'pid';
+    },
+    (s) => {
+      s.presentation_validation_results!.pid = {};
+    },
+    (s) => {
+      s.presentation_validation_results!.pid['mso_mdoc/device-auth'].success = false;
+    },
+    (s) => {
+      s.policy_results!.vc_policies[0].success = false;
+    },
   ];
-  for (const mutate of invalid) { const s = session(); mutate(s); assert.throws(() => assertPolicyOutcome(s, policies)); }
+  for (const mutate of invalid) {
+    const s = session();
+    mutate(s);
+    assert.throws(() => assertPolicyOutcome(s, policies));
+  }
 });
 
 test('a policy-negative control must reject for exactly the intended reason', () => {
   const s = session();
-  s.status = 'FAILED'; s.failure = { type: 'vc_policy_violations' };
+  s.status = 'FAILED';
+  s.failure = { type: 'vc_policy_violations' };
   s.policy_results!.specific_vc_policies!.sca[0].success = false;
   assertPolicyOutcome(s, policies, 'sca:etsi-trust-list');
   assert.throws(() => assertPolicyOutcome(s, policies, 'sca:schema'));
@@ -124,10 +280,18 @@ test('a policy-negative control must reject for exactly the intended reason', ()
 test('missing-credential controls require DCQL failure and a valid retained presentation', () => {
   for (const omitted of ['sca', 'pid'] as const) {
     const retained = omitted === 'sca' ? 'pid' : 'sca';
-    const s: VerificationSession = { status: 'FAILED', failure: { type: 'dcql_fulfillment', failure: { successfully_validated_query_ids: [retained], unsatisfied_sets: [{ options: [['sca', 'pid']] }] } },
-      presentation_validation_results: { [retained]: Object.fromEntries(PRESENTATION_CHECKS[retained].map(name => [name, { success: true }])) } };
+    const s: VerificationSession = {
+      status: 'FAILED',
+      failure: {
+        type: 'dcql_fulfillment',
+        failure: { successfully_validated_query_ids: [retained], unsatisfied_sets: [{ options: [['sca', 'pid']] }] },
+      },
+      presentation_validation_results: {
+        [retained]: Object.fromEntries(EXPECTED_CHECKS[retained].map((name) => [name, { success: true }])),
+      },
+    };
     assertMissingCredential(s, omitted);
-    s.presentation_validation_results![retained][PRESENTATION_CHECKS[retained][0]].success = false;
+    s.presentation_validation_results![retained][EXPECTED_CHECKS[retained][0]].success = false;
     assert.throws(() => assertMissingCredential(s, omitted));
   }
 });
@@ -143,19 +307,48 @@ test('profile assertions preserve disclosure and credential-audience boundaries'
   assertProfilePresentation('sca-user', compact(user));
   assert.throws(() => assertProfilePresentation('sca-user', compact({ ...user, aud: 'verifier' })));
   assert.throws(() => assertProfilePresentation('sca-user', compact(user, [['salt', 'sub', 'example-user']])));
-  const disclosures = [['salt', 'credential_id', 'urn:uuid:81df8af6-c1ac-4fd9-97d9-4f67512c47bb'], ['salt', 'network', 'mastercard']];
+  const disclosures = [
+    ['salt', 'credential_id', 'urn:uuid:81df8af6-c1ac-4fd9-97d9-4f67512c47bb'],
+    ['salt', 'network', 'mastercard'],
+  ];
   assertProfilePresentation('sca-card-dpc', compact(common, disclosures));
-  for (const name of ['pan', 'bin', 'last_four', 'sub', 'card_id']) assert.throws(() => assertProfilePresentation('sca-card-dpc', compact({ ...common, [name]: 'unexpected' }, disclosures)));
-  assert.throws(() => assertProfilePresentation('sca-card-dpc', compact(common, [...disclosures, ['salt', 'card_id', 'hidden']])));
+  for (const name of ['pan', 'bin', 'last_four', 'sub', 'card_id'])
+    assert.throws(() =>
+      assertProfilePresentation('sca-card-dpc', compact({ ...common, [name]: 'unexpected' }, disclosures)),
+    );
+  assert.throws(() =>
+    assertProfilePresentation('sca-card-dpc', compact(common, [...disclosures, ['salt', 'card_id', 'hidden']])),
+  );
 });
 
 test('branding remains configurable and published parent integrity remains pinned', () => {
   const c = config();
   for (const id of SCA_PROFILE_IDS) assert(scaProfile(id, c.branding).name.startsWith('Example Bank'));
-  const parents = Object.fromEntries(SCA_PROFILE_IDS.map(id => [id, { uri: `https://types.example.org/${id}`, integrity: 'sha256-' + 'A'.repeat(43) + '=' }])) as NonNullable<typeof c.typeParents>;
+  const parents = Object.fromEntries(
+    SCA_PROFILE_IDS.map((id) => [
+      id,
+      { uri: `https://types.example.org/${id}`, integrity: 'sha256-' + 'A'.repeat(43) + '=' },
+    ]),
+  ) as NonNullable<typeof c.typeParents>;
   validateScaPidConfig({ ...c, typeParents: parents });
   const metadata = scaTypeMetadata(c.branding, parents) as Record<string, any>;
   assert.equal(metadata['sca-user-base'].extends, parents['sca-user'].uri);
   assert.equal(metadata['sca-user-base']['extends#integrity'], parents['sca-user'].integrity);
   assert.equal(metadata['sca-user'].extends, '{vctBaseURL}/sca-user-base');
+});
+
+test('scenario translates signing roles into explicit certificate requirements', () => {
+  assert.deepEqual(signerCertificateRequirements('sca'), { algorithms: ['ES256'], extendedKeyUsageOids: [] });
+  assert.deepEqual(signerCertificateRequirements('pid'), {
+    algorithms: ['ES256'],
+    extendedKeyUsageOids: ['1.0.18013.5.1.2'],
+  });
+  assert.deepEqual(signerCertificateRequirements('provider'), {
+    algorithms: ['ES256'],
+    extendedKeyUsageOids: ['1.3.6.1.5.5.7.3.2'],
+  });
+  assert.deepEqual(signerCertificateRequirements('verifier'), {
+    algorithms: ['ES256', 'RS256'],
+    extendedKeyUsageOids: ['1.3.6.1.5.5.7.3.2'],
+  });
 });

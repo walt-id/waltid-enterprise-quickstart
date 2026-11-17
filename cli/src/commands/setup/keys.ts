@@ -8,7 +8,7 @@
  */
 
 import assert from 'node:assert/strict';
-import { createHash, createPublicKey, randomUUID, verify, type KeyObject } from 'node:crypto';
+import { createHash, randomUUID, verify, type KeyObject } from 'node:crypto';
 import { HttpClient } from '../../http/client.js';
 import { CommandContext } from '../../context.js';
 import {
@@ -102,6 +102,10 @@ function x509StoreCertificatePath(ctx: CommandContext, certId: string): string {
   return `/v1/${x509StoreCertificateRef(ctx, certId)}/x509-store-api/certificates`;
 }
 
+function x509ServiceCreateCertificatePath(ctx: CommandContext, certId: string): string {
+  return `/v1/${ctx.tenantPath}.${RESOURCES.x509Service}.${certId}/x509-service-api/certificates`;
+}
+
 export function extractCertificatePem(data: any): string | undefined {
   return (
     data?.certificate?.certificatePem ||
@@ -135,7 +139,7 @@ export async function createGeneratedCertificate(
   request: UpsertGeneratedCertificateRequest,
   logName: string,
   step?: string,
-  options: { serviceReference?: string; createOnly?: boolean } = {}
+  options: { createOnly?: boolean } = {}
 ): Promise<string> {
   const body = {
     storeRef: `${ctx.tenantPath}.${RESOURCES.x509Store}`,
@@ -143,17 +147,17 @@ export async function createGeneratedCertificate(
   };
   ctx.saveJson(`create-${logName}-request.json`, body, step);
 
-  const serviceReference = options.serviceReference ?? `${ctx.tenantPath}.${RESOURCES.x509Service}`;
-  const path = `/v1/${serviceReference}.${certId}/x509-service-api/certificates`;
+  const path = x509ServiceCreateCertificatePath(ctx, certId);
   const response = options.createOnly ? await ctx.orgClient.post(path, body) : await ctx.orgClient.put(path, body);
   ctx.saveJson(`create-${logName}-response.json`, response.data, step);
 
-  const pem = extractCertificatePem(response.data) || (await getStoredCertificatePem(ctx, certId));
+  const storedPath = `/v1/${body.storeRef}.${certId}/x509-store-api/certificates`;
+  const pem = extractCertificatePem(response.data) || extractCertificatePem((await ctx.orgClient.get(storedPath)).data);
   if (!pem) {
     throw new Error(`Certificate '${certId}' was created but PEM could not be retrieved`);
   }
   if (options.createOnly) {
-    const stored = extractCertificatePem((await ctx.orgClient.get(`/v1/${body.storeRef}.${certId}/x509-store-api/certificates`)).data);
+    const stored = extractCertificatePem((await ctx.orgClient.get(storedPath)).data);
     assert.equal(stored, pem, 'Generated certificate readback differs');
   }
   return pem;
@@ -375,10 +379,13 @@ export async function proveSigningKey(client: HttpClient, reference: string, pub
     ? { key: publicKey, dsaEncoding: 'ieee-p1363' } : publicKey, Buffer.from(parts[2], 'base64url')), 'KMS proof does not match the certificate');
 }
 
-export function publicKeyOfStoredKey(value: any): KeyObject {
-  const jwk = value?.key?.jwk;
-  assert(jwk && (jwk.kty === 'EC' || jwk.kty === 'RSA'), 'Expected a supported JWK-backed key');
-  return createPublicKey({ key: jwk.kty === 'EC'
-    ? { kty: jwk.kty, crv: jwk.crv, x: jwk.x, y: jwk.y }
-    : { kty: jwk.kty, n: jwk.n, e: jwk.e }, format: 'jwk' });
+/** Read only key references. The key-view endpoint may contain private material. */
+export async function listKeyReferences(client: HttpClient, kmsReference: string): Promise<string[]> {
+  const keys: string[] = [];
+  for (let offset = 0; ; offset += 100) {
+    const { data } = await client.get<string[]>(`/v1/${kmsReference}/kms-service-api/keys/list?limit=100&offset=${offset}`);
+    assert(Array.isArray(data) && data.every(id => typeof id === 'string'), 'Expected key references');
+    keys.push(...data);
+    if (data.length < 100) return keys;
+  }
 }
