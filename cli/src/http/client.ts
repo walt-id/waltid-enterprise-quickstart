@@ -50,8 +50,6 @@ export interface HttpRequestOptions {
   auth?: boolean;
   /** Expected non-success status codes; all other failures still throw. */
   allow?: readonly number[];
-  /** Require a rejection containing this reason, never an unrelated failure. */
-  expectedError?: string;
   contentType?: string;
   raw?: boolean;
 }
@@ -179,9 +177,6 @@ export class HttpClient {
       });
     }
 
-    if (requestOptions.expectedError && (response.ok || !text.includes(requestOptions.expectedError))) {
-      throw new Error('API did not return the expected rejection');
-    }
     if (!response.ok && !requestOptions.allow?.includes(response.status)) {
       const message = this.options.logging === 'none'
         ? `HTTP ${response.status}`

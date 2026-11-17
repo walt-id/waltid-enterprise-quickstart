@@ -44,19 +44,6 @@ test('strict transport rejects cross-origin paths before fetch and supports anon
   } finally { globalThis.fetch = original; }
 });
 
-test('expected rejection cannot be satisfied by a different failure or by success', async () => {
-  const original = globalThis.fetch;
-  const client = new HttpClient('https://api.example.org', { logging: 'none' });
-  try {
-    globalThis.fetch = async () => new Response('another reason', { status: 400 });
-    await assert.rejects(client.request('POST', '/presentation', {}, { allow: [400], expectedError: 'missing evidence' }));
-    globalThis.fetch = async () => new Response('missing evidence', { status: 400 });
-    assert.equal((await client.request('POST', '/presentation', {}, { allow: [400], expectedError: 'missing evidence' })).status, 400);
-    globalThis.fetch = async () => Response.json({ accepted: true });
-    await assert.rejects(client.request('POST', '/presentation', {}, { allow: [400], expectedError: 'missing evidence' }));
-  } finally { globalThis.fetch = original; }
-});
-
 test('real HTTPS verifies certificates and refuses to send credentials to redirect targets', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'cli-https-'));
   const exec = promisify(execFile);
