@@ -187,6 +187,7 @@ the vanilla PostgreSQL backend (`databaseType = postgresql`), not DocumentDB: th
 JDBC and stores documents as JSONB. `config/database-postgresql.conf` is mounted over
 `config/database.conf`; its settings are described in
 [Database configuration](https://docs.walt.id/enterprise-stack/setup/configurations/config-files/database).
+PostgreSQL 13 or later is required and 15 to 18 are tested; `POSTGRES_IMAGE` selects another image.
 It needs an Enterprise API image with PostgreSQL support:
 
 ```bash

@@ -257,7 +257,7 @@ variable "postgres_major_version" {
   type        = string
   default     = "18"
 
-  # The majors with community support; the Enterprise schema needs 13 or later.
+  # The majors the Enterprise API is tested on; it refuses servers older than 13.
   validation {
     condition     = contains(["15", "16", "17", "18"], var.postgres_major_version)
     error_message = "PostgreSQL major version must be one of 15, 16, 17, 18."
