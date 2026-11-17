@@ -1,24 +1,7 @@
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { existsSync, lstatSync, mkdirSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-
-/** Provenance contains no input paths, URLs, tokens or credential contents. */
-export function resultProvenance(operation: string, sourceDirectory: string) {
-  let source: { revision: string; dirty: boolean } | null = null;
-  try {
-    const git = (...args: string[]) =>
-      execFileSync('git', ['-C', sourceDirectory, ...args], {
-        encoding: 'utf8',
-        stdio: ['ignore', 'pipe', 'ignore'],
-      }).trim();
-    source = { revision: git('rev-parse', 'HEAD'), dirty: git('status', '--porcelain').length > 0 };
-  } catch {
-    /* Installed copies without Git report unknown provenance explicitly. */
-  }
-  return { runId: randomUUID(), operation, startedAt: new Date().toISOString(), source };
-}
 
 function ownedDirectory(path: string) {
   const directory = dirname(path);
