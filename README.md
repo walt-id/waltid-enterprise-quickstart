@@ -221,7 +221,7 @@ CREDENTIAL_TYPE=mdl npx tsx walt.ts --recreate
 The issuer is only configured for one credential type at a time, so pair `CREDENTIAL_TYPE` with
 `--recreate` when switching — see [cli/README.md](cli/README.md) for details.
 
-For the SCA-card/DPC and SCA-User plus PID scenario, see [the SCA/PID guide](cli/SCA-PID.md).
+For the SCA-card/DPC and SCA-User plus PID scenario, see [the SCA/PID guide](cli/docs/sca-pid.md).
 
 ### Common Commands
 
