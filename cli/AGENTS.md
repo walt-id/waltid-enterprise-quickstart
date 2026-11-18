@@ -325,7 +325,7 @@ await ctx.orgClient.put(
 | `EMAIL` | From config file | Superadmin email |
 | `PASSWORD` | From config file | Superadmin password |
 | `ADMIN_EMAIL` | `admin@walt.id` | Admin user email |
-| `ADMIN_PASSWORD` | `admin123456` | Admin user password |
+| `ADMIN_PASSWORD` | `violet meadow river lantern` | Admin user password |
 
 ## File Naming Conventions
 

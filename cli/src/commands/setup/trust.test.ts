@@ -57,6 +57,7 @@ function context(): { ctx: CommandContext; client: FakeOrgClient } {
     password: 'secret',
     port: 7500,
     superadminToken: '',
+    devModeToken: '',
     adminEmail: 'admin@example.test',
     adminPassword: 'secret',
   };

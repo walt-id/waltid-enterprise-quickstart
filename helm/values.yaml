@@ -37,7 +37,7 @@ superadminRegConf: |
       account = {
         type = "email"
         identifier = { email = "superadmin@walt.id" }
-        data = { password = "super123456" }
+        data = { password = "violet orchard river lantern" }
       }
     }
   }

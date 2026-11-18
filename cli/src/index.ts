@@ -196,7 +196,7 @@ Environment Variables:
   EMAIL                   Superadmin email (from config/superadmin-registration.conf)
   PASSWORD                Superadmin password (from config/superadmin-registration.conf)
   ADMIN_EMAIL             Admin user email (default: admin@walt.id)
-  ADMIN_PASSWORD          Admin user password (default: admin123456)
+  ADMIN_PASSWORD          Admin user password (default: violet meadow river lantern)
   SUPERADMIN_TOKEN        Superadmin registration token (from config/superadmin-registration.conf)
   CREDENTIAL_STATUS_S3_BUCKET  Publish status lists to this S3 bucket. Without it, lists are stored in
                           the enterprise database and served from /fetch.
