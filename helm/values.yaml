@@ -75,14 +75,16 @@ eventsConf: |
   # write fails the request). false: written in the background, in batches.
   synchronous = false
 networkFetchGuardConf: |
-  # Wallet-service endpoints fetch caller-supplied URLs server-side (issuer metadata, request_uri,
-  # credential_offer_uri, token/credential endpoints, ...). By default this refuses loopback and
-  # private-network (RFC1918 / IPv6 ULA) targets, in addition to link-local/cloud-metadata/multicast
-  # targets, which are never allowed and have no flag here.
+  # Server-side fetches of caller-supplied URLs follow this guard: wallet-service endpoints (issuer
+  # metadata, request_uri, credential_offer_uri, token/credential endpoints, ...), Trust Registry
+  # sources (sources/load with a url, sources/{sourceId}/refresh) and the trust list URLs of the
+  # etsi-trust-list verification policy. By default this refuses loopback and private-network
+  # (RFC1918 / IPv6 ULA) targets, in addition to link-local/cloud-metadata/multicast targets, which
+  # are never allowed and have no flag here.
   #
-  # Set these to true only if this deployment's issuer/verifier/wallet services legitimately run as
-  # siblings on the same host or the same private network (a common topology) - otherwise leave both
-  # false so private/internal infrastructure stays unreachable even from a caller-supplied URL.
+  # Set these to true only if this deployment's services legitimately reach each other, or an internal
+  # trust list publisher, on the same host or the same private network (a common topology) - otherwise
+  # leave both false so private/internal infrastructure stays unreachable even from a caller-supplied URL.
   allowLoopback = false
   allowPrivateNetworks = false
 
