@@ -10,7 +10,7 @@ import { join } from 'node:path';
 import { once } from 'node:events';
 import type { AddressInfo } from 'node:net';
 import { setTimeout as delay } from 'node:timers/promises';
-import { readScaPidConfig, scaPidContext, holderKeyReference } from './sca-pid-config.js';
+import { readScaPidConfig, scaPidContext, holderKeyReference, SCA_PROFILE_IDS } from './sca-pid-config.js';
 import { RESOURCES } from './config.js';
 import { setupScaPid, trustPolicy } from './commands/setup/sca-pid.js';
 import { flowScaPid } from './flows/sca-pid.js';
@@ -134,6 +134,10 @@ test('synthetic provisioning, scoped journeys, trust rejection and authenticated
     process.env.SCA_PID_CALLBACK_TOKEN = callbackToken;
     const result = await flowScaPid(scoped, config);
     assert.equal(result.outcome, 'successful');
+    assert.deepEqual(result.profiles.map(profile => profile.profile), [...SCA_PROFILE_IDS]);
+    for (const profile of result.profiles) {
+      assert.deepEqual(profile.payments, ['immediate:authentication-required', 'recurring:authentication-required']);
+    }
     assert.deepEqual((await listKeyReferences(admin, `${target}.wallet-kms`)).sort(), holderKeys.sort(), 'Flow must reuse provisioned holder keys');
     for (let i = 0; i < 50 && callbacks.filter(c => c.event.startsWith('credential_request_') && c.event.endsWith('_succeeded')).length < 4; i++) await delay(100);
     const issuance = callbacks.filter(c => c.event.startsWith('credential_request_') && c.event.endsWith('_succeeded'));

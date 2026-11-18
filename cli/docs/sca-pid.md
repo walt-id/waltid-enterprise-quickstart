@@ -4,9 +4,9 @@ This scenario provisions one tenant and exercises SCA-card/DPC and SCA-User SD-J
 
 ## Provision and run
 
-Use a reviewed Enterprise API and matching quickstart revision. Enable `issuer2` and `wallet-provider`, plus `trust-registry` when using fixture or registered trust, in addition to the deployment's normal features. Node.js, OpenSSL 3 and the CLI dependencies (`npm ci` in `cli/`) are required.
+Use a reviewed Enterprise API with the Wallet2 and Verifier2 transaction-data profile endpoints and a matching quickstart revision. Enable `issuer2` and `wallet-provider`, plus `trust-registry` when using fixture or registered trust, in addition to the deployment's normal features. Node.js, OpenSSL 3 and the CLI dependencies (`npm ci` in `cli/`) are required.
 
-Copy `sca-pid.example.json` to a private directory outside the checkout. Set the API origin, organization, tenant and branding. The API must route the organization hostname (`<organization>.<base-host>`) to the same deployment. HTTPS certificate verification remains enabled. The explicit `local` transport is restricted to localhost names and is for disposable development only.
+Copy `sca-pid.example.json` to a private directory outside the checkout. Set the HTTPS API origin, organization, tenant and branding. Route the organization hostname (`<organization>.<base-host>`) to the same deployment so the wallet can retrieve the issuer's type metadata. For disposable development, use `local` transport with localhost names and a trusted local TLS certificate.
 
 Supply an operator token through `SCA_PID_API_TOKEN`, then run from `cli/`:
 
@@ -16,7 +16,9 @@ npm run walt -- --setup-sca-pid /private/scenario.json
 
 Setup creates the tenant, separate issuer and holder KMS services, credential store, X.509 store/service, status service, wallet provider, wallet, issuer, verifier and `journey-operator` role. Fixture and registered modes also create a trust registry. Setup provisions separate SCA, PID, verifier and provider signing keys, plus four holder keys (one SCA key and one PID key per profile).
 
-Supplied key/certificate material is validated before provisioning; existing tenants are checked and reused. Missing or changed existing state requires an explicit operator repair. Setup never silently rotates a key, replaces a registration or resets a wallet. Earlier draft installations with different resource names or permissions require explicit migration or a new sample tenant.
+Setup registers `urn:eudi:sca:payment:1` on the tenant's Wallet2 and Verifier2 services, reusing existing profiles where present. The setup operator needs permission to update both services' configuration.
+
+Supplied key/certificate material is validated before provisioning; existing tenants are checked and reused. Missing or changed resources, keys or trust material require an explicit operator repair. Setup never silently rotates a key, replaces a registration or resets a wallet. Earlier draft installations with different resource names or permissions require explicit migration or a new sample tenant.
 
 Use the normal Enterprise API-key or account-role endpoints to assign `<organization>.<tenant>.journey-operator`. For a disposable API key, an operator:
 

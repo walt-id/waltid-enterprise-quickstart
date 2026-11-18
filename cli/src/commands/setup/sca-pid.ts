@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { createHash, X509Certificate } from 'node:crypto';
 import { CommandContext, assertConfigurationSubset } from '../../context.js';
-import { ScaPidConfig, SIGNER_ROLES, SignerRole, SCA_PROFILE_IDS, scaProfile, scaTypeMetadata, PID,
+import { ScaPidConfig, SIGNER_ROLES, SignerRole, SCA_PROFILE_IDS, SCA_PAYMENT_TYPE, scaProfile, scaTypeMetadata, PID,
   holderKeyReference, signerCertificateRequirements } from '../../sca-pid-config.js';
 import { certificateValidityWindow, createGeneratedCertificate, extractCertificatePem, certificatePemToDerBase64, x509HashClientId, proveSigningKey,
   listKeyReferences } from './keys.js';
@@ -222,6 +222,22 @@ export async function setupScaPid(ctx: CommandContext, config: ScaPidConfig): Pr
     else assertConfigurationSubset(existing.data, body);
   }
   await ensureScaPidRole(ctx, !existingTenant);
+  await ensureScaPidPaymentProfiles(ctx);
+}
+
+async function ensureScaPidPaymentProfiles(ctx: CommandContext): Promise<void> {
+  const profile = { type: SCA_PAYMENT_TYPE, displayName: 'SCA Payment', fields: ['payload'] };
+  const api = ctx.orgClient;
+  for (const [id, service] of [[RESOURCES.wallet, 'wallet'], [RESOURCES.verifier2, 'verifier']] as const) {
+    const collection = `/v2/${ctx.tenantPath}.${id}/${service}-service-api/transaction-data-profiles`;
+    const path = `${collection}/${encodeURIComponent(profile.type)}`;
+    let current = await api.get(path, { allow: [404] });
+    if (current.status === 404) {
+      current = await api.request('POST', collection, profile, { allow: [409] });
+      if (current.status === 409) current = await api.get(path);
+    }
+    assert.equal(current.data.type, profile.type, `Missing TS12 transaction-data profile on ${id}`);
+  }
 }
 
 async function ensureScaPidRole(ctx: CommandContext, createIfMissing: boolean): Promise<void> {
