@@ -7,7 +7,9 @@
  * - Certificate storage (VICAL signer)
  */
 
-import { createHash } from 'crypto';
+import assert from 'node:assert/strict';
+import { createHash, randomUUID, verify, type KeyObject } from 'node:crypto';
+import { HttpClient } from '../../http/client.js';
 import { CommandContext } from '../../context.js';
 import {
   RESOURCES,
@@ -128,7 +130,7 @@ export async function getStoredCertificatePem(
 }
 
 /**
- * Create a certificate through the unified X.509 service (`PUT /certificates/{id}`)
+ * Create a certificate through the unified X.509 service (upsert by default; create-only when requested)
  * using a stable child id so later store lookups stay deterministic.
  */
 export async function createGeneratedCertificate(
@@ -136,7 +138,8 @@ export async function createGeneratedCertificate(
   certId: string,
   request: UpsertGeneratedCertificateRequest,
   logName: string,
-  step?: string
+  step?: string,
+  options: { createOnly?: boolean } = {}
 ): Promise<string> {
   const body = {
     storeRef: `${ctx.tenantPath}.${RESOURCES.x509Store}`,
@@ -144,15 +147,18 @@ export async function createGeneratedCertificate(
   };
   ctx.saveJson(`create-${logName}-request.json`, body, step);
 
-  const response = await ctx.orgClient.put(
-    x509ServiceCreateCertificatePath(ctx, certId),
-    body
-  );
+  const path = x509ServiceCreateCertificatePath(ctx, certId);
+  const response = options.createOnly ? await ctx.orgClient.post(path, body) : await ctx.orgClient.put(path, body);
   ctx.saveJson(`create-${logName}-response.json`, response.data, step);
 
-  const pem = extractCertificatePem(response.data) || (await getStoredCertificatePem(ctx, certId));
+  const storedPath = `/v1/${body.storeRef}.${certId}/x509-store-api/certificates`;
+  const pem = extractCertificatePem(response.data) || extractCertificatePem((await ctx.orgClient.get(storedPath)).data);
   if (!pem) {
     throw new Error(`Certificate '${certId}' was created but PEM could not be retrieved`);
+  }
+  if (options.createOnly) {
+    const stored = extractCertificatePem((await ctx.orgClient.get(storedPath)).data);
+    assert.equal(stored, pem, 'Generated certificate readback differs');
   }
   return pem;
 }
@@ -356,4 +362,30 @@ export async function setupCreateVerifierRequestSigningCertificate(ctx: CommandC
 
   console.log('   [OK] Verifier request-signing certificate created');
   return pem;
+}
+
+/** Prove the KMS key matches the expected certificate without exporting private parameters. */
+export async function proveSigningKey(client: HttpClient, reference: string, publicKey: KeyObject): Promise<void> {
+  const nonce = randomUUID();
+  const { data } = await client.post<{ jwt: string }>(`/v1/${reference}/kms-service-api/keys/sign`, {
+    format: 'jwt', plaintext: { purpose: 'provisioning-check', nonce },
+  });
+  const parts = data.jwt?.split('.');
+  assert.equal(parts?.length, 3, 'Expected a compact signing proof');
+  const algorithm = publicKey.asymmetricKeyType === 'rsa' ? 'RS256' : 'ES256';
+  assert.equal(JSON.parse(Buffer.from(parts[0], 'base64url').toString()).alg, algorithm);
+  assert.equal(JSON.parse(Buffer.from(parts[1], 'base64url').toString()).nonce, nonce);
+  assert(verify('sha256', Buffer.from(parts.slice(0, 2).join('.')), algorithm === 'ES256'
+    ? { key: publicKey, dsaEncoding: 'ieee-p1363' } : publicKey, Buffer.from(parts[2], 'base64url')), 'KMS proof does not match the certificate');
+}
+
+/** Read only key references. The key-view endpoint may contain private material. */
+export async function listKeyReferences(client: HttpClient, kmsReference: string): Promise<string[]> {
+  const keys: string[] = [];
+  for (let offset = 0; ; offset += 100) {
+    const { data } = await client.get<string[]>(`/v1/${kmsReference}/kms-service-api/keys/list?limit=100&offset=${offset}`);
+    assert(Array.isArray(data) && data.every(id => typeof id === 'string'), 'Expected key references');
+    keys.push(...data);
+    if (data.length < 100) return keys;
+  }
 }

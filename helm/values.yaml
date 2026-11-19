@@ -233,6 +233,15 @@ loggingConf: |
   }
 
 api:
+  # Mount a pre-provisioned Secret containing the complete /config directory instead of
+  # rendering inline values into a ConfigMap. The license-request job uses the same Secret.
+  existingConfigSecret: ""
+  strategy:
+    type: RollingUpdate
+  # Standard pod extensions, e.g. an operator configuration Secret and an existing replay PVC.
+  extraEnv: []
+  extraVolumes: []
+  extraVolumeMounts: []
   ports:
   - name: http
     port: 80
@@ -241,6 +250,8 @@ api:
   type: ClusterIP
   image:
     repository: waltid/waltid-enterprise-api
+    # When supplied, digest takes precedence over tag for both API and bootstrap job.
+    digest: ""
     tag: latest
     imagePullPolicy: Always
     pullSecrets: waltid-regcred

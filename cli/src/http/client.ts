@@ -6,6 +6,7 @@
  * - Request/response logging
  * - JSON and text content type support
  * - Error handling with response data
+ * - Opt-in private logging, bounded requests and strict origin/redirect handling
  */
 
 // ============================================================================
@@ -36,6 +37,23 @@ export interface HttpLogEntry {
   timestamp: string;
 }
 
+export interface HttpClientOptions {
+  /** Sensitive commands must not retain payloads, headers or resource identifiers. */
+  logging?: 'full' | 'none';
+  /** Reject redirects and cross-origin paths; the caller validates the base URL. */
+  strictTransport?: boolean;
+  timeoutMs?: number;
+}
+
+export interface HttpRequestOptions {
+  /** Omit bearer authentication for public endpoints and denial controls. */
+  auth?: boolean;
+  /** Expected non-success status codes; all other failures still throw. */
+  allow?: readonly number[];
+  contentType?: string;
+  raw?: boolean;
+}
+
 // ============================================================================
 // HTTP Client
 // ============================================================================
@@ -55,7 +73,7 @@ export class HttpClient {
   private token: string | null = null;
   private httpLog: HttpLogEntry[] = [];
 
-  constructor(baseUrl: string) {
+  constructor(baseUrl: string, private options: HttpClientOptions = {}) {
     this.baseUrl = baseUrl;
   }
 
@@ -86,43 +104,45 @@ export class HttpClient {
 
   /**
    * Make an HTTP request.
-   * @internal
+   * Request options support anonymous calls and explicit negative controls.
    */
-  private async request<T>(
+  async request<T = any>(
     method: string,
     path: string,
-    body?: any,
-    contentType: string = 'application/json',
-    skipStringify: boolean = false
+    body?: unknown,
+    requestOptions: HttpRequestOptions = {}
   ): Promise<HttpResponse<T>> {
     const url = `${this.baseUrl}${path}`;
+    if (this.options.strictTransport && (
+      !path.startsWith('/') || path.startsWith('//') ||
+      new URL(path, this.baseUrl).origin !== new URL(this.baseUrl).origin
+    )) {
+      throw new Error('API path must remain on the configured origin');
+    }
+    const contentType = requestOptions.contentType ?? 'application/json';
     const headers: Record<string, string> = {
       'Content-Type': contentType,
     };
 
-    if (this.token) {
+    if (this.token && requestOptions.auth !== false) {
       headers['Authorization'] = `Bearer ${this.token}`;
     }
-
-    const requestLog = {
-      method,
-      url,
-      headers: { ...headers, Authorization: headers.Authorization ? '[REDACTED]' : undefined },
-      body,
-    };
 
     const options: RequestInit = {
       method,
       headers,
     };
 
-    if (body) {
-      if (skipStringify) {
-        options.body = body;
+    if (this.options.strictTransport) options.redirect = 'error';
+    if (this.options.timeoutMs !== undefined) options.signal = AbortSignal.timeout(this.options.timeoutMs);
+
+    if (body !== undefined) {
+      if (requestOptions.raw) {
+        options.body = body as RequestInit['body'];
       } else if (contentType === 'application/json') {
         options.body = JSON.stringify(body);
       } else {
-        options.body = body;
+        options.body = body as RequestInit['body'];
       }
     }
 
@@ -132,31 +152,41 @@ export class HttpClient {
       responseHeaders[key] = value;
     });
 
-    let data: T;
-    const responseContentType = response.headers.get('content-type');
-    if (responseContentType?.includes('application/json')) {
-      data = await response.json() as T;
-    } else {
-      data = await response.text() as unknown as T;
+    // No-content responses may still carry an application/json Content-Type.
+    const text = await response.text();
+    let data: T = text as T;
+    if (text && response.headers.get('content-type')?.includes('application/json')) {
+      data = JSON.parse(text) as T;
     }
 
-    const responseLog = {
-      status: response.status,
-      statusText: response.statusText,
-      headers: responseHeaders,
-      data,
-    };
+    if (this.options.logging !== 'none') {
+      this.httpLog.push({
+        request: {
+          method,
+          url,
+          headers: { ...headers, Authorization: headers.Authorization ? '[REDACTED]' : undefined },
+          body,
+        },
+        response: {
+          status: response.status,
+          statusText: response.statusText,
+          headers: responseHeaders,
+          data,
+        },
+        timestamp: new Date().toISOString(),
+      });
+    }
 
-    this.httpLog.push({
-      request: requestLog,
-      response: responseLog,
-      timestamp: new Date().toISOString(),
-    });
-
-    if (!response.ok) {
-      const error = new Error(`HTTP ${response.status}: ${response.statusText}`) as any;
+    if (!response.ok && !requestOptions.allow?.includes(response.status)) {
+      const message = this.options.logging === 'none'
+        ? `HTTP ${response.status}`
+        : `HTTP ${response.status}: ${response.statusText}`;
+      const error = new Error(message) as Error & {
+        status: number;
+        response?: { data: T; headers: Record<string, string> };
+      };
       error.status = response.status;
-      error.response = { data, headers: responseHeaders };
+      if (this.options.logging !== 'none') error.response = { data, headers: responseHeaders };
       throw error;
     }
 
@@ -168,18 +198,18 @@ export class HttpClient {
   }
 
   /** GET request */
-  async get<T = any>(path: string): Promise<HttpResponse<T>> {
-    return this.request<T>('GET', path);
+  async get<T = any>(path: string, options?: HttpRequestOptions): Promise<HttpResponse<T>> {
+    return this.request<T>('GET', path, undefined, options);
   }
 
   /** POST request with JSON body */
   async post<T = any>(path: string, body?: any, contentType: string = 'application/json'): Promise<HttpResponse<T>> {
-    return this.request<T>('POST', path, body, contentType);
+    return this.request<T>('POST', path, body, { contentType });
   }
 
   /** POST request with raw string body (no JSON.stringify) */
   async postRaw<T = any>(path: string, body: string, contentType: string = 'application/json'): Promise<HttpResponse<T>> {
-    return this.request<T>('POST', path, body, contentType, true);
+    return this.request<T>('POST', path, body, { contentType, raw: true });
   }
 
   /** PATCH request */

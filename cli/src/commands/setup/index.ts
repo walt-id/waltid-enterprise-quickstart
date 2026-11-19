@@ -80,3 +80,6 @@ export { runIssuerVariantsSetup, runIssuerVariantsTeardown } from './issuer-vari
 
 // Verifier variants (format, status and trust checks, signed request, encrypted response)
 export { runVerifierVariantsSetup, runVerifierVariantsTeardown } from './verifier-variants.js';
+
+// SCA and PID
+export { setupScaPid } from './sca-pid.js';

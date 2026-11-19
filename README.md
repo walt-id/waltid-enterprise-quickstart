@@ -199,6 +199,17 @@ LICENSE_SEED_CREDENTIAL="openid-credential-offer://..." docker compose -f docker
 To move an existing installation from MongoDB to DocumentDB, see
 [Moving to another database](LICENSING.md#moving-to-another-database).
 
+### Helm deployment options
+
+The existing chart in `helm/` supports operator-managed configuration and storage:
+
+- `api.image.digest` pins the API and license-request Job to the same immutable image; it takes precedence over `tag`.
+- `api.existingConfigSecret` mounts a pre-provisioned Secret as the complete `/config` directory for both workloads and suppresses the inline ConfigMap. Include their database, installation and native license configuration.
+- `api.hpa.minReplicas: 1`, `api.hpa.maxReplicas: 1` and `api.strategy.type: Recreate` configure a single writer. Defaults retain autoscaling and rolling updates.
+- `api.extraEnv`, `api.extraVolumes` and `api.extraVolumeMounts` extend the API pod using existing configuration, Secrets and storage. These options do not create or replace storage.
+
+License identity and encryption material remain operator-owned; see [Kubernetes licensing](LICENSING.md#kubernetes--helm). Inspect rendered resources and retain the existing namespace, database, Secrets and volumes during upgrades.
+
 ## 2. Enterprise CLI
 
 A TypeScript CLI tool for setting up and testing the walt.id Enterprise Stack.
@@ -228,6 +239,8 @@ CREDENTIAL_TYPE=mdl npx tsx walt.ts --recreate
 
 The issuer is only configured for one credential type at a time, so pair `CREDENTIAL_TYPE` with
 `--recreate` when switching — see [cli/README.md](cli/README.md) for details.
+
+For the SCA-card/DPC and SCA-User plus PID scenario, see [the SCA/PID guide](cli/docs/sca-pid.md).
 
 ### Common Commands
 

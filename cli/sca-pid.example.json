@@ -1,0 +1,13 @@
+{
+  "baseUrl": "https://api.example.org",
+  "organization": "example",
+  "tenant": "sca-pid",
+  "transport": "https",
+  "branding": { "name": "Example Bank", "background": "#203040", "text": "#ffffff" },
+  "trust": {
+    "sca": { "kind": "fixture" },
+    "pid": { "kind": "fixture" },
+    "verifier": { "kind": "fixture" },
+    "provider": { "kind": "fixture" }
+  }
+}
