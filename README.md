@@ -205,6 +205,13 @@ left alone, and `docker volume rm postgresql-data` removes it once you no longer
 A fresh database has no license state, so activate it as described for DocumentDB above. There is no
 migration from an existing MongoDB database.
 
+### External databases with Vault credentials
+
+Use the standalone `docker-compose-vault.yml` to connect the API to an external PostgreSQL or native
+MongoDB database through Vault `STATIC` or `DYNAMIC` database roles. It mounts an externally maintained
+token directory and TLS material read-only, and supports the image's license commands. Select an
+Enterprise image containing PR 908 explicitly. [Vault setup and verification](VAULT-DATABASES.md)
+
 ## 2. Enterprise CLI
 
 A TypeScript CLI tool for setting up and testing the walt.id Enterprise Stack.

@@ -1,0 +1,66 @@
+# External PostgreSQL or MongoDB with native Vault database credentials. See VAULT-DATABASES.md.
+# Run standalone with --env-file .env --env-file vault.env -f docker-compose-vault.yml.
+name: waltid-enterprise-vault
+
+services:
+  waltid-enterprise:
+    # Explicitly select a build containing Enterprise PR 908 while it is unreleased.
+    image: ${VAULT_ENTERPRISE_IMAGE:?set VAULT_ENTERPRISE_IMAGE to an image containing Enterprise PR 908}
+    mem_limit: ${ENTERPRISE_MEM_LIMIT:-8g}
+    environment:
+      JAVA_TOOL_OPTIONS: -XX:MaxRAMPercentage=${ENTERPRISE_MAX_RAM_PERCENTAGE:-70}
+      LICENSE_STATE_ENCRYPTION_KEY:
+      LICENSE_SEED_CREDENTIAL:
+      LICENSE_SEED_CREDENTIAL_FILE:
+      LICENSE_INSTALLATION_KEY_FILE:
+      LICENSE_SERVER_URL:
+      ENTERPRISE_WEB_PORT: ${ENTERPRISE_API_PORT:-7500}
+      ENTERPRISE_BASE_PORT: ${ENTERPRISE_API_PORT:-7500}
+      VAULT_ADDRESS: ${VAULT_ADDRESS:?set VAULT_ADDRESS to the external HTTPS Vault base URL}
+      VAULT_DATABASE_ROLE: ${VAULT_DATABASE_ROLE:?set VAULT_DATABASE_ROLE}
+      VAULT_DATABASE_ROLE_TYPE: ${VAULT_DATABASE_ROLE_TYPE:?set VAULT_DATABASE_ROLE_TYPE to STATIC or DYNAMIC}
+      VAULT_DATABASE_MOUNT: ${VAULT_DATABASE_MOUNT:-database}
+      VAULT_NAMESPACE:
+      VAULT_DATABASE_CONNECTION_STRING: ${VAULT_DATABASE_CONNECTION_STRING:?set the credential-free database connection string}
+      VAULT_DATABASE_NAME: ${VAULT_DATABASE_NAME:?set VAULT_DATABASE_NAME}
+      VAULT_POSTGRESQL_SCHEMA: ${VAULT_POSTGRESQL_SCHEMA:-public}
+      VAULT_MONGODB_AUTH_SOURCE: ${VAULT_MONGODB_AUTH_SOURCE:-admin}
+    ports:
+      - "${ENTERPRISE_API_PORT:-7500}:${ENTERPRISE_API_PORT:-7500}"
+    volumes:
+      - type: bind
+        source: ./config
+        target: /config
+        read_only: true
+      - type: bind
+        source: ${VAULT_DATABASE_CONFIG:?select config/database-vault-postgresql.conf or config/database-vault-mongodb.conf}
+        target: /config/database.conf
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ./license
+        target: /license
+      # Directory mounts retain external token replacements performed with rename(2).
+      - type: bind
+        source: ${VAULT_TOKEN_DIRECTORY:?set VAULT_TOKEN_DIRECTORY to the externally managed token sink directory}
+        target: /run/vault-token
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${VAULT_TLS_DIRECTORY:?set VAULT_TLS_DIRECTORY to an existing TLS material directory}
+        target: /run/vault-tls
+        read_only: true
+        bind:
+          create_host_path: false
+    networks:
+      vault_network:
+        aliases:
+          - enterprise.localhost
+          - waltid.enterprise.localhost
+    command: "--log-level=info"
+
+networks:
+  vault_network:
+    driver: bridge

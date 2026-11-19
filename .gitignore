@@ -18,6 +18,9 @@ cli/walt-log-*/
 # docs/documentdb-existing-postgres.md.
 /certs/
 documentdb-external.env
+vault.env
+/secrets/
+config/database-vault.local.conf
 
 # Local crash and profiling artifacts that get dropped into the bind-mounted config/ directory.
 *.hprof
