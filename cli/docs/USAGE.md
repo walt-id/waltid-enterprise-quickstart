@@ -249,7 +249,7 @@ npx tsx walt.ts --flow-credential-revocation
 | `EMAIL` | (from conf) | Superadmin email |
 | `PASSWORD` | (from conf) | Superadmin password |
 | `ADMIN_EMAIL` | `admin@walt.id` | Admin user email (used for regular operations) |
-| `ADMIN_PASSWORD` | `admin123456` | Admin user password |
+| `ADMIN_PASSWORD` | `violet meadow river lantern` | Admin user password |
 | `SUPERADMIN_TOKEN` | (from conf) | Superadmin registration token |
 
 Superadmin credentials are read from `config/superadmin-registration.conf` by default.

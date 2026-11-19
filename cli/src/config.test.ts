@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { MDL_DOC_TYPE, PID_DOC_TYPE, selectedMdocDcqlCredential } from './config.js';
+import { fileURLToPath } from 'node:url';
+import { createConfig, MDL_DOC_TYPE, PID_DOC_TYPE, selectedMdocDcqlCredential } from './config.js';
 
 test('selectedMdocDcqlCredential defaults to the PID doctype', () => {
   const previous = process.env.CREDENTIAL_TYPE;
@@ -28,5 +29,29 @@ test('selectedMdocDcqlCredential follows CREDENTIAL_TYPE=mdl', () => {
   } finally {
     if (previous === undefined) delete process.env.CREDENTIAL_TYPE;
     else process.env.CREDENTIAL_TYPE = previous;
+  }
+});
+
+test('quickstart configuration uses bundled credentials and permits deployment overrides', () => {
+  const names = ['EMAIL', 'PASSWORD', 'ADMIN_EMAIL', 'ADMIN_PASSWORD'] as const;
+  const previous = Object.fromEntries(names.map(name => [name, process.env[name]]));
+  try {
+    for (const name of names) delete process.env[name];
+    const root = fileURLToPath(new URL('../../', import.meta.url));
+    const defaults = createConfig(root);
+    assert.equal(defaults.email, 'superadmin@walt.id');
+    assert.equal(defaults.password, 'violet orchard river lantern');
+    assert.equal(defaults.adminPassword, 'violet meadow river lantern');
+
+    process.env.PASSWORD = 'existing bootstrap passphrase';
+    process.env.ADMIN_PASSWORD = 'existing admin passphrase';
+    const overridden = createConfig(root);
+    assert.equal(overridden.password, process.env.PASSWORD);
+    assert.equal(overridden.adminPassword, process.env.ADMIN_PASSWORD);
+  } finally {
+    for (const name of names) {
+      if (previous[name] === undefined) delete process.env[name];
+      else process.env[name] = previous[name];
+    }
   }
 });
