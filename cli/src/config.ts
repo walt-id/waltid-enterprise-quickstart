@@ -396,7 +396,7 @@ export function createConfig(projectRoot: string): Config {
     superadminToken: process.env.SUPERADMIN_TOKEN || superadminCreds.token || '',
     devModeToken: process.env.DEV_MODE_TOKEN || devModeCreds.accessToken || '',
     adminEmail: process.env.ADMIN_EMAIL || 'admin@walt.id',
-    adminPassword: process.env.ADMIN_PASSWORD || 'admin123456',
+    adminPassword: process.env.ADMIN_PASSWORD || 'violet meadow river lantern',
     hostAliasDomain: process.env.HOST_ALIAS_DOMAIN || undefined,
     hostAliasTarget: process.env.HOST_ALIAS_TARGET || undefined,
   };

@@ -37,7 +37,8 @@ superadminRegConf: |
       account = {
         type = "email"
         identifier = { email = "superadmin@walt.id" }
-        data = { password = "super123456" }
+        # Public example password: replace before deployment outside local development.
+        data = { password = "violet orchard river lantern" }
       }
     }
   }

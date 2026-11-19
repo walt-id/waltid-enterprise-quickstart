@@ -230,7 +230,7 @@ Error code: DEPTH_ZERO_SELF_SIGNED_CERT
 ### Solution 1: Use the insecure wrapper (quick)
 ```bash
 ADMIN_EMAIL=admin@example.com \
-ADMIN_PASSWORD=yourpassword \
+ADMIN_PASSWORD='violet meadow river lantern' \
 BASE_URL=https://your-remote-system.example.com \
 ./walt-insecure.sh --setup-all
 ```
@@ -239,7 +239,7 @@ BASE_URL=https://your-remote-system.example.com \
 ```bash
 export NODE_TLS_REJECT_UNAUTHORIZED=0
 ADMIN_EMAIL=admin@example.com \
-ADMIN_PASSWORD=yourpassword \
+ADMIN_PASSWORD='violet meadow river lantern' \
 BASE_URL=https://your-remote-system.example.com \
 npx tsx walt.ts --setup-all
 ```
