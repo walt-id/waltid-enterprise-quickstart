@@ -223,7 +223,8 @@ What this does and does not cover:
 ## Moving to another database
 
 The license is bound to the installation key, not to the database. This also applies to moving
-between MongoDB and DocumentDB (`docker-compose-documentdb.yml`).
+between MongoDB, DocumentDB (`docker-compose-documentdb.yml`) and PostgreSQL
+(`docker-compose-postgresql.yml`).
 
 - **With a pinned key**, start the new stack with the same `LICENSE_INSTALLATION_KEY_FILE`, plus the
   latest `.waltlicense` (offline) or a new credential offer from walt.id (online).
