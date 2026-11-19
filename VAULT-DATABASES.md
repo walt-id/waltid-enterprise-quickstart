@@ -127,8 +127,8 @@ drain deadline can end a long-running transaction or cursor. An external token r
 invalidate its child leases before their recorded expiry. Health and rotation evidence should
 include application reads/writes and the database's authentication outcome.
 
-The standalone authenticated examples exercise both backends and modes, token-file replacement,
-two replicas, outage recovery and early token revocation.
+The standalone configuration examples provide local PostgreSQL and MongoDB services, Vault roles
+and API configuration for static and dynamic credentials.
 [Vault database credential examples](https://github.com/walt-id/waltid-enterprise-examples/tree/codex/vault-database-credentials/vault-database-credentials)
 
 The deployment runbook documents the configuration and operational contract.
