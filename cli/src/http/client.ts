@@ -54,6 +54,28 @@ export interface HttpRequestOptions {
   raw?: boolean;
 }
 
+/** JWK members that carry private or symmetric key material (RFC 7518 §6). */
+const PRIVATE_JWK_MEMBERS = ['d', 'p', 'q', 'dp', 'dq', 'qi', 'oth', 'k'];
+
+/**
+ * Copy of a logged body with the private members of every JWK replaced by `[REDACTED]`,
+ * so key imports never reach `walt-http-log.json`.
+ */
+export function redactPrivateKeyMaterial(value: any): any {
+  if (Array.isArray(value)) return value.map(redactPrivateKeyMaterial);
+  // Only plain objects: a Date or Buffer must still serialize the way it is sent.
+  if (value === null || typeof value !== 'object' || ![Object.prototype, null].includes(Object.getPrototypeOf(value))) {
+    return value;
+  }
+  const isJwk = typeof value.kty === 'string';
+  return Object.fromEntries(
+    Object.entries(value).map(([name, member]) => [
+      name,
+      isJwk && PRIVATE_JWK_MEMBERS.includes(name) ? '[REDACTED]' : redactPrivateKeyMaterial(member),
+    ])
+  );
+}
+
 // ============================================================================
 // HTTP Client
 // ============================================================================
@@ -165,7 +187,7 @@ export class HttpClient {
           method,
           url,
           headers: { ...headers, Authorization: headers.Authorization ? '[REDACTED]' : undefined },
-          body,
+          body: redactPrivateKeyMaterial(body),
         },
         response: {
           status: response.status,

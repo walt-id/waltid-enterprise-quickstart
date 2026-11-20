@@ -37,7 +37,7 @@ cli/
 │       ├── index.ts       # Flow exports
 │       ├── etsi.ts        # ETSI trust lists flow
 │       ├── revocation.ts  # Credential revocation flow
-│       └── wallet-provider-trust.ts  # Issuer2 wallet provider trust flow and demo
+│       └── wallet-provider-trust.ts  # Issuer2 wallet provider trust demo
 ├── keys/                   # Cryptographic key files (JWK, PEM)
 └── logs/                   # Runtime logs (gitignored)
 ```

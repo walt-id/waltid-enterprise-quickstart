@@ -6,11 +6,10 @@
  * `x509-trust-registry` method, the Trust Registry linked to the issuer decides both: the provider
  * certificate chain must be listed for one of `expectedEntityTypes` by a fresh source.
  *
- *   --flow-wallet-provider-trust   Scenario matrix (accepted, rejected, server error), PASS/FAIL table.
- *   --demo-wallet-provider-trust   The same feature as a three-act customer demo.
+ *   --demo-wallet-provider-trust   Three acts: provider unlisted, listed, removed again.
  *
- * Both create their own wallet, wallet provider, issuers and registries, named after one run id, and
- * reuse the tenant's issuer signing key and document signer certificate from `--setup-all`.
+ * The demo creates its own wallet, wallet provider, issuer and registry, named after one run id, and
+ * reuses the tenant's issuer signing key and document signer certificate from `--setup-all`.
  */
 import { generateKeyPairSync, KeyObject, sign } from 'crypto';
 import { mkdirSync } from 'fs';
@@ -26,21 +25,14 @@ import {
   kmsKeyRef,
   x509StoreCertificateRef,
 } from '../commands/setup/keys.js';
-import {
-  buildCertificateAnchorLote,
-  LOTE_TYPE_EU_PID_PROVIDERS,
-  LOTE_TYPE_EU_WALLET_PROVIDERS,
-} from '../trust-registry/index.js';
+import { buildCertificateAnchorLote, LOTE_TYPE_EU_WALLET_PROVIDERS } from '../trust-registry/index.js';
 
 const WALLET_PROVIDER_SERVICE_TYPE = 'urn:waltid:trust-service:wallet-provider';
 const KEY_STORAGE = 'iso_18045_high';
-const HOUR_MS = 60 * 60 * 1000;
-const DAY_MS = 24 * HOUR_MS;
-
-type EntityType = 'WALLET_PROVIDER' | 'PID_PROVIDER';
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 /**
- * What the wallet receipt, or a configuration call, ended with.
+ * What the wallet receipt ended with.
  *
  * Wallet2 passes `invalid_client` from the token endpoint through. It does not pass the credential
  * endpoint's error code through: a rejected key attestation (`invalid_proof`) shows as a failure at
@@ -51,7 +43,6 @@ type Outcome =
   | 'INVALID_CLIENT'
   | 'CREDENTIAL_REJECTED'
   | 'SERVER_ERROR'
-  | 'LIST_REJECTED'
   | 'HTTP_400'
   | 'OTHER';
 
@@ -84,15 +75,6 @@ interface Run {
 
 interface Attempt {
   outcome: Outcome;
-  status: number;
-  detail: string;
-}
-
-interface ScenarioResult {
-  id: string;
-  title: string;
-  expected: Outcome;
-  actual: Outcome;
   status: number;
   detail: string;
 }
@@ -263,22 +245,15 @@ async function prepareRun(ctx: CommandContext): Promise<Run> {
 // Issuer2, Trust Registry and receipt
 // ============================================================================
 
-type VerificationMethod =
-  | { type: 'x509-chain'; trustedRootCertificatesPem: string[] }
-  | { type: 'x509-trust-registry'; expectedEntityTypes: EntityType[]; requireAuthenticatedSource: boolean };
-
-function registryMethod(types: EntityType[], requireAuthenticatedSource = false): VerificationMethod {
-  return { type: 'x509-trust-registry', expectedEntityTypes: types, requireAuthenticatedSource };
-}
+/** Both attestations: the linked registry must list the provider, from a list signed by a trusted operator. */
+const VERIFICATION_METHOD = {
+  type: 'x509-trust-registry',
+  expectedEntityTypes: ['WALLET_PROVIDER'],
+  requireAuthenticatedSource: true,
+};
 
 /** Issuer2 that requires a WIA on the token request and a KA on the credential request. */
-async function createIssuer(
-  ctx: CommandContext,
-  run: Run,
-  name: string,
-  clientMethod: VerificationMethod,
-  keyMethod: VerificationMethod = clientMethod
-): Promise<string> {
+async function createIssuer(ctx: CommandContext, run: Run, name: string): Promise<string> {
   const step = ctx.nextStep();
   const credType = CREDENTIAL_TYPES[getCredentialType()];
   const issuerTarget = `${ctx.tenantPath}.${run.id}-${name}-issuer`;
@@ -288,9 +263,9 @@ async function createIssuer(
     tokenKeyId: kmsKeyRef(ctx, KEY_IDS.issuerSigningKey),
     kms: `${ctx.tenantPath}.${RESOURCES.kms}`,
     clientAuthenticationConfig: {
-      supportedMethods: [{ type: 'client-attestation', config: { verificationMethod: clientMethod } }],
+      supportedMethods: [{ type: 'client-attestation', config: { verificationMethod: VERIFICATION_METHOD } }],
     },
-    keyAttestationConfig: { verificationMethod: keyMethod },
+    keyAttestationConfig: { verificationMethod: VERIFICATION_METHOD },
     credentialConfigurations: {
       [credType.docType]: {
         format: 'mso_mdoc',
@@ -328,11 +303,6 @@ interface Listing {
   certificatesPem: string[];
   /** Entity names, by position; defaults to "Demo Wallet Provider". */
   names?: string[];
-  loteType?: string;
-  /** Defaults to one year from now; `null` omits it. */
-  nextUpdate?: Date | null;
-  /** Sign the list as the run's list operator and load it with REQUIRE_AUTHENTICATED. */
-  signed?: boolean;
 }
 
 function walletProviderList(sourceId: string, listing: Listing): object {
@@ -347,8 +317,8 @@ function walletProviderList(sourceId: string, listing: Listing): object {
       serviceType: WALLET_PROVIDER_SERVICE_TYPE,
       certificatePem,
     })),
-    listing.loteType ?? LOTE_TYPE_EU_WALLET_PROVIDERS,
-    listing.nextUpdate === undefined ? new Date(Date.now() + 365 * DAY_MS) : listing.nextUpdate
+    LOTE_TYPE_EU_WALLET_PROVIDERS,
+    new Date(Date.now() + 365 * DAY_MS)
   );
 }
 
@@ -358,28 +328,30 @@ async function createRegistry(ctx: CommandContext, run: Run, name: string): Prom
   return registryTarget;
 }
 
-/** Load (or replace, same `sourceId`) a list in the registry. Returns the load result. */
+/**
+ * Sign the list as the run's list operator and load (or replace, same `sourceId`) it in the registry.
+ * A rejected load stops the demo instead of letting a later act pass for the wrong reason.
+ */
 async function publishList(
   ctx: CommandContext,
   run: Run,
   registryTarget: string,
   sourceId: string,
   listing: Listing
-): Promise<any> {
+): Promise<void> {
   const step = ctx.nextStep();
   const lote = walletProviderList(sourceId, listing);
   ctx.saveJson(`${sourceId}-lote.json`, lote, step);
-  const request = listing.signed
-    ? {
-        sourceId,
-        content: signList(run.listSigner, lote),
-        acceptancePolicy: 'REQUIRE_AUTHENTICATED',
-        trustedSignerCertificates: [run.listSigner.certificatePem],
-      }
-    : { sourceId, content: JSON.stringify(lote), acceptancePolicy: 'ALLOW_UNSIGNED' };
-  const response = await ctx.orgClient.post(`/v1/${registryTarget}/trust-registry-api/sources/load`, request);
+  const response = await ctx.orgClient.post(`/v1/${registryTarget}/trust-registry-api/sources/load`, {
+    sourceId,
+    content: signList(run.listSigner, lote),
+    acceptancePolicy: 'REQUIRE_AUTHENTICATED',
+    trustedSignerCertificates: [run.listSigner.certificatePem],
+  });
   ctx.saveJson(`${sourceId}-load-response.json`, response.data, step);
-  return response.data;
+  if (response.data?.success !== true) {
+    throw new Error(`List "${sourceId}" was not loaded: ${response.data?.error ?? errorDetail(response.data)}`);
+  }
 }
 
 async function linkRegistry(ctx: CommandContext, issuerTarget: string, registryTarget: string): Promise<void> {
@@ -448,286 +420,6 @@ async function receive(ctx: CommandContext, run: Run, issuerTarget: string, labe
   return { outcome, status, detail };
 }
 
-/** Run a configuration call that is expected to fail; never throws for HTTP errors. */
-async function attempt(ctx: CommandContext, label: string, call: () => Promise<unknown>): Promise<Attempt> {
-  const step = ctx.nextStep();
-  try {
-    await call();
-    ctx.saveJson(`${label}-response.json`, { status: 'ok' }, step);
-    return { outcome: 'OTHER', status: 200, detail: 'accepted' };
-  } catch (error: any) {
-    if (!error.status) throw error;
-    ctx.saveJson(`${label}-response.json`, { status: error.status, body: error.response?.data }, step);
-    return {
-      outcome: classify(error.status, error.response?.data),
-      status: error.status,
-      detail: errorDetail(error.response?.data),
-    };
-  }
-}
-
-// ============================================================================
-// Test matrix
-// ============================================================================
-
-interface Scenario {
-  id: string;
-  title: string;
-  expected: Outcome;
-  run: (ctx: CommandContext, run: Run) => Promise<Attempt>;
-}
-
-/** Issuer with `x509-trust-registry`, its own registry holding `listing`, linked after creation. */
-async function registryIssuance(
-  ctx: CommandContext,
-  run: Run,
-  name: string,
-  listing: Listing,
-  options: { clientTypes?: EntityType[]; keyTypes?: EntityType[]; requireAuthenticatedSource?: boolean } = {}
-): Promise<{ issuerTarget: string; registryTarget: string; result: Attempt }> {
-  const clientTypes = options.clientTypes ?? ['WALLET_PROVIDER'];
-  const keyTypes = options.keyTypes ?? clientTypes;
-  const issuerTarget = await createIssuer(
-    ctx, run, name,
-    registryMethod(clientTypes, options.requireAuthenticatedSource),
-    registryMethod(keyTypes, options.requireAuthenticatedSource)
-  );
-  const registryTarget = await createRegistry(ctx, run, name);
-  const load = await publishList(ctx, run, registryTarget, `${run.id}-${name}`, listing);
-  if (!load.success) {
-    return { issuerTarget, registryTarget, result: { outcome: 'LIST_REJECTED', status: 0, detail: `list not loaded: ${load.error}` } };
-  }
-  await linkRegistry(ctx, issuerTarget, registryTarget);
-  return { issuerTarget, registryTarget, result: await receive(ctx, run, issuerTarget, name) };
-}
-
-function scenarios(): Scenario[] {
-  return [
-    {
-      id: 'baseline',
-      title: 'x509-chain with the provider CA as root (no registry)',
-      expected: 'ISSUED',
-      run: async (ctx, run) => {
-        const issuer = await createIssuer(ctx, run, 'baseline', {
-          type: 'x509-chain',
-          trustedRootCertificatesPem: [run.pki.caPem],
-        });
-        return receive(ctx, run, issuer, 'baseline');
-      },
-    },
-    {
-      id: 'leaf-listed',
-      title: 'Registry lists the provider signing certificate as WALLET_PROVIDER',
-      expected: 'ISSUED',
-      run: async (ctx, run) =>
-        (await registryIssuance(ctx, run, 'leaf-listed', { certificatesPem: [run.pki.leafPem] })).result,
-    },
-    {
-      id: 'ca-listed',
-      title: 'Registry lists the provider CA only (leaf-only x5c, path built to the CA)',
-      expected: 'ISSUED',
-      run: async (ctx, run) =>
-        (await registryIssuance(ctx, run, 'ca-listed', { certificatesPem: [run.pki.caPem] })).result,
-    },
-    {
-      id: 'unlisted',
-      title: 'Registry lists only an unrelated CA',
-      expected: 'INVALID_CLIENT',
-      run: async (ctx, run) =>
-        (await registryIssuance(ctx, run, 'unlisted', { certificatesPem: [run.pki.otherCaPem] })).result,
-    },
-    {
-      id: 'wrong-type',
-      title: 'Provider listed on a PID Providers list, issuer expects WALLET_PROVIDER',
-      expected: 'INVALID_CLIENT',
-      run: async (ctx, run) =>
-        (await registryIssuance(ctx, run, 'wrong-type', {
-          certificatesPem: [run.pki.caPem],
-          loteType: LOTE_TYPE_EU_PID_PROVIDERS,
-        })).result,
-    },
-    {
-      id: 'expired',
-      title: 'List expired (nextUpdate yesterday)',
-      expected: 'INVALID_CLIENT',
-      run: async (ctx, run) =>
-        (await registryIssuance(ctx, run, 'expired', {
-          certificatesPem: [run.pki.caPem],
-          nextUpdate: new Date(Date.now() - DAY_MS),
-        })).result,
-    },
-    {
-      id: 'stale',
-      title: 'List stale (nextUpdate in 12 hours)',
-      expected: 'INVALID_CLIENT',
-      run: async (ctx, run) =>
-        (await registryIssuance(ctx, run, 'stale', {
-          certificatesPem: [run.pki.caPem],
-          nextUpdate: new Date(Date.now() + 12 * HOUR_MS),
-        })).result,
-    },
-    {
-      id: 'fresh-25h',
-      title: 'List still fresh (nextUpdate in 25 hours)',
-      expected: 'ISSUED',
-      run: async (ctx, run) =>
-        (await registryIssuance(ctx, run, 'fresh-25h', {
-          certificatesPem: [run.pki.caPem],
-          nextUpdate: new Date(Date.now() + 25 * HOUR_MS),
-        })).result,
-    },
-    {
-      id: 'no-next-update',
-      // ETSI TS 119 602 requires NextUpdate, so the registry refuses the list before any decision.
-      title: 'List without nextUpdate is refused at load',
-      expected: 'LIST_REJECTED',
-      run: async (ctx, run) =>
-        (await registryIssuance(ctx, run, 'no-next-update', {
-          certificatesPem: [run.pki.caPem],
-          nextUpdate: null,
-        })).result,
-    },
-    {
-      id: 'require-authenticated',
-      title: 'requireAuthenticatedSource=true, list loaded unsigned',
-      expected: 'INVALID_CLIENT',
-      run: async (ctx, run) =>
-        (await registryIssuance(ctx, run, 'require-auth', { certificatesPem: [run.pki.caPem] }, {
-          requireAuthenticatedSource: true,
-        })).result,
-    },
-    {
-      id: 'signed-authenticated',
-      title: 'requireAuthenticatedSource=true, list signed by a trusted list operator',
-      expected: 'ISSUED',
-      run: async (ctx, run) =>
-        (await registryIssuance(ctx, run, 'signed-auth', { certificatesPem: [run.pki.caPem], signed: true }, {
-          requireAuthenticatedSource: true,
-        })).result,
-    },
-    {
-      id: 'ka-only',
-      title: 'WIA accepts PID_PROVIDER too, KA only WALLET_PROVIDER, provider on a PID list',
-      expected: 'CREDENTIAL_REJECTED',
-      run: async (ctx, run) =>
-        (await registryIssuance(ctx, run, 'ka-only', {
-          certificatesPem: [run.pki.caPem],
-          loteType: LOTE_TYPE_EU_PID_PROVIDERS,
-        }, {
-          clientTypes: ['WALLET_PROVIDER', 'PID_PROVIDER'],
-          keyTypes: ['WALLET_PROVIDER'],
-        })).result,
-    },
-    {
-      id: 'no-registry',
-      title: 'x509-trust-registry configured, no registry linked',
-      expected: 'SERVER_ERROR',
-      run: async (ctx, run) => {
-        const issuer = await createIssuer(ctx, run, 'no-registry', registryMethod(['WALLET_PROVIDER']));
-        return receive(ctx, run, issuer, 'no-registry');
-      },
-    },
-    {
-      // Reuses the issuer from 'no-registry'; keep both in this order.
-      id: 'link-later',
-      title: 'Same issuer, registry linked afterwards (no restart, no reconfiguration)',
-      expected: 'ISSUED',
-      run: async (ctx, run) => {
-        const issuer = `${ctx.tenantPath}.${run.id}-no-registry-issuer`;
-        const registry = await createRegistry(ctx, run, 'link-later');
-        await publishList(ctx, run, registry, `${run.id}-link-later`, { certificatesPem: [run.pki.caPem] });
-        await linkRegistry(ctx, issuer, registry);
-        return receive(ctx, run, issuer, 'link-later');
-      },
-    },
-    {
-      // The 'no-registry' issuer has a registry since 'link-later'.
-      id: 'second-registry',
-      title: 'Linking a second registry to the same issuer',
-      expected: 'HTTP_400',
-      run: async (ctx, run) => {
-        const issuer = `${ctx.tenantPath}.${run.id}-no-registry-issuer`;
-        const second = await createRegistry(ctx, run, 'second');
-        return attempt(ctx, 'second-registry', () => linkRegistry(ctx, issuer, second));
-      },
-    },
-    {
-      id: 'delisted',
-      title: 'Provider removed from the list (same sourceId reloaded without it)',
-      expected: 'INVALID_CLIENT',
-      run: async (ctx, run) => {
-        const { issuerTarget, registryTarget, result } = await registryIssuance(
-          ctx, run, 'delisted', { certificatesPem: [run.pki.caPem] }
-        );
-        if (result.outcome !== 'ISSUED') {
-          return { ...result, detail: `precondition (listed) failed: ${result.detail}` };
-        }
-        await publishList(ctx, run, registryTarget, `${run.id}-delisted`, { certificatesPem: [run.pki.otherCaPem] });
-        return receive(ctx, run, issuerTarget, 'delisted-after');
-      },
-    },
-    {
-      id: 'empty-types',
-      title: 'Create an issuer with expectedEntityTypes []',
-      expected: 'HTTP_400',
-      run: async (ctx, run) =>
-        attempt(ctx, 'empty-types', () => createIssuer(ctx, run, 'empty-types', registryMethod([]))),
-    },
-  ];
-}
-
-function printTable(results: ScenarioResult[]): void {
-  const width = Math.max(...results.map(r => r.id.length));
-  console.log('\n  Result  Scenario' + ' '.repeat(Math.max(0, width - 8)) + '  Expected             Actual');
-  console.log('  ' + '-'.repeat(width + 60));
-  for (const r of results) {
-    const verdict = r.expected === r.actual ? 'PASS' : 'FAIL';
-    console.log(
-      `  [${verdict}] ${r.id.padEnd(width)}  ${r.expected.padEnd(20)} ${r.actual} (HTTP ${r.status})`
-    );
-    if (verdict === 'FAIL' || process.env.VERBOSE === 'true') console.log(`         ${r.detail}`);
-  }
-}
-
-export async function flowWalletProviderTrust(ctx: CommandContext): Promise<void> {
-  console.log('\n========================================');
-  console.log('  Flow: Wallet Provider trust (x509-trust-registry)');
-  console.log('========================================\n');
-  mkdirSync(ctx.workdir, { recursive: true });
-  const results: ScenarioResult[] = [];
-  const only = process.env.WPT_SCENARIOS?.split(',').map(s => s.trim()).filter(Boolean);
-
-  try {
-    await setupLogin(ctx);
-    const run = await prepareRun(ctx);
-    for (const scenario of scenarios()) {
-      if (only && !only.includes(scenario.id)) continue;
-      ctx.log(`${scenario.id}: ${scenario.title}`, 'SCENARIO');
-      let outcome: Attempt;
-      try {
-        outcome = await scenario.run(ctx, run);
-      } catch (error: any) {
-        outcome = {
-          outcome: 'OTHER',
-          status: error.status ?? 0,
-          detail: `setup failed: ${error.message} ${error.response?.data ? errorDetail(error.response.data) : ''}`,
-        };
-      }
-      const pass = outcome.outcome === scenario.expected;
-      console.log(`   [${pass ? 'PASS' : 'FAIL'}] expected ${scenario.expected}, got ${outcome.outcome} (HTTP ${outcome.status})`);
-      results.push({ id: scenario.id, title: scenario.title, expected: scenario.expected, actual: outcome.outcome, status: outcome.status, detail: outcome.detail });
-    }
-    ctx.saveJson('wallet-provider-trust-results.json', { runId: run.id, results }, ctx.nextStep());
-    printTable(results);
-    const failed = results.filter(r => r.expected !== r.actual);
-    if (failed.length > 0) throw new Error(`${failed.length} of ${results.length} scenarios failed`);
-    console.log(`\n  PASS - ${results.length} scenarios\n`);
-  } finally {
-    ctx.saveHttpLog();
-    console.log(`Logs saved to: ${ctx.workdir}`);
-  }
-}
-
 // ============================================================================
 // Customer demo
 // ============================================================================
@@ -784,14 +476,13 @@ export async function flowWalletProviderTrustDemo(ctx: CommandContext): Promise<
   try {
     await setupLogin(ctx);
     const run = await prepareRun(ctx);
-    const issuerTarget = await createIssuer(ctx, run, 'demo', registryMethod(['WALLET_PROVIDER'], true));
+    const issuerTarget = await createIssuer(ctx, run, 'demo');
     const registryTarget = await createRegistry(ctx, run, 'demo');
     const sourceId = `${run.id}-eu-wallet-providers`;
-    const otherProvider = { certificatesPem: [run.pki.otherCaPem], names: ['Other Wallet Provider'], signed: true };
+    const otherProvider = { certificatesPem: [run.pki.otherCaPem], names: ['Other Wallet Provider'] };
     const bothProviders = {
       certificatesPem: [run.pki.otherCaPem, run.pki.caPem],
       names: ['Other Wallet Provider', 'Demo Wallet Provider'],
-      signed: true,
     };
     await publishList(ctx, run, registryTarget, sourceId, otherProvider);
     await linkRegistry(ctx, issuerTarget, registryTarget);

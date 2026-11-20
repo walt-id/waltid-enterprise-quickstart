@@ -119,8 +119,7 @@ These commands manage credential status and revocation.
 |---------|-------------|
 | `--flow-etsi-trust-lists` | Run ETSI trust lists verification flow (see below) |
 | `--flow-trust-list-assurance` | Test certificate paths, signed LoTE, and verifier integration |
-| `--flow-wallet-provider-trust` | Test Issuer2 wallet provider trust through the Trust Registry (see below) |
-| `--demo-wallet-provider-trust` | Demo: issue only to wallets whose provider is on the trust list |
+| `--demo-wallet-provider-trust` | Demo: issue only to wallets whose provider is on the trust list (see below) |
 | `--flow-credential-revocation` | Run credential revocation flow (see below) |
 
 #### ETSI Trust Lists Flow (`--flow-etsi-trust-lists`)
@@ -207,47 +206,21 @@ export TRUST_LIST_ALLOW_EMBEDDED_SIGNER_TEST_PIN=true
 
 The flow writes every request, response, trust decision, and final Verifier2 session to its timestamped directory under `cli/logs/`.
 
-#### Wallet Provider Trust (`--flow-wallet-provider-trust`, `--demo-wallet-provider-trust`)
+#### Wallet Provider Trust Demo (`--demo-wallet-provider-trust`)
 
-Tests the Issuer2 `x509-trust-registry` attestation verification method. The issuer accepts the wallet instance attestation (token request) and the key attestation (credential request) only if the Trust Registry linked to the issuer lists the wallet provider's certificate chain for one of `expectedEntityTypes`, from a fresh source.
+Shows the Issuer2 `x509-trust-registry` attestation verification method. The issuer accepts the wallet instance attestation (token request) and the key attestation (credential request) only if the Trust Registry linked to the issuer lists the wallet provider's certificate chain as `WALLET_PROVIDER`, from a fresh list signed by a list operator it trusts.
 
-Both commands create their own wallet, wallet provider, issuers and trust registries, named after one run id. They reuse the tenant's issuer signing key and document signer certificate, so run `--setup-all` first.
-
-`--flow-wallet-provider-trust` runs these scenarios, prints a PASS/FAIL table and fails if any scenario ends differently. Results go to `wallet-provider-trust-results.json` in the run's log directory.
-
-| Scenario | Checks | Expected |
-|---|---|---|
-| `baseline` | `x509-chain` with the provider CA as root, no registry | `ISSUED` |
-| `leaf-listed` | Registry lists the provider signing certificate | `ISSUED` |
-| `ca-listed` | Registry lists only the provider CA, wallet sends the leaf only | `ISSUED` |
-| `unlisted` | Registry lists only an unrelated CA | `INVALID_CLIENT` |
-| `wrong-type` | Provider on a PID Providers list, issuer expects `WALLET_PROVIDER` | `INVALID_CLIENT` |
-| `expired` | List `nextUpdate` was yesterday | `INVALID_CLIENT` |
-| `stale` | List `nextUpdate` is in 12 hours | `INVALID_CLIENT` |
-| `fresh-25h` | List `nextUpdate` is in 25 hours | `ISSUED` |
-| `no-next-update` | List without `nextUpdate` | `LIST_REJECTED` |
-| `require-authenticated` | `requireAuthenticatedSource: true`, unsigned list | `INVALID_CLIENT` |
-| `signed-authenticated` | `requireAuthenticatedSource: true`, list signed by a trusted operator | `ISSUED` |
-| `ka-only` | Wallet attestation accepts `PID_PROVIDER`, key attestation only `WALLET_PROVIDER` | `CREDENTIAL_REJECTED` |
-| `no-registry` | `x509-trust-registry` configured, no registry linked | `SERVER_ERROR` |
-| `link-later` | Same issuer, registry linked afterwards | `ISSUED` |
-| `second-registry` | Link a second registry to the same issuer | `HTTP_400` |
-| `delisted` | Provider removed from a reloaded list | `INVALID_CLIENT` |
-| `empty-types` | Create an issuer with `expectedEntityTypes: []` | `HTTP_400` |
-
-`CREDENTIAL_REJECTED` means the token request succeeded and the credential request failed: Wallet2 does not pass the issuer's `invalid_proof` through.
-
-`--demo-wallet-provider-trust` shows the same feature in three acts, against one issuer that only accepts signed lists. The issuer configuration never changes between acts:
+The demo creates its own wallet, wallet provider, issuer and trust registry, named after one run id. It reuses the tenant's issuer signing key and document signer certificate, so run `--setup-all` first. The issuer configuration never changes between the three acts:
 
 1. The Wallet Providers List names another provider: the issuer refuses the wallet (`invalid_client`).
 2. The list operator publishes a new signed version that adds the provider CA: the wallet receives the PID.
 3. The provider is removed from the list: the issuer refuses the wallet again.
 
+The demo fails if any act ends differently or the registry rejects a list.
+
 **Usage:**
 ```bash
 npx tsx walt.ts --setup-all  # once
-npx tsx walt.ts --flow-wallet-provider-trust
-WPT_SCENARIOS=ca-listed,stale npx tsx walt.ts --flow-wallet-provider-trust  # selected scenarios only
 npx tsx walt.ts --demo-wallet-provider-trust
 ```
 
@@ -430,7 +403,6 @@ The `--setup-recreate` command automatically creates both the superadmin and adm
 - **Repeatable flow commands**: Issue credentials and test verification
   - `--flow-credential-revocation`: Test status lifecycle
   - `--flow-etsi-trust-lists`: Test trust list verification
-  - `--flow-wallet-provider-trust`: Test wallet provider trust (creates its own wallet, issuers and registries)
 
 This ensures:
 - ✅ Predictable credential selection during presentation
@@ -459,7 +431,7 @@ npx tsx walt.ts --clear-wallet-credentials
 Logs are saved to `walt-log-<date>-<time>-<count>/` directories (e.g., `walt-log-2026-05-07-14-30-15-001/`):
 - **Request files**: Step-numbered JSON files with full HTTP details including method, endpoint, headers, and body (e.g., `001-login-request.json`)
 - **Response files**: Step-numbered JSON files with status code, status text, and response body (e.g., `001-login-response.json`)
-- **Combined HTTP log**: `walt-http-log.json` with all HTTP traffic
+- **Combined HTTP log**: `walt-http-log.json` with all HTTP traffic. Authorization headers and the private members of imported JWKs are redacted
 
 Example request file format:
 ```json
