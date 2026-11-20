@@ -20,6 +20,7 @@ import { fileURLToPath } from 'url';
 
 import { createConfig } from './config.js';
 import { CommandContext } from './context.js';
+import { readScaPidConfig, scaPidContext } from './sca-pid-config.js';
 import { loadWaltEnv } from './env.js';
 import { loadBankTenantEnv, createBankTenantConfig } from './bank-tenant-config.js';
 import { loadGovServicesEnv, createGovServicesConfig } from './gov-services-config.js';
@@ -59,6 +60,7 @@ import {
   setupEtsiTrustRegistry,
   setupImportTrustList,
   setupCreateOidcBridge,
+  setupScaPid,
   
   // Run commands
   runCreateCredentialOffer,
@@ -93,6 +95,7 @@ import {
   flowTrustListAssurance,
   flowWalletProviderTrust,
   flowWalletProviderTrustDemo,
+  flowScaPid,
 } from './flows/index.js';
 
 // ============================================================================
@@ -126,6 +129,10 @@ System Commands:
   --setup-create-organization  Create organization
   --setup-create-admin-role  Create organization admin role
   --setup-create-admin-account  Create admin user account and assign role
+
+SCA/PID setup and flows (explicit configuration and SCA_PID_API_TOKEN required):
+  --setup-sca-pid <file>  Provision an SCA/PID tenant using operator credentials
+  --flow-sca-pid <file>   Issue and jointly present both profiles using scoped access
 
 Setup Commands (create resources):
   --setup-all             Run all setup commands
@@ -318,6 +325,30 @@ async function main(): Promise<void> {
   // Help
   if (args.includes('--help') || args.includes('-h')) {
     printHelp();
+    return;
+  }
+
+  // Explicit scenario credentials must be handled before the default administrator setup.
+  if (args.includes('--setup-sca-pid') || args.includes('--flow-sca-pid')) {
+    const operation = args[0] === '--setup-sca-pid' ? 'setup' : 'flow';
+    let stage = 'configuration';
+    try {
+      if (args.length !== 2 || !['--setup-sca-pid', '--flow-sca-pid'].includes(args[0]) || args[1].startsWith('-')) {
+        throw new SyntaxError('Use one scenario command and one configuration file');
+      }
+      const scenario = readScaPidConfig(args[1]);
+      stage = 'authentication';
+      const context = scaPidContext(scenario, process.env.SCA_PID_API_TOKEN ?? '', cliDir);
+      stage = operation;
+      const result = operation === 'setup'
+        ? (await setupScaPid(context, scenario), { outcome: 'successful' })
+        : await flowScaPid(context, scenario);
+      console.log(JSON.stringify({ operation, ...result }));
+    } catch {
+      // Input paths, API bodies and assertion values can identify the deployment or contain secrets.
+      console.error(`SCA/PID ${operation} failed during ${stage}. Check private server diagnostics for details.`);
+      process.exitCode = 1;
+    }
     return;
   }
 
