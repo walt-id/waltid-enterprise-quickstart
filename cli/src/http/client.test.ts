@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
+import { generateKeyPairSync } from 'node:crypto';
 import test from 'node:test';
-import { HttpClient } from './client.js';
+import { HttpClient, redactPrivateKeyMaterial } from './client.js';
 import { createServer as httpsServer } from 'node:https';
 import { createServer as httpServer } from 'node:http';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
@@ -98,4 +99,35 @@ test('ordinary HTTP callers retain diagnostics, raw bodies and redacted logs; em
   } finally {
     globalThis.fetch = original;
   }
+});
+
+test('a logged JWK import keeps its public members and drops the private ones', async () => {
+  const jwk = generateKeyPairSync('ec', { namedCurve: 'prime256v1' }).privateKey.export({ format: 'jwk' });
+  const client = new HttpClient('http://quickstart.test');
+  const previousFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response('{}', { headers: { 'content-type': 'application/json' } });
+  try {
+    await client.post('/keys/import/jwk', jwk);
+  } finally {
+    globalThis.fetch = previousFetch;
+  }
+
+  const logged = client.getHttpLog()[0]!.request.body;
+  assert.equal(logged.d, '[REDACTED]');
+  assert.equal(logged.x, jwk.x);
+  assert.ok(!JSON.stringify(client.getHttpLog()).includes(jwk.d!));
+  assert.ok(jwk.d, 'the sent key itself is not modified');
+});
+
+test('nested and symmetric JWKs are redacted, other bodies pass through', () => {
+  const body = { keys: [{ kty: 'oct', k: 'c2VjcmV0' }], note: { d: 'not a jwk' }, list: ['a', 1, null] };
+  assert.deepEqual(redactPrivateKeyMaterial(body), {
+    keys: [{ kty: 'oct', k: '[REDACTED]' }],
+    note: { d: 'not a jwk' },
+    list: ['a', 1, null],
+  });
+  assert.equal(redactPrivateKeyMaterial('text/plain dependency'), 'text/plain dependency');
+  assert.equal(redactPrivateKeyMaterial(undefined), undefined);
+  const dated = { validFrom: new Date(0) };
+  assert.equal(JSON.stringify(redactPrivateKeyMaterial(dated)), JSON.stringify(dated));
 });
