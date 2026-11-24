@@ -1,170 +1,63 @@
+{{- if .Values.ingress.enabled }}
+{{- /*
+Prefix paths only: every controller (ALB, nginx, Traefik) matches them the same way, while
+ImplementationSpecific means an exact match on the AWS Load Balancer Controller.
+*/}}
+{{- $apiService := printf "%s-api-service" (include "enterprise-stack.fullname" .) }}
+{{- $uiService := printf "%s-ui-service" (include "enterprise-stack.fullname" .) }}
+{{- $apiPaths := list "/auth/" "/v1/" "/v2/" "/.well-known/" "/swagger" "/api.json" "/livez" "/features/" }}
+{{- if .Values.ingress.exposeDebugEndpoints }}
+{{- $apiPaths = append $apiPaths "/debug/" }}
+{{- end }}
+{{- $hosts := list .Values.ingress.host }}
+{{- if .Values.ingress.wildcardHost }}
+{{- $hosts = append $hosts (printf "*.%s" .Values.ingress.host) }}
+{{- end }}
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: {{ include "enterprise-stack.fullname" . }}-ingress
   labels:
   {{- include "enterprise-stack.labels" . | nindent 4 }}
+  {{- if or .Values.ingress.annotations .Values.ingress.clusterIssuer }}
   annotations:
-  {{- if .Values.ingress.annotations }}
-    {{- .Values.ingress.annotations | toYaml | nindent 4 }}
+  {{- with .Values.ingress.annotations }}
+    {{- toYaml . | nindent 4 }}
   {{- end }}
-  {{- if .Values.ingress.clusterIssuer }}
-    cert-manager.io/cluster-issuer: {{ .Values.ingress.clusterIssuer }}
+  {{- with .Values.ingress.clusterIssuer }}
+    cert-manager.io/cluster-issuer: {{ . | quote }}
+  {{- end }}
   {{- end }}
 spec:
-  ingressClassName: {{ .Values.ingress.ingressClassName }}
-  {{- if .Values.ingress.tls }}
-  tls: 
-    {{- .Values.ingress.tls | toYaml | nindent 4 }}
+  {{- with .Values.ingress.ingressClassName }}
+  ingressClassName: {{ . | quote }}
+  {{- end }}
+  {{- with .Values.ingress.tls }}
+  tls:
+    {{- toYaml . | nindent 4 }}
   {{- end }}
   rules:
-  - host: {{ quote .Values.ingress.host }}
+  {{- range $hosts }}
+  - host: {{ . | quote }}
     http:
       paths:
-      - path: /auth/
+      {{- range $apiPaths }}
+      - path: {{ . }}
         pathType: Prefix
         backend:
           service:
-            name: '{{ include "enterprise-stack.fullname" . }}-api-service'
+            name: {{ $apiService | quote }}
             port:
               name: http
-      - path: /v1/
-        pathType: Prefix
-        backend:
-          service:
-            name: '{{ include "enterprise-stack.fullname" . }}-api-service'
-            port:
-              name: http
-      - path: /v2/
-        pathType: Prefix
-        backend:
-          service:
-            name: '{{ include "enterprise-stack.fullname" . }}-api-service'
-            port:
-              name: http
-      - path: /.well-known/
-        pathType: ImplementationSpecific
-        backend:
-          service:
-            name: '{{ include "enterprise-stack.fullname" . }}-api-service'
-            port:
-              name: http
-      - path: /swagger
-        pathType: Prefix
-        backend:
-          service:
-            name: '{{ include "enterprise-stack.fullname" . }}-api-service'
-            port:
-              name: http
-      - path: /api.json
-        pathType: ImplementationSpecific
-        backend:
-          service:
-            name: '{{ include "enterprise-stack.fullname" . }}-api-service'
-            port:
-              name: http
-      - path: /livez
-        pathType: Prefix
-        backend:
-          service:
-            name: '{{ include "enterprise-stack.fullname" . }}-api-service'
-            port:
-              name: http
-      - path: /features/
-        pathType: Prefix
-        backend:
-          service:
-            name: '{{ include "enterprise-stack.fullname" . }}-api-service'
-            port:
-              name: http
-      - path: /debug/
-        pathType: Prefix
-        backend:
-          service:
-            name: '{{ include "enterprise-stack.fullname" . }}-api-service'
-            port:
-              name: http
-      {{- if .Values.web.enabled }}
+      {{- end }}
+      {{- if $.Values.web.enabled }}
       - path: /
         pathType: Prefix
         backend:
           service:
-            name: '{{ include "enterprise-stack.fullname" . }}-ui-service'
+            name: {{ $uiService | quote }}
             port:
               name: http
       {{- end }}
-  - host: {{ quote (printf "*.%s" .Values.ingress.host) }}
-    http:
-      paths:
-      - path: /auth/
-        pathType: Prefix
-        backend:
-          service:
-            name: '{{ include "enterprise-stack.fullname" . }}-api-service'
-            port:
-              name: http
-      - path: /v1/
-        pathType: Prefix
-        backend:
-          service:
-            name: '{{ include "enterprise-stack.fullname" . }}-api-service'
-            port:
-              name: http
-      - path: /v2/
-        pathType: Prefix
-        backend:
-          service:
-            name: '{{ include "enterprise-stack.fullname" . }}-api-service'
-            port:
-              name: http
-      - path: /.well-known/
-        pathType: ImplementationSpecific
-        backend:
-          service:
-            name: '{{ include "enterprise-stack.fullname" . }}-api-service'
-            port:
-              name: http
-      - path: /swagger
-        pathType: Prefix
-        backend:
-          service:
-            name: '{{ include "enterprise-stack.fullname" . }}-api-service'
-            port:
-              name: http
-      - path: /api.json
-        pathType: ImplementationSpecific
-        backend:
-          service:
-            name: '{{ include "enterprise-stack.fullname" . }}-api-service'
-            port:
-              name: http
-      - path: /livez
-        pathType: Prefix
-        backend:
-          service:
-            name: '{{ include "enterprise-stack.fullname" . }}-api-service'
-            port:
-              name: http
-      - path: /features/
-        pathType: Prefix
-        backend:
-          service:
-            name: '{{ include "enterprise-stack.fullname" . }}-api-service'
-            port:
-              name: http
-      - path: /debug/
-        pathType: Prefix
-        backend:
-          service:
-            name: '{{ include "enterprise-stack.fullname" . }}-api-service'
-            port:
-              name: http
-      {{- if .Values.web.enabled }}
-      - path: /
-        pathType: Prefix
-        backend:
-          service:
-            name: '{{ include "enterprise-stack.fullname" . }}-ui-service'
-            port:
-              name: http
-      {{- end }}
+  {{- end }}
+{{- end }}

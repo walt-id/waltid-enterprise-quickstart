@@ -84,8 +84,8 @@ New Enterprise passwords must contain 15–128 characters. Spaces and Unicode ar
 uppercase letters, digits and symbols are not required. The server rejects passwords found in
 its bundled blocklist and whole matches against account identifiers or service names.
 
-The Docker Compose bootstrap account in `config/superadmin-registration.conf` and the Helm
-example in `helm/values.yaml` use `violet orchard river lantern`. The CLI admin account defaults
+The Docker Compose bootstrap account in `config/superadmin-registration.conf` uses
+`violet orchard river lantern`. The CLI admin account defaults
 to `violet meadow river lantern`; override it with `ADMIN_PASSWORD` in `cli/walt.env` or your
 environment. These are public local-development examples: replace them before deployment.
 Changing these files does not reset an existing account's password. When using an existing

@@ -1,49 +1,19 @@
+# See helm/README.md for the Secret layout.
+sensitiveConfig:
+  secretName: waltid-enterprise-config
+  files:
+    - auth.conf
+    - database.conf
+    - superadmin-registration.conf
+
 featConf: |-
   enabledFeatures = [
       admin
-      dev-mode
       superadmin-registration
   ]
-authConf: |
-  requireHttps = false
-  pepper = "waltid-enterprise12345678"
-  signingKey = {"type": "jwk", "jwk": {"kty": "OKP", "d": "L_2RuCSFUu818ZzM6Xml6uxesqTcxo8323-Q2S_qq4c", "use": "sig", "crv": "Ed25519", "x": "vvCN3xMAb0ZCt4sWIdtKDhkVHSERJZeBxybN-eSRkgw", "alg": "EdDSA"}}
-  verificationKey = {"type": "jwk", "jwk": {"kty": "OKP", "d": "L_2RuCSFUu818ZzM6Xml6uxesqTcxo8323-Q2S_qq4c", "use": "sig", "crv": "Ed25519", "x": "vvCN3xMAb0ZCt4sWIdtKDhkVHSERJZeBxybN-eSRkgw", "alg": "EdDSA"}}
-  hashAlgorithm = ARGON2
-  hashMigrations = {
-      MESSAGE_DIGEST: ARGON2 # E.g.: Convert all the MD5 hashes to Argon2 hashes
-  }
-  authFlow = {
-      method: email
-      expiration: "7d" # optional: Set expiration time for login tokens, e.g. a week
-      ok: true # Auth flow ends successfuly with this step
-  }
-dbConf: |
-  databaseType = mongodb
-  fileStorage = {
-    path = "data"
-  }
-  mongodb = {
-    connectionString = "mongodb://root:password@localhost:27017/"
-    database = "waltid-enterprise-demo"
-  }
-superadminRegConf: |
-  tokens = {
-    "1234567890-my-token": {
-      expiration = "2029-01-01T00:00:00Z", # Token has to be used by this expiration date
-      # Well-known demo token: usable only while dev-mode is enabled (see featConf above).
-      # A real deployment needs a secret, per-deployment token with devModeOnly = false.
-      devModeOnly = true
-      account = {
-        type = "email"
-        identifier = { email = "superadmin@walt.id" }
-        # Public example password: replace before deployment outside local development.
-        data = { password = "violet orchard river lantern" }
-      }
-    }
-  }
-enterpriseConf: |
-  baseDomain = "enterprise.test.waltid.cloud"
+# Extra enterprise.conf settings. baseDomain is generated from ingress.host above these lines;
+# set it here only if the public domain differs from the ingress host (the later value wins).
+enterpriseConf: ""
 webConfig:
   webConf: |-
     webHost = "0.0.0.0"
@@ -94,8 +64,8 @@ networkFetchGuardConf: |
   # hostnames (or their subdomains) here only if this deployment needs to trust something beyond its
   # own base domain - most deployments should leave this empty.
   additionalTrustedHostSuffixes = []
-devModeConf: |
-  enableDidWebResolverHttps = false
+# Only read while featConf enables dev-mode, see values-demo.yaml.
+devModeConf: ""
 eidasAuditConf: |
   # true: every audit entry is written before the request goes on (a failed write fails the request, and nothing is
   # lost if the pod dies right after). false: entries are written in the background, in order per organization.
@@ -131,8 +101,8 @@ license:
   # does not return installation-key.json. That Secret key is only for rare pre-provision of
   # a serialized walt.id key ({"type":"jwk","jwk":{...}}).
   #
-  # Note that featConf above enables dev-mode, which requires a DEV license. A PROD license refuses
-  # to start while dev-mode is enabled.
+  # A PROD license refuses to start while featConf enables dev-mode (values-demo.yaml does, and
+  # needs a DEV license).
   secretName: waltid-enterprise-license
   offline: false
   # Mount Secret key installation-key.json and set LICENSE_INSTALLATION_KEY_FILE. Leave false:
@@ -212,7 +182,7 @@ loggingConf: |
           {
             "fromMinLevel": "WARN",
             "toSinks": [
-              "stout"
+              "stdout"
             ]
           }
         ]
@@ -224,7 +194,7 @@ loggingConf: |
           {
             "fromMinLevel": "WARN",
             "toSinks": [
-              "stout"
+              "stdout"
             ]
           }
         ]
@@ -235,6 +205,7 @@ loggingConf: |
 api:
   # Mount a pre-provisioned Secret containing the complete /config directory instead of
   # rendering inline values into a ConfigMap. The license-request job uses the same Secret.
+  # When set, sensitiveConfig is ignored: the Secret must hold every file, sensitive ones included.
   existingConfigSecret: ""
   strategy:
     type: RollingUpdate
@@ -248,13 +219,21 @@ api:
     protocol: TCP
     targetPort: http-api
   type: ClusterIP
+  # Rendered as <registry>/<repository>:<tag>. AWS Marketplace rewrites registry per region.
   image:
+    registry: docker.io
     repository: waltid/waltid-enterprise-api
+    # Empty uses the chart's appVersion.
+    tag: ""
     # When supplied, digest takes precedence over tag for both API and bootstrap job.
+    # Leave empty for AWS Marketplace, which references images by tag.
     digest: ""
-    tag: latest
-    imagePullPolicy: Always
-    pullSecrets: waltid-regcred
+    imagePullPolicy: IfNotPresent
+  # Used only when hpa.enabled is false.
+  replicas: 1
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
   # Heap as a share of the container memory limit. The JVM default is 25, which wastes most of
   # the limit and produced `Java heap space` under sustained load; 50 is the practical ceiling,
   # since the non-heap footprint measured about 0.9Gi (metaspace, threads, direct buffers).
@@ -267,14 +246,30 @@ api:
       memory: "6Gi"
   # The HPA targets average CPU utilization against resources.requests.cpu above, so lowering
   # that request makes the API scale out sooner for the same absolute load.
+  # Needs metrics-server in the cluster (not installed on EKS by default).
   hpa:
+    enabled: true
     minReplicas: 1
     maxReplicas: 5
     targetCPUUtilizationPercentage: 90
 
+# Pull Secrets for every pod, e.g. [{name: waltid-regcred}] for the private Docker Hub images.
+# Not needed for AWS Marketplace ECR.
+imagePullSecrets: []
+
+# ServiceAccount for the API and the license-request Job. To reach AWS KMS or S3 without access
+# keys, annotate it with an IAM role (IRSA):
+#   annotations:
+#     eks.amazonaws.com/role-arn: arn:aws:iam::<account-id>:role/<role-name>
+# The UI never uses it.
+serviceAccount:
+  create: true
+  # Empty uses the release fullname.
+  name: ""
+  annotations: {}
+
 web:
-  # The UI is not needed for API-only or load-test deployments, and its image is amd64-only, so a
-  # Graviton node group cannot run it - `helm --wait` then fails on a component nothing depends on.
+  # The UI is not needed for API-only or load-test deployments.
   enabled: true
   ports:
   - name: http
@@ -283,15 +278,43 @@ web:
     targetPort: http-api
   type: ClusterIP
   image:
+    registry: docker.io
     repository: waltid/waltid-enterprise-ui
-    tag: latest
-    imagePullPolicy: Always
-    pullSecrets: waltid-regcred
+    # Empty uses the chart's appVersion.
+    tag: ""
+    # Same as api.image.digest. Leave empty for AWS Marketplace.
+    digest: ""
+    imagePullPolicy: IfNotPresent
+  replicas: 1
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
   hpa:
+    enabled: true
     minReplicas: 1
     maxReplicas: 5
     targetCPUUtilizationPercentage: 90
 
 ingress:
-  ingressClassName: traefik
-  host: enterprise.test.waltid.cloud
+  enabled: true
+  # Empty uses the cluster's default IngressClass. E.g. alb (AWS Load Balancer Controller), nginx.
+  ingressClassName: ""
+  # Public domain of the installation. Also written to enterprise.conf as baseDomain, which the API
+  # uses for every public URL; organizations are served from <organizationId>.<host>. Set it even
+  # with ingress.enabled false.
+  host: enterprise.example.com
+  # Also route *.<host>, where organizations are served. Needs a wildcard DNS record and certificate.
+  wildcardHost: true
+  # Controller-specific annotations. For the AWS Load Balancer Controller, e.g.:
+  #   alb.ingress.kubernetes.io/scheme: internet-facing
+  #   alb.ingress.kubernetes.io/target-type: ip
+  #   alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS":443}]'
+  #   alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:<region>:<account-id>:certificate/<id>
+  annotations: {}
+  # cert-manager ClusterIssuer. Empty adds no cert-manager annotation.
+  clusterIssuer: ""
+  # spec.tls entries, e.g. [{hosts: [enterprise.example.com, "*.enterprise.example.com"], secretName: enterprise-tls}].
+  # The AWS Load Balancer Controller ignores this and takes the certificate from ACM.
+  tls: []
+  # Route /debug/* through the ingress. The endpoints exist only when featConf enables debug-endpoints.
+  exposeDebugEndpoints: false

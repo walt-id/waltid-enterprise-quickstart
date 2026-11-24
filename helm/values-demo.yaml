@@ -1,0 +1,35 @@
+# Demo / test-cluster overrides, layered on top of values.yaml:
+#
+#   helm upgrade --install enterprise-stack ./helm -f helm/values-demo.yaml
+#
+# Restores the settings values.yaml used to ship with: dev-mode (needs a DEV license), the private
+# Docker Hub images at their moving tags, and a Traefik ingress. The sensitive files are still read
+# from the sensitiveConfig Secret; helm/README.md shows how to create it.
+# Never use this file for production or AWS Marketplace installs.
+
+featConf: |-
+  enabledFeatures = [
+      admin
+      dev-mode
+      superadmin-registration
+  ]
+devModeConf: |
+  enableDidWebResolverHttps = false
+
+imagePullSecrets:
+  - name: waltid-regcred
+
+api:
+  image:
+    tag: latest
+    imagePullPolicy: Always
+
+web:
+  image:
+    tag: latest
+    imagePullPolicy: Always
+
+ingress:
+  ingressClassName: traefik
+  host: enterprise.test.waltid.cloud
+  exposeDebugEndpoints: true
