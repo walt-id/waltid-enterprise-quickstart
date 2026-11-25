@@ -3,6 +3,9 @@ kind: Deployment
 metadata:
   name: {{ include "enterprise-stack.fullname" . }}-api
 spec:
+  {{- if not .Values.api.hpa.enabled }}
+  replicas: {{ .Values.api.replicas }}
+  {{- end }}
   strategy:
     {{- toYaml .Values.api.strategy | nindent 4 }}
   selector:
@@ -17,6 +20,20 @@ spec:
       annotations:
         latest-restart: {{ now | unixEpoch | quote }}
     spec:
+      serviceAccountName: {{ include "enterprise-stack.serviceAccountName" . }}
+      automountServiceAccountToken: false
+      {{- with .Values.api.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.api.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.api.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       topologySpreadConstraints:
         - maxSkew: 1
           topologyKey: kubernetes.io/hostname
@@ -30,11 +47,13 @@ spec:
         runAsUser: 10001
         seccompProfile:
           type: RuntimeDefault
+      {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
-        - name: {{ .Values.api.image.pullSecrets }}
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       containers:
       - name: waltid-enterprise-api
-        image: {{ include "enterprise-stack.apiImage" . | quote }}
+        image: {{ include "enterprise-stack.image" (dict "image" .Values.api.image "path" "api.image" "root" .) | quote }}
         imagePullPolicy: {{ .Values.api.image.imagePullPolicy }}
         securityContext:
           allowPrivilegeEscalation: false

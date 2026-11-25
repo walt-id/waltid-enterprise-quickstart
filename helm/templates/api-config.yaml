@@ -5,12 +5,13 @@ metadata:
   name: {{ include "enterprise-stack.fullname" . }}-api-config
   labels:
   {{- include "enterprise-stack.labels" . | nindent 4 }}
+# Non-sensitive files only. auth.conf, database.conf and superadmin-registration.conf come from
+# sensitiveConfig.secretName, see the configVolume helper.
+{{- /* baseDomain follows ingress.host; a baseDomain in enterpriseConf comes later and wins (HOCON). */}}
+{{- $enterpriseConf := printf "baseDomain = %s\n%s" (.Values.ingress.host | quote) (.Values.enterpriseConf | default "") }}
 data:
   _features.conf: {{ .Values.featConf | toYaml | indent 1 }}
-  auth.conf: {{ .Values.authConf | toYaml | indent 1 }}
-  database.conf: {{ .Values.dbConf | toYaml | indent 1 }}
-  superadmin-registration.conf: {{ .Values.superadminRegConf | toYaml | indent 1 }}
-  enterprise.conf: {{ .Values.enterpriseConf | toYaml | indent 1 }}
+  enterprise.conf: {{ $enterpriseConf | toYaml | indent 1 }}
   web.conf: {{ .Values.webConfig.webConf | toYaml | indent 1 }}
   resource-access.conf: {{ .Values.resourceAccessConf | toYaml | indent 1 }}
   license.conf: {{ .Values.licenseConf | toYaml | indent 1 }}

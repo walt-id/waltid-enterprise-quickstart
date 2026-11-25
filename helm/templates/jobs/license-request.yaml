@@ -6,9 +6,15 @@ An unlicensed Enterprise API refuses to start, so there is no running pod to `ku
 This Job runs the same image with the same ConfigMap, Secret, and database as the Deployment, creates
 the installation keypair inside the database, and prints the signed public request to its log.
 
-  helm upgrade --install <release> . --set license.installationRequest.enabled=true \
-    --set license.installationRequest.licenseId=<licenseId> \
-    --set license.installationRequest.organizationId=<organizationId>
+Enable it in your values file:
+
+  license:
+    installationRequest:
+      enabled: true
+      licenseId: <licenseId>
+      organizationId: <organizationId>
+
+  helm upgrade --install <release> . -f my-values.yaml
 
   kubectl logs job/{{ include "enterprise-stack.fullname" . }}-license-request \
     | sed -n '/^{/,/^}/p' > installation-request.json
@@ -39,16 +45,32 @@ spec:
         {{- include "enterprise-stack.selectorLabels" . | nindent 8 }}
     spec:
       restartPolicy: Never
+      serviceAccountName: {{ include "enterprise-stack.serviceAccountName" . }}
+      automountServiceAccountToken: false
+      {{- with .Values.api.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.api.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.api.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       securityContext:
         runAsNonRoot: true
         runAsUser: 10001
         seccompProfile:
           type: RuntimeDefault
+      {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
-        - name: {{ .Values.api.image.pullSecrets }}
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       containers:
         - name: license-request
-          image: {{ include "enterprise-stack.apiImage" . | quote }}
+          image: {{ include "enterprise-stack.image" (dict "image" .Values.api.image "path" "api.image" "root" .) | quote }}
           imagePullPolicy: {{ .Values.api.image.imagePullPolicy }}
           args:
             - license

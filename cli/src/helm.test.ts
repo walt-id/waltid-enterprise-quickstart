@@ -22,7 +22,7 @@ test('API and offline bootstrap share immutable image, private config, encryptio
   assert.equal(workloads.length, 2);
   for (const workload of workloads) {
     const pod = workload.spec.template.spec, container = pod.containers[0];
-    assert.equal(container.image, 'waltid/waltid-enterprise-api@' + digest);
+    assert.equal(container.image, 'docker.io/waltid/waltid-enterprise-api@' + digest);
     assert.deepEqual(pod.volumes.find((v: any) => v.name === 'waltid-enterprise-api-config').secret, { secretName: 'private-config' });
     assert.deepEqual(container.env.find((e: any) => e.name === 'LICENSE_STATE_ENCRYPTION_KEY').valueFrom.secretKeyRef,
       { name: 'retained-license', key: 'state-encryption-key', optional: true });

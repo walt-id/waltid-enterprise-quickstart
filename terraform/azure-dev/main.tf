@@ -331,27 +331,60 @@ resource "kubectl_manifest" "secret-registry-dockerhub" {
   })
 }
 
+resource "kubernetes_secret" "waltid-enterprise-config" {
+  metadata {
+    name = "waltid-enterprise-config"
+  }
+  data = {
+    "auth.conf" = <<-EOT
+      requireHttps = false
+      pepper = "waltid-enterprise12345678"
+      signingKey = {"type": "jwk", "jwk": {"kty": "OKP", "d": "L_2RuCSFUu818ZzM6Xml6uxesqTcxo8323-Q2S_qq4c", "use": "sig", "crv": "Ed25519", "x": "vvCN3xMAb0ZCt4sWIdtKDhkVHSERJZeBxybN-eSRkgw", "alg": "EdDSA"}}
+      verificationKey = {"type": "jwk", "jwk": {"kty": "OKP", "d": "L_2RuCSFUu818ZzM6Xml6uxesqTcxo8323-Q2S_qq4c", "use": "sig", "crv": "Ed25519", "x": "vvCN3xMAb0ZCt4sWIdtKDhkVHSERJZeBxybN-eSRkgw", "alg": "EdDSA"}}
+      hashAlgorithm = ARGON2
+      hashMigrations = {
+          MESSAGE_DIGEST: ARGON2
+      }
+      authFlow = {
+          method: email
+          expiration: "7d"
+          ok: true
+      }
+    EOT
+    "database.conf" = <<-EOT
+      databaseType = "mongodb"
+      fileStorage = {
+        path = "/data"
+      }
+      mongodb = {
+        connectionString = "${azurerm_mongo_cluster.mongo-cluster.connection_strings[0].value}"
+        database = "waltid-enterprise-${var.environment.short_name}"
+      }
+    EOT
+    "superadmin-registration.conf" = <<-EOT
+      tokens = {
+        "1234567890-my-token": {
+          expiration = "2029-01-01T00:00:00Z",
+          devModeOnly = true
+          account = {
+            type = "email"
+            identifier = { email = "superadmin@walt.id" }
+            data = { password = "violet orchard river lantern" }
+          }
+        }
+      }
+    EOT
+  }
+}
+
 resource "helm_release" "waltid-enterprise" {
   name       = "enterprise-stack"
   # Helm charts have been moved to https://github.com/walt-id/waltid-enterprise-quickstart
   # Update the path accordingly after cloning the repo
   chart      = "../../helm"
   values = [
-    file("../../helm/values.yaml"),
+    file("../../helm/values-demo.yaml"),
     yamlencode({
-      dbConf = <<-EOT
-        databaseType = "mongodb"
-        fileStorage = {
-          path = "/data"
-        }
-        mongodb = {
-          connectionString = "${azurerm_mongo_cluster.mongo-cluster.connection_strings[0].value}"
-          database = "waltid-enterprise-${var.environment.short_name}"
-        }
-      EOT
-      enterpriseConf = <<-EOT
-        baseDomain = "enterprise.${data.azurerm_dns_zone.dns-zone.name}"
-      EOT
       ingress = {
         host = "enterprise.${data.azurerm_dns_zone.dns-zone.name}"
         tls = [{
@@ -362,7 +395,7 @@ resource "helm_release" "waltid-enterprise" {
       }
     })
   ]
-  depends_on = [kubectl_manifest.lets-encrypt-cluster-issuer, kubectl_manifest.secret-registry-dockerhub, helm_release.nginx_ingress]
+  depends_on = [kubectl_manifest.lets-encrypt-cluster-issuer, kubectl_manifest.secret-registry-dockerhub, helm_release.nginx_ingress, kubernetes_secret.waltid-enterprise-config]
 }
 
 output "kube_config" {

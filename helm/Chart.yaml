@@ -1,6 +1,6 @@
 apiVersion: v2
 name: enterprise-stack
-description: A Helm chart for Kubernetes
+description: walt.id Enterprise Stack - the Enterprise API and optional admin UI, backed by an external MongoDB or Amazon DocumentDB
 
 # A chart can be either an 'application' or a 'library' chart.
 #

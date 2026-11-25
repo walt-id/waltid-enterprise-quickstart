@@ -21,3 +21,5 @@
 .idea/
 *.tmproj
 .vscode/
+# Demo overrides are used from the repository checkout, never shipped in the packaged chart.
+values-demo.yaml

@@ -61,24 +61,46 @@ Create the name of the service account to use
 {{- end }}
 {{- end }}
 
-{{/* One image identity and configuration source for the API and license bootstrap. */}}
-{{- define "enterprise-stack.apiImage" -}}
-{{- if .Values.api.image.digest -}}
-{{- if not (regexMatch "^sha256:[a-f0-9]{64}$" .Values.api.image.digest) -}}
-{{- fail "api.image.digest must be a sha256 digest" -}}
+{{/*
+Image reference for every container, built only from values.yaml as <registry>/<repository>:<tag>, so
+AWS Marketplace can regionalize it by rewriting registry. An empty tag falls back to the chart's
+appVersion; a digest, when set, takes precedence over the tag.
+
+  {{ include "enterprise-stack.image" (dict "image" .Values.api.image "path" "api.image" "root" .) }}
+*/}}
+{{- define "enterprise-stack.image" -}}
+{{- $image := .image -}}
+{{- if $image.digest -}}
+{{- if not (regexMatch "^sha256:[a-f0-9]{64}$" $image.digest) -}}
+{{- fail (printf "%s.digest must be a sha256 digest" .path) -}}
 {{- end -}}
-{{- printf "%s@%s" .Values.api.image.repository .Values.api.image.digest -}}
+{{- printf "%s/%s@%s" $image.registry $image.repository $image.digest -}}
 {{- else -}}
-{{- printf "%s:%s" .Values.api.image.repository (.Values.api.image.tag | default .Chart.AppVersion) -}}
+{{- printf "%s/%s:%s" $image.registry $image.repository ($image.tag | default .root.Chart.AppVersion) -}}
 {{- end -}}
 {{- end -}}
 
+{{/*
+/config for the API and the license-request Job: either one operator-provided Secret holding every
+file, or the rendered ConfigMap plus the sensitive files from sensitiveConfig.secretName.
+*/}}
 {{- define "enterprise-stack.configVolume" -}}
 {{- if .Values.api.existingConfigSecret }}
 secret:
   secretName: {{ .Values.api.existingConfigSecret | quote }}
 {{- else }}
-configMap:
-  name: {{ include "enterprise-stack.fullname" . }}-api-config
+projected:
+  sources:
+    - configMap:
+        name: {{ include "enterprise-stack.fullname" . }}-api-config
+    {{- with .Values.sensitiveConfig.files }}
+    - secret:
+        name: {{ required "sensitiveConfig.secretName is required" $.Values.sensitiveConfig.secretName | quote }}
+        items:
+          {{- range . }}
+          - key: {{ . | quote }}
+            path: {{ . | quote }}
+          {{- end }}
+    {{- end }}
 {{- end }}
 {{- end -}}
