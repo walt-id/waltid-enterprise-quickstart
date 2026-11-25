@@ -119,6 +119,7 @@ These commands manage credential status and revocation.
 |---------|-------------|
 | `--flow-etsi-trust-lists` | Run ETSI trust lists verification flow (see below) |
 | `--flow-trust-list-assurance` | Test certificate paths, signed LoTE, and verifier integration |
+| `--demo-wallet-provider-trust` | Demo: issue only to wallets whose provider is on the trust list (see below) |
 | `--flow-credential-revocation` | Run credential revocation flow (see below) |
 
 #### ETSI Trust Lists Flow (`--flow-etsi-trust-lists`)
@@ -204,6 +205,24 @@ export TRUST_LIST_ALLOW_EMBEDDED_SIGNER_TEST_PIN=true
 ```
 
 The flow writes every request, response, trust decision, and final Verifier2 session to its timestamped directory under `cli/logs/`.
+
+#### Wallet Provider Trust Demo (`--demo-wallet-provider-trust`)
+
+Shows the Issuer2 `x509-trust-registry` attestation verification method. The issuer accepts the wallet instance attestation (token request) and the key attestation (credential request) only if the Trust Registry linked to the issuer lists the wallet provider's certificate chain as `WALLET_PROVIDER`, from a fresh list signed by a list operator it trusts.
+
+The demo creates its own wallet, wallet provider, issuer and trust registry, named after one run id. It reuses the tenant's issuer signing key and document signer certificate, so run `--setup-all` first. The issuer configuration never changes between the three acts:
+
+1. The Wallet Providers List names another provider: the issuer refuses the wallet (`invalid_client`).
+2. The list operator publishes a new signed version that adds the provider CA: the wallet receives the PID.
+3. The provider is removed from the list: the issuer refuses the wallet again.
+
+The demo fails if any act ends differently or the registry rejects a list.
+
+**Usage:**
+```bash
+npx tsx walt.ts --setup-all  # once
+npx tsx walt.ts --demo-wallet-provider-trust
+```
 
 #### Credential Revocation Flow (`--flow-credential-revocation`)
 
@@ -412,7 +431,7 @@ npx tsx walt.ts --clear-wallet-credentials
 Logs are saved to `walt-log-<date>-<time>-<count>/` directories (e.g., `walt-log-2026-05-07-14-30-15-001/`):
 - **Request files**: Step-numbered JSON files with full HTTP details including method, endpoint, headers, and body (e.g., `001-login-request.json`)
 - **Response files**: Step-numbered JSON files with status code, status text, and response body (e.g., `001-login-response.json`)
-- **Combined HTTP log**: `walt-http-log.json` with all HTTP traffic
+- **Combined HTTP log**: `walt-http-log.json` with all HTTP traffic. Authorization headers and the private members of imported JWKs are redacted
 
 Example request file format:
 ```json

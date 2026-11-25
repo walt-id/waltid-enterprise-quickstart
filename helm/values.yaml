@@ -64,6 +64,12 @@ networkFetchGuardConf: |
   # hostnames (or their subdomains) here only if this deployment needs to trust something beyond its
   # own base domain - most deployments should leave this empty.
   additionalTrustedHostSuffixes = []
+webhookDeliveryConf: |
+  # How long a dead-lettered webhook stays in the MongoDB outbox before it is removed.
+  # Pending and redriven deliveries have no failedAt field and remain eligible for delivery.
+  # The single-process file outbox used with the in-memory database does not apply this retention.
+  # Changing this value updates the TTL index the next time the service starts.
+  deadLetterRetention = 30d
 # Only read while featConf enables dev-mode, see values-demo.yaml.
 devModeConf: ""
 eidasAuditConf: |
