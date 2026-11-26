@@ -22,9 +22,8 @@ services:
     ports:
       - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
     volumes:
-      # PostgreSQL 18 images keep data in /var/lib/postgresql/<major>/docker and refuse a mount on
-      # /var/lib/postgresql/data. One volume can then hold two major versions for pg_upgrade.
-      - postgres-data:/var/lib/postgresql
+      # The official 18 image mounts the parent. Images through 17 declare /var/lib/postgresql/data.
+      - postgres-data:${POSTGRES_VOLUME_TARGET:-/var/lib/postgresql}
     networks:
       - postgres_network
     healthcheck:
