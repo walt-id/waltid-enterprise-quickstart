@@ -236,6 +236,11 @@ PostgreSQL's upgrade or dump/restore procedure when changing majors.
 A fresh database has no license state, so activate it as described for DocumentDB above. There is no
 migration from an existing MongoDB database.
 
+With an Enterprise image that includes [the PostgreSQL migration registry](https://github.com/walt-id/waltid-identity-enterprise/pull/931),
+the API applies registered schema migrations at startup. The PostgreSQL license CLI also initializes
+the schema and ignores `recreateOnStart`. Leave `recreateOnStart = false` to keep application data on API restarts.
+Use a fresh development database when switching from an unreleased, pre-registry PostgreSQL schema.
+
 ### Helm deployment options
 
 The existing chart in `helm/` supports operator-managed configuration and storage:
