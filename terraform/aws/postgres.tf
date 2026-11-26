@@ -55,29 +55,29 @@ resource "random_password" "postgres" {
 }
 
 resource "aws_db_instance" "postgres" {
-  count                  = local.use_postgres ? 1 : 0
-  identifier             = "${var.cluster_name}-pg"
-  engine                 = "postgres"
+  count      = local.use_postgres ? 1 : 0
+  identifier = "${var.cluster_name}-pg"
+  engine     = "postgres"
   # A major version alone: RDS creates the instance on that major's default minor and, with
   # auto_minor_version_upgrade (the default), keeps it current. engine_version_actual has the minor.
-  engine_version         = var.postgres_major_version
-  instance_class         = var.postgres_instance_class
-  allocated_storage      = 100
-  storage_type           = "gp3"
-  db_name                = "waltid_enterprise"
-  username               = "waltid"
-  password               = random_password.postgres[0].result
-  db_subnet_group_name   = aws_db_subnet_group.postgres[0].name
-  parameter_group_name   = aws_db_parameter_group.postgres[0].name
-  vpc_security_group_ids = [aws_security_group.postgres[0].id]
-  publicly_accessible     = false
-  multi_az                = false
-  backup_retention_period = 1
-  skip_final_snapshot     = var.skip_final_snapshot
+  engine_version            = var.postgres_major_version
+  instance_class            = var.postgres_instance_class
+  allocated_storage         = 100
+  storage_type              = "gp3"
+  db_name                   = "waltid_enterprise"
+  username                  = "waltid"
+  password                  = random_password.postgres[0].result
+  db_subnet_group_name      = aws_db_subnet_group.postgres[0].name
+  parameter_group_name      = aws_db_parameter_group.postgres[0].name
+  vpc_security_group_ids    = [aws_security_group.postgres[0].id]
+  publicly_accessible       = false
+  multi_az                  = false
+  backup_retention_period   = 1
+  skip_final_snapshot       = var.skip_final_snapshot
   final_snapshot_identifier = var.skip_final_snapshot ? null : "${var.cluster_name}-pg-final"
-  deletion_protection     = false
-  apply_immediately      = true
-  storage_encrypted      = true
+  deletion_protection       = false
+  apply_immediately         = true
+  storage_encrypted         = true
 
   tags = merge(local.common_tags, { Name = "${var.cluster_name}-pg" })
 }
