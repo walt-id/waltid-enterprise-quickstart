@@ -95,10 +95,11 @@ networkFetchGuardConf: |
   # own base domain - most deployments should leave this empty.
   additionalTrustedHostSuffixes = []
 webhookDeliveryConf: |
-  # How long a dead-lettered webhook stays in the MongoDB outbox before it is removed.
+  # How long the MongoDB and PostgreSQL outboxes retain dead-lettered webhooks.
   # Pending and redriven deliveries have no failedAt field and remain eligible for delivery.
   # The single-process file outbox used with the in-memory database does not apply this retention.
-  # Changing this value updates the TTL index the next time the service starts.
+  # MongoDB updates its TTL index at startup. PostgreSQL removes expired rows when claiming
+  # deliveries, listing dead letters or retrying a dead letter.
   deadLetterRetention = 30d
 devModeConf: |
   enableDidWebResolverHttps = false
@@ -119,6 +120,16 @@ devModeAccessConf: ""
 #     jvm = true
 #     ram = true
 debugEndpointsConf: ""
+# Optional. Outbound HTTP client settings, per fetcher under `service`. A wallet refuses to POST a request_uri
+# over plain HTTP unless its fetcher allows it, so a deployment without TLS (baseSsl = false) cannot present to
+# a signed request without this. Development and load-test clusters only; production keeps HTTPS:
+#   httpClientConf: |
+#     service = {
+#       OPENID4VP_WALLET_RESOLVE_AUTHORIZATIONREQUEST = {
+#         url = { protocols = { allowHttp = true } }
+#       }
+#     }
+httpClientConf: ""
 
 license:
   # Pre-provisioned Secret holding all license material. Optional key:
